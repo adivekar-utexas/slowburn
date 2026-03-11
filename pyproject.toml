@@ -1,0 +1,90 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slowburn"
+dynamic = ["version"]
+authors = [
+    { name = "Abhishek Divekar", email = "adivekar@utexas.edu" },
+]
+description = "Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+license-files = ["LICENSE"]
+keywords = [
+    "llm",
+    "agents",
+    "concurrency",
+    "cost-optimization",
+    "long-horizon",
+]
+dependencies = [
+    "concurry>=0.13.0",
+    "litellm>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+crewai = ["crewai>=0.80.0"]
+autogen = ["ag2>=0.8.0"]
+ray = ["ray>=2.0.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-timeout>=2.0",
+    "ruff>=0.4",
+]
+all = [
+    "slowburn[crewai,autogen,ray,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/adivekar-utexas/slowburn"
+Repository = "https://github.com/adivekar-utexas/slowburn"
+Issues = "https://github.com/adivekar-utexas/slowburn/issues"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slowburn"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = [
+    "E731",
+    "E741",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["slowburn"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
