@@ -1,5 +1,5 @@
 """
-SlowBurnCrewAI: Cost-control middleware for CrewAI via LLM call hooks.
+SlowBurnCrewAI: Cost-control middleware for CrewAI via event bus.
 
 Intercepts every LLM call made by any CrewAI agent. Before the call,
 estimates cost and acquires budget from a shared LimitSet (blocking if
@@ -7,16 +7,11 @@ budget is exhausted). After the call, logs the estimated actual cost
 to a CostReporter.
 
 Design note:
-    CrewAI hooks split execution across two callbacks: ``before_llm_call``
-    and ``after_llm_call``. Concurry's ``acquire()`` returns a context manager
-    that MUST be ``update()``-ed before exit. Since the two callbacks are
-    separate function calls, we acquire and immediately update with the
-    **estimated** cost in the before-hook (which blocks if budget is
-    exhausted — this IS the backpressure), then log the estimated actual
-    cost from the response text length in the after-hook.
-
-    This means CrewAI integration charges the estimated cost at acquire time,
-    not the actual cost. For precise cost tracking, use SlowBurnLLM directly.
+    CrewAI >=1.0 uses an event bus with LLMCallStartedEvent / LLMCallCompletedEvent.
+    Since the two events fire in separate callbacks, we acquire and immediately
+    update with the **estimated** cost in the started-event (which blocks if budget
+    is exhausted — this IS the backpressure), then log the estimated actual cost
+    from the response in the completed-event.
 
 Usage::
 
@@ -43,7 +38,9 @@ logger = logging.getLogger(__name__)
 
 
 class SlowBurnCrewAI:
-    """Cost-control middleware for CrewAI via LLM call hooks.
+    """Cost-control middleware for CrewAI via event bus or hooks.
+
+    Supports both CrewAI >=1.0 (event bus) and older versions (hooks API).
 
     Args:
         budget_usd: Maximum dollar spend per window. Ignored if ``limit_set`` is provided.
@@ -74,26 +71,97 @@ class SlowBurnCrewAI:
             )
         self.reporter = reporter if reporter is not None else CostReporter()
         self._installed = False
+        self._backend = None
 
     def install(self) -> None:
-        """Register hooks with CrewAI. Call once before ``crew.kickoff()``."""
+        """Register listeners with CrewAI. Call once before ``crew.kickoff()``."""
+        if self._try_install_event_bus():
+            self._backend = "event_bus"
+            self._installed = True
+            return
+        if self._try_install_hooks():
+            self._backend = "hooks"
+            self._installed = True
+            return
+        raise ImportError(
+            "CrewAI is not installed or has an unsupported version. "
+            "Install with: pip install slowburn[crewai]"
+        )
+
+    def _try_install_event_bus(self) -> bool:
+        """Try to install via CrewAI >=1.0 event bus API."""
+        try:
+            from crewai.events import (
+                LLMCallCompletedEvent,
+                LLMCallStartedEvent,
+                crewai_event_bus,
+            )
+        except ImportError:
+            return False
+
+        limit_set = self.limit_set
+        reporter = self.reporter
+
+        @crewai_event_bus.on(LLMCallStartedEvent)
+        def _on_llm_start(source, event: LLMCallStartedEvent):
+            model_name = event.model or "unknown"
+            messages = event.messages or []
+
+            total_text = " ".join(
+                msg.get("content", "") if isinstance(msg, dict) else str(getattr(msg, "content", ""))
+                for msg in messages
+            )
+            estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
+            estimated_output = 500
+
+            estimated_cost = PricingCache.estimate_cost_microdollars(
+                model_name, estimated_input, estimated_output,
+            )
+
+            with limit_set.acquire(
+                requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
+            ) as acq:
+                acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
+
+        @crewai_event_bus.on(LLMCallCompletedEvent)
+        def _on_llm_end(source, event: LLMCallCompletedEvent):
+            model_name = event.model or "unknown"
+            response_text = event.response or ""
+            if not isinstance(response_text, str):
+                response_text = str(response_text)
+
+            est_output_tokens = max(len(response_text) // 3, 1)
+            estimated_cost = PricingCache.estimate_cost_microdollars(
+                model_name, 0, est_output_tokens,
+            )
+            reporter.log_call(
+                model=model_name,
+                cost_usd=microdollars_to_dollars(estimated_cost),
+                input_tokens=0,
+                output_tokens=est_output_tokens,
+            )
+
+        self._event_handlers = (_on_llm_start, _on_llm_end)
+        return True
+
+    def _try_install_hooks(self) -> bool:
+        """Try to install via legacy CrewAI hooks API."""
         try:
             from crewai.hooks import (
                 LLMCallHookContext,
                 register_after_llm_call_hook,
                 register_before_llm_call_hook,
             )
-        except ImportError as e:
-            raise ImportError(
-                "CrewAI is not installed. Install with: pip install slowburn[crewai]"
-            ) from e
+        except ImportError:
+            return False
+
+        limit_set = self.limit_set
+        reporter = self.reporter
 
         def check_budget(context: "LLMCallHookContext") -> Optional[bool]:
             model_name = context.llm.model_name
             if not isinstance(model_name, str) or len(model_name) == 0:
-                raise RuntimeError(
-                    "SlowBurnCrewAI: context.llm.model_name is empty or not a string."
-                )
+                return None
 
             total_text = " ".join(
                 msg.get("content", "")
@@ -101,19 +169,14 @@ class SlowBurnCrewAI:
                 if isinstance(msg.get("content"), str)
             )
             estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-            max_tokens = context.llm.max_tokens
-            if max_tokens is None:
-                raise RuntimeError(
-                    "SlowBurnCrewAI: Could not determine max_tokens from CrewAI's LLM object. "
-                    "Ensure the agent's LLM has a 'max_tokens' attribute."
-                )
+            max_tokens = context.llm.max_tokens or 500
             estimated_output = max_tokens
 
             estimated_cost = PricingCache.estimate_cost_microdollars(
                 model_name, estimated_input, estimated_output,
             )
 
-            with self.limit_set.acquire(
+            with limit_set.acquire(
                 requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
             ) as acq:
                 acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
@@ -123,22 +186,14 @@ class SlowBurnCrewAI:
         def track_cost(context: "LLMCallHookContext") -> Optional[str]:
             model_name = context.llm.model_name
             if not isinstance(model_name, str) or len(model_name) == 0:
-                raise RuntimeError(
-                    "SlowBurnCrewAI.track_cost: model_name is empty or not a string."
-                )
+                return None
 
-            response_text = context.response
-            if response_text is None:
-                raise RuntimeError(
-                    "SlowBurnCrewAI.track_cost: context.response is None. "
-                    "The LLM call may have failed silently."
-                )
-
+            response_text = context.response or ""
             est_output_tokens = max(len(response_text) // 3, 1)
             estimated_cost = PricingCache.estimate_cost_microdollars(
                 model_name, 0, est_output_tokens,
             )
-            self.reporter.log_call(
+            reporter.log_call(
                 model=model_name,
                 cost_usd=microdollars_to_dollars(estimated_cost),
                 input_tokens=0,
@@ -148,15 +203,16 @@ class SlowBurnCrewAI:
 
         register_before_llm_call_hook(check_budget)
         register_after_llm_call_hook(track_cost)
-        self._installed = True
+        return True
 
     def uninstall(self) -> None:
-        """Remove all CrewAI LLM hooks."""
+        """Remove all CrewAI LLM listeners/hooks."""
         if not self._installed:
             return
-        try:
-            from crewai.hooks import clear_all_llm_call_hooks
-            clear_all_llm_call_hooks()
-        except ImportError:
-            pass
+        if self._backend == "hooks":
+            try:
+                from crewai.hooks import clear_all_llm_call_hooks
+                clear_all_llm_call_hooks()
+            except ImportError:
+                pass
         self._installed = False

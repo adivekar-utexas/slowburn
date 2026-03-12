@@ -39,8 +39,16 @@ from ..reporter import CostReporter
 
 logger = logging.getLogger(__name__)
 
+try:
+    from langchain_core.callbacks import BaseCallbackHandler as _BaseCallbackHandler
+except ImportError:
+    try:
+        from langchain.callbacks.base import BaseCallbackHandler as _BaseCallbackHandler
+    except ImportError:
+        _BaseCallbackHandler = object
 
-class SlowBurnCallbackHandler:
+
+class SlowBurnCallbackHandler(_BaseCallbackHandler):
     """LangChain callback handler for cost-controlled LLM execution.
 
     Implements ``on_llm_start``, ``on_llm_end``, and ``on_llm_error``
