@@ -1,0 +1,17 @@
+{
+  "step": 5,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "LLM rate limiting backpressure distributed systems OpenAI API"
+      },
+      "result_length": 1707
+    }
+  ],
+  "actual_input_tokens": 2988,
+  "actual_output_tokens": 46,
+  "cost_usd": 0.000166,
+  "elapsed_seconds": 2.4605517387390137
+}

@@ -1,0 +1,17 @@
+{
+  "step": 3,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "gRPC backpressure flow control streaming mechanisms"
+      },
+      "result_length": 1802
+    }
+  ],
+  "actual_input_tokens": 1978,
+  "actual_output_tokens": 37,
+  "cost_usd": 0.000131,
+  "elapsed_seconds": 1.417262077331543
+}

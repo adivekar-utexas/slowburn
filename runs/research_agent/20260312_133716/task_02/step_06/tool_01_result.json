@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "How AI Systems Are Architected From Data to Deployment",
+      "url": "https://www.nadcab.com/blog/ai-system-architecture-data-to-deployment",
+      "snippet": "System-level failures dominate because AIsystemsare complexdistributedsystemsthat happen to include machine learning."
+    },
+    {
+      "title": "How Netflix Ensures Highly-Reliable Online Stateful Systems -",
+      "url": "https://www.infoq.com/presentations/netflix-stateful-cache/",
+      "snippet": "In this podcast, InfoQ spoke with Somtochi Onyekwere on recent developments indistributeddatasystems, how to achieve fast, eventually consistent ..."
+    },
+    {
+      "title": "What Happens When Everyone Clicks “Buy Now” at the... | Medium",
+      "url": "https://medium.com/@akhil.chandewar00/what-happens-when-everyone-clicks-buy-now-at-the-same-time-ffbfbc63a30c",
+      "snippet": "5.RateLimiting&Backpressure. When the herd begins, the worst thing you can do is: - Accept everything. Instead: - Apply per-user rate limits - Apply global request caps - Use token buckets - Reject excess requests early."
+    },
+    {
+      "title": "Scaling Web Scraping from 1K to 10M Pages per Day | FineData.ai",
+      "url": "https://finedata.ai/blog/scaling-web-scraping-millions/",
+      "snippet": "Covers asyncpatterns, queues,ratelimiting,distributedsystems, and cost optimization.Ratelimitingper domain becomes critical. Error handling needs to be more robust (retries, backoff). Memory management withlargenumbers of concurrent responses."
+    },
+    {
+      "title": "Scraper Spider",
+      "url": "https://dbaman.guru/",
+      "snippet": "Atombot supports multipleLargeLanguageModel (LLM) providers, including those using OpenAI-compatible endpoints or Codex in CLI mode, and provides provider-first onboarding that automatically detectsmodelsfrom Ollama, LM Studio, or Codex to set up configurations seamlessly."
+    }
+  ]
+}

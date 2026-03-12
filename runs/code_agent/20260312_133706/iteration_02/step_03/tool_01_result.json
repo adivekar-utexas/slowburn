@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Python Best Practices: Type Hints, Docstrings, and Doctests Explained ...",
+      "url": "https://www.blog.qualitypointtech.com/2025/06/python-best-practices-type-hints.html",
+      "snippet": "🧠 Why ThesePracticesMatter When you're writingPythoncode—especially for real-world projects or sharing your work—clarity is everything. Here's how each of thesepracticescontributes:Typehintsmake your code easier to understand and debug.Docstringstell others (and your future self) what the code does. Doctests provide a simple way to validate codeexamplesdirectly from the ..."
+    },
+    {
+      "title": "docstrings | Python Best Practices - Real Python",
+      "url": "https://realpython.com/ref/best-practices/docstrings/",
+      "snippet": "Guidelines andbestpracticesthat will help you write gooddocstringsfor yourPythonpackages, modules, functions, and classes."
+    },
+    {
+      "title": "8 Essential Python Docstring Examples for Senior Developers",
+      "url": "https://deepdocs.dev/python-docstring-example/",
+      "snippet": "The introduction oftypehintsin PEP 484 fundamentally changedPythondocumentation. This modern style shiftstypedeclarations from thedocstringdirectly into the code itself, creating a single source of truth that is both human-readable and machine-verifiable."
+    },
+    {
+      "title": "Python Docstring Intelligence - Auto-Generate, Validate & Track",
+      "url": "https://marketplace.visualstudio.com/items?itemName=nextgencode.python-docstring-intelligence",
+      "snippet": "PythonDocstringIntelligence 📝 Smartdocstringgenerator, validator, and coverage tracker forPythondevelopersPythonDocstringIntelligence is the most advanced documentation tool forPythondevelopers. Auto-generatedocstringsin Google/NumPy/Sphinx styles, validateexamplesin real-time, track coverage, and generate unit tests - all with AI-powered intelligence. ⚡ 10x faster than ..."
+    },
+    {
+      "title": "Typing Best Practices — typing documentation",
+      "url": "https://typing.python.org/en/latest/reference/best_practices.html",
+      "snippet": "TypingBestPractices¶ Introduction ¶ Over time, somebestpracticeshave proven themselves as useful when working withtypehintsinPython. Not allpracticesare applicable in all situations and somepracticescome down to personal style and preference, but they are a good default set of recommendations to fall back to, unless there is a specific reason to deviate. Thesebestpractices..."
+    }
+  ]
+}

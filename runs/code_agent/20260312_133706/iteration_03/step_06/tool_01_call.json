@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_428c39a842f945608ca6ea0d",
+  "function": "search_web",
+  "arguments": {
+    "query": "RFC 5322 email regex pattern comprehensive python angle brackets international"
+  }
+}

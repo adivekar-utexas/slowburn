@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Claude API Cost Calculator 2025 - Latest Models | Opus 4.1",
+      "url": "https://calculatequick.com/ai/claude-token-cost-calculator/",
+      "snippet": "Claude 4 models lead software engineering benchmarks, often justifying higherper-tokencoststhrough superior output quality and fewer required ..."
+    },
+    {
+      "title": "1 Example trace from mini-swe-agent working on SWE-Bench. The",
+      "url": "https://arxiv.org/html/2511.02230v1",
+      "snippet": "...SWE-Benchand BFCL) with Llama-3.1 8B/70B models shows that Continuum significantly improves the average job completion times, and remains performant ..."
+    },
+    {
+      "title": "The LLM Price-Intelligence Paradox: Why Smarter Models Are",
+      "url": "https://ai505.com/the-llm-price-intelligence-paradox-why-smarter-models-are-costing-you-more-than-ever/",
+      "snippet": "... note upfront: throughout this analysis, I use “ effectivecostpertask” as the primary comparison metric rather than rawAPIpricing ..."
+    },
+    {
+      "title": "MegaFlow: Large-Scale Distributed Orchestration System for the",
+      "url": "https://arxiv.org/html/2601.07526v2",
+      "snippet": "Traditional approaches to agent training work well for simpletaskssuch as single-turn functioncalling( Patil et al."
+    },
+    {
+      "title": "OpenAI's Codex-Max Solves the Wrong Problem Better",
+      "url": "https://www.implicator.ai/openais-codex-max-solves-the-wrong-problem-better/",
+      "snippet": "Thirty percent fewer tokens than its predecessor, 27-42% faster on realtasks, 77.9% onSWE-BenchVerified versus 73.7% before."
+    }
+  ]
+}

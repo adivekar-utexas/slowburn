@@ -1,0 +1,17 @@
+{
+  "step": 4,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "TCP flow control backpressure window size mechanisms"
+      },
+      "result_length": 2022
+    }
+  ],
+  "actual_input_tokens": 2446,
+  "actual_output_tokens": 38,
+  "cost_usd": 0.000138,
+  "elapsed_seconds": 1.5673389434814453
+}

@@ -1,0 +1,17 @@
+{
+  "step": 2,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Python email extraction regex best practices"
+      },
+      "result_length": 1861
+    }
+  ],
+  "actual_input_tokens": 1070,
+  "actual_output_tokens": 131,
+  "cost_usd": 0.000535,
+  "elapsed_seconds": 4.493841886520386
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Pricing | OpenAI API",
+      "url": "https://developers.openai.com/api/docs/pricing",
+      "snippet": "For models with a 1.05M context window (gpt-5.4andgpt-5.4-pro), the listedpricesapply to prompts with fewer than 272K inputtokens. Prompts with more than 272K inputtokensare priced at 2x input and 1.5x output for the full session for standard, batch, and flex."
+    },
+    {
+      "title": "OpenAI GPT-4o Pricing (2026) — Cost per 1K/1M Tokens ...",
+      "url": "https://langcopilot.com/llm-pricing/openai/gpt-4o",
+      "snippet": "OpenAIGPT-4ocosts $2.50 per 1M inputtokensand $10.00 per 1M output tokens, with cached input at $1.250 per1Mtokens. How much does it cost per 1K tokens? Per 1K tokens: $0.0025 for input and $0.0100 for output. This is useful for calculating costs for smaller workloads or individual API calls."
+    },
+    {
+      "title": "OpenAI API Pricing (Updated 2026) – All Models & Token Costs",
+      "url": "https://pricepertoken.com/pricing-page/provider/openai",
+      "snippet": "1 day ago ·CompleteOpenAIAPIpricingguide for 2026. Compare all models withper-tokencosts, context lengths, andpricingexamples."
+    },
+    {
+      "title": "LLM API Pricing Comparison (2025): OpenAI, Gemini, Claude",
+      "url": "https://intuitionlabs.ai/articles/llm-api-pricing-comparison-2025",
+      "snippet": "A complete LLMAPIpricingcomparison for2025. Analyzetoken-based costs forOpenAI(GPT-5), Google Gemini, Anthropic Claude, Grok, and DeepSeek models."
+    },
+    {
+      "title": "GPT-5 vs GPT-4o API Pricing: 2025 Cost Guide",
+      "url": "https://www.creolestudios.com/gpt-5-vs-gpt-4o-api-pricing-comparison/",
+      "snippet": "Sep 23,2025·CompareGPT-5 andGPT-4oAPIcosts, features, and real-world ROI. Discover whichOpenAImodel offers the best value for your2025use cases."
+    }
+  ]
+}

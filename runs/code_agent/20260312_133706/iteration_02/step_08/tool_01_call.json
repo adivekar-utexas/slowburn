@@ -1,0 +1,13 @@
+{
+  "tool_call_id": "call_8748add9485d4dbf81e04b37",
+  "function": "write_file",
+  "arguments": {
+    "path": "solution.py",
+    "content": "import re\nfrom collections import Counter\nfrom typing import List",
+    "": "str) -> List[str]:\n    \"\"\"\n    Extract email addresses from text using RFC 5322 compliant regex pattern.\n    \n    This function uses a comprehensive regex pattern to identify valid email addresses\n    in the input text and returns them as a list of unique addresses",
+    "Args": "n        text: The input text to search for email addresses. Must be a non-empty string.\n        \n    Returns:\n        List of unique email addresses found in the text. Returns empty list if no\n        emails are found.\n        \n    Raises:\n        TypeError: If text is not a string.\n        ValueError: If text is empty or contains only whitespace.\n        \n    Examples:\n        >>> extract_emails(\"Contact me at john@example.com or jane@test.org\")\n        ['john@example.com'",
+    "jane@test.org": "n        \n        >>> extract_emails(\"Emails: user@domain.com",
+    "user@domain.com', 'another.user@sub.domain.co.uk": "n        \n        >>> extract_emails(\"No emails here\")\n        []\n        \n        >>> extract_emails(\"\")  # doctest: +IGNORE_EXCEPTION_DETAIL\n        Traceback (most recent call last):\n        ValueError: Input text cannot be empty or contain only whitespace\n        \n        >>> extract_emails(123)  # doctest: +IGNORE_EXCEPTION_DETAIL\n        Traceback (most recent call last):\n        TypeError: Input text must be a string\n    \"\"\"\n    # Input validation\n    if not isinstance(text",
+    "str)": "n        raise TypeError(\"Input text must be a string\")\n    \n    if not text.strip():\n        raise ValueError(\"Input text cannot be empty or contain only whitespace\")\n    \n    # RFC 5322 compliant email regex pattern (more comprehensive)\n    email_pattern = r\"\"\"\n        [a-zA-Z0-9._%+-]+       # Username part\n        @                       # @ symbol\n        [a-zA-Z0-9.-]+          # Domain name\n        \\.                      # Dot before TLD\n        [a-zA-Z]{2"
+  }
+}

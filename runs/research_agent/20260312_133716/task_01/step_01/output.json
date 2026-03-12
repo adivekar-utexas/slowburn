@@ -1,0 +1,17 @@
+{
+  "step": 1,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "LLM agent production costs GPT-4 Claude Gemini API pricing SWE-bench Tau-bench"
+      },
+      "result_length": 1535
+    }
+  ],
+  "actual_input_tokens": 711,
+  "actual_output_tokens": 197,
+  "cost_usd": 0.000255,
+  "elapsed_seconds": 5.534934997558594
+}

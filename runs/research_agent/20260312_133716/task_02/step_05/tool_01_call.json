@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_751e1f7ed9a4442db9306b25",
+  "function": "search_web",
+  "arguments": {
+    "query": "LLM rate limiting backpressure distributed systems OpenAI API"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "step": 3,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Python Counter word counting best practices"
+      },
+      "result_length": 1970
+    }
+  ],
+  "actual_input_tokens": 1645,
+  "actual_output_tokens": 50,
+  "cost_usd": 0.001075,
+  "elapsed_seconds": 6.331881999969482
+}

@@ -1,0 +1,17 @@
+{
+  "step": 11,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "\"GPT-4\" \"$5 per million tokens\" \"$15 per million tokens\" Claude pricing"
+      },
+      "result_length": 1745
+    }
+  ],
+  "actual_input_tokens": 5875,
+  "actual_output_tokens": 80,
+  "cost_usd": 0.000216,
+  "elapsed_seconds": 2.5007598400115967
+}

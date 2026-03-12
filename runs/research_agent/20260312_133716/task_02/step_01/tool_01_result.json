@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Back Pressure in Distributed Systems - GeeksforGeeks",
+      "url": "https://www.geeksforgeeks.org/computer-networks/back-pressure-in-distributed-systems/",
+      "snippet": "26 June 2024 -Here are some notable examples: ... Apache Kafka: In Kafka, back pressurehelps manage the rate at which producers send messages to topics and consumers read them, ensuring that consumers are not overwhelmed by the influx of data."
+    },
+    {
+      "title": "Backpressure explained — the resisted flow of data through software | by Jay Phelps | Medium",
+      "url": "https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7",
+      "snippet": "9 May 2025 -When I worked at Netflix, this sort of backpressure was common. I talk about it in one of my talks. Ultimately, which strategy we used to control backpressure depended on the use case. Sometimes we were able to control the producer using things like RSocket and gRPC."
+    },
+    {
+      "title": "Back-pressure in Grpc-akkastream – Beyond the lines",
+      "url": "https://www.beyondthelines.net/computing/grpc-akkastream-back-pressure/",
+      "snippet": "Now that we’ve got a good idea on how back-pressure is implemented inside both GRPC-java and Akkastream, let’s see how we can put everything together and provide a fully reactive akkastream interface for GRPC."
+    },
+    {
+      "title": "Backpressure - RisingWave: Event Streaming Platform For Agents, Apps, and Analytics",
+      "url": "https://risingwave.com/glossary/backpressure/",
+      "snippet": "TCP Flow Control: At a lower level, standard TCP flow control mechanisms inherently provide a form of backpressure by adjusting window sizes based on receiver buffer availability. However, application-level backpressure is often needed for more sophisticated control. Streaming frameworks like Apache Flink, Akka Streams, and RisingWave implement sophisticated internal backpressure mechanisms between their distributed operators."
+    },
+    {
+      "title": "gRPC-Kafka backpressure support? · aklivity/zilla · Discussion #1244",
+      "url": "https://github.com/aklivity/zilla/discussions/1244",
+      "snippet": "Can we dynamically adjust the in/out rate from topics, across gRPC services through Zilla? Beta Was this translation helpful? Give feedback. ... There was an error while loading. Please reload this page. Something went wrong. There was an error while loading. Please reload this page. ... Currently, Zilla doesn't support rate-limiting, but it is on our feature roadmap. This enhancement would cover both inbound and outbound messages to a Kafka topic."
+    }
+  ]
+}

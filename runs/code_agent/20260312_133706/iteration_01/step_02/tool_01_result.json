@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Capturing emails with regex in Python - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/45498518/capturing-emails-with-regex-in-python",
+      "snippet": "4 Aug 2017·I am trying to extract the emails from this example sentence. However, emails is populating with only the @ symbol and the letter immediately before that.regex extract email from strings - Stack OverflowUse regex to extract recepient and sender from an email text in pythonMore results from stackoverflow.com"
+    },
+    {
+      "title": "Mastering Regular Expressions in Python — Part 1: A Gentle ... - Medium",
+      "url": "https://medium.com/ai-qa-nexus/mastering-regular-expressions-in-python-part-1-a-gentle-introduction-step-by-step-guide-to-9513bc87de04",
+      "snippet": "16 Aug 2025·- Step-by-Step Email Extraction: We will build a robust regex pattern from scratch to capture a wide variety of email formats."
+    },
+    {
+      "title": "From Basics to Best Practices: Python Regex Mastery - The New Stack",
+      "url": "https://thenewstack.io/from-basics-to-best-practices-python-regex-mastery/",
+      "snippet": "18 Mar 2025·It automates various text-processing tasks, such as validating email addresses, extracting data from log files and cleaning messy datasets."
+    },
+    {
+      "title": "Python Regex: Master Regular Expressions in Python",
+      "url": "https://mimo.org/glossary/python/regex-regular-expressions",
+      "snippet": "Regex is invaluable for validating fields such as email addresses, phone numbers, or file formats. It also helps identify and extract data from large datasets, ..."
+    },
+    {
+      "title": "Extracting email addresses using regular expressions in ...",
+      "url": "https://www.tutorialspoint.com/extracting-email-addresses-using-regular-expressions-in-python",
+      "snippet": "20 Jun 2020·The RFC 5322 specifies the format of an email address. We'll use this format to extract email addresses from the text."
+    }
+  ]
+}

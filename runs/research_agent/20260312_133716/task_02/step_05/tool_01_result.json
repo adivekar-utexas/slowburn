@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "platform.openai.com/docs/guides/rate-limits",
+      "url": "https://platform.openai.com/docs/guides/rate-limits",
+      "snippet": "Ratelimits-OpenAIAPIDocumentation."
+    },
+    {
+      "title": "Build a crash-proof AI agent with Temporal +OpenAIAgents SDK. Full...",
+      "url": "https://gist.github.com/jordansterchele-dev/f95447f76e9a086a674971213c38b32c",
+      "snippet": "Retry Configuration forLLMCalls.LLMAPIshaveratelimits, transient errors, and occasional timeouts. This retry policy handles all three without anyapplication-level retry logic"
+    },
+    {
+      "title": "Resilient-LLM: How I Built a Fault-TolerantLLMIntegration... | RavChat",
+      "url": "https://www.ravchat.com/resilient-llm-build-fault-integration",
+      "snippet": "Expertise:LLMretrieval and evaluation, SEO measurement (GSC/GA),Distributedsystemsperformance. Resilient-LLM: How I Built a Fault-TolerantLLMIntegration Layer That Auto-Switches Providers onRate-LimitErrors. Table of Contents. Why this matters."
+    },
+    {
+      "title": "The unifiedinterfacefor LLMs. Find the best models & prices for your...",
+      "url": "https://openrouter.ai/",
+      "snippet": "OneAPIfor Any Model. Access all major models through a single, unifiedinterface.OpenAISDK works out of the box.Create anAPIkey and start making requests. FullyOpenAIcompatible."
+    },
+    {
+      "title": "AI Agent:Ratelimitreached error - Questions - n8n Community",
+      "url": "https://community.n8n.io/t/ai-agent-rate-limit-reached-error/68114",
+      "snippet": "However, when I integrate it into an n8n workflow, I encounter anOpenAI:Ratelimitreached error with the GPT-4o model. I suspect this is due to the size of the data in my table. It works with the GPT-4o-mini model, but the results provided by the AI are often less accurate."
+    }
+  ]
+}

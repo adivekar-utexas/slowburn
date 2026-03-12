@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Email Regex (RFC 6531) · GitHub",
+      "url": "https://gist.github.com/baker-ling/3b4b014ee809aa9732f9873fe060c098",
+      "snippet": "EmailRegex(RFC 6531) This gist is an exploration of how to validateemailaddresses withregexas close as possible to the specification in RFC 6531."
+    },
+    {
+      "title": "How to Validate an Email Address Using a Regular Expression: Best ...",
+      "url": "https://www.tutorialpedia.org/blog/how-can-i-validate-an-email-address-using-a-regular-expression/",
+      "snippet": "One of the most common tools for validatingemailsyntax is the **regular expression (regex)**. However,emailvalidation is deceptively complex due to evolving standards (like RFC 5322) andedgecases(e.g.,internationalcharacters, special symbols)."
+    },
+    {
+      "title": "Regex Email Validation (Practical Patterns & Real Examples)",
+      "url": "https://flipperfile.com/developer-guides/regex/regex-email-validation/",
+      "snippet": "Learn the most practicalregexpatterns foremailvalidation, from simple checks to stricter formats with multipledomainlevels. Includes examples, common pitfalls, and copy-ready patterns for JavaScript, Python, and PCRE."
+    },
+    {
+      "title": "A Practical Guide to Email Regex Validation for Developers",
+      "url": "https://www.emailverify.io/blog/email-regex-validation/",
+      "snippet": "What IsRegexAnd Why Is It Essential ForEmailValidation?Regex, short for regular expressions, is a sequence of characters that defines a search pattern. Developers use it to match, find, and manipulate strings, making it essential for pattern-matchingemailaddresses. By understandingregex, you can turn vague validation rules into precise, actionable checks."
+    },
+    {
+      "title": "5 Ways to Validate Emails with Regex - Abstract API",
+      "url": "https://www.abstractapi.com/guides/api-functions/email-validation-in-regex",
+      "snippet": "The list of valid TLDs andinternationaldomainnames changes frequently, so theregexquickly becomes outdated and misses validemailsor accepts typos. Complex patterns that attempt to catch alledgecasesrely on heavy backtracking."
+    }
+  ]
+}

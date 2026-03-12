@@ -1,0 +1,17 @@
+{
+  "step": 3,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "\"SWE-bench\" \"Tau-bench\" LLM agent cost analysis production dollars"
+      },
+      "result_length": 2110
+    }
+  ],
+  "actual_input_tokens": 1888,
+  "actual_output_tokens": 80,
+  "cost_usd": 0.000166,
+  "elapsed_seconds": 3.1978418827056885
+}

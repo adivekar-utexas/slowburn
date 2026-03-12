@@ -1,0 +1,17 @@
+{
+  "step": 5,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "email regex \"angle brackets\" \"trailing punctuation\" extraction python code examples"
+      },
+      "result_length": 1381
+    }
+  ],
+  "actual_input_tokens": 3126,
+  "actual_output_tokens": 87,
+  "cost_usd": 0.002029,
+  "elapsed_seconds": 30.206497192382812
+}

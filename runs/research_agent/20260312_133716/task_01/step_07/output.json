@@ -1,0 +1,17 @@
+{
+  "step": 7,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "\"SWE-bench\" \"cost per task\" \"API calls\" dollars production"
+      },
+      "result_length": 1981
+    }
+  ],
+  "actual_input_tokens": 4139,
+  "actual_output_tokens": 61,
+  "cost_usd": 0.000204,
+  "elapsed_seconds": 2.0404791831970215
+}

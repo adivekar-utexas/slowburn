@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_bcce442a0c5c4f6c8b4dd58c",
+  "function": "search_web",
+  "arguments": {
+    "query": "\"SWE-bench\" \"cost per task\" \"$\" \"API calls\" production"
+  }
+}

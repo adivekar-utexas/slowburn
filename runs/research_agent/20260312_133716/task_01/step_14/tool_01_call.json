@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_f97bca1941e64efcbcba17d2",
+  "function": "search_web",
+  "arguments": {
+    "query": "\"production costs\" \"LLM agents\" \"API calls\" \"per task\" dollars SWE-bench"
+  }
+}

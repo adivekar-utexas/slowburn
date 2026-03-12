@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_57ec04989d22454dbf8208ec",
+  "function": "search_web",
+  "arguments": {
+    "query": "Apache Kafka backpressure mechanisms consumer producer rate limiting"
+  }
+}

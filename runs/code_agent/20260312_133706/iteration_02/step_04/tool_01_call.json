@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_2acdf6b3fab44692bc8fc372",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python input validation functions type checking Union Optional"
+  }
+}

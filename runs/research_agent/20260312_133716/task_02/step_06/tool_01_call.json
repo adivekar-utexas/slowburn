@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_23633be1e6d345a6be8243e2",
+  "function": "search_web",
+  "arguments": {
+    "query": "\"distributed systems\" \"backpressure\" \"large language models\" \"rate limiting\" patterns"
+  }
+}

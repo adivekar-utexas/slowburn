@@ -1,0 +1,17 @@
+{
+  "step": 1,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "backpressure mechanisms distributed systems Kafka gRPC TCP"
+      },
+      "result_length": 2527
+    }
+  ],
+  "actual_input_tokens": 693,
+  "actual_output_tokens": 182,
+  "cost_usd": 0.000176,
+  "elapsed_seconds": 5.15509295463562
+}

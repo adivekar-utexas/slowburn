@@ -1,0 +1,17 @@
+{
+  "step": 2,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "email regex edge cases angle brackets trailing punctuation international domains"
+      },
+      "result_length": 2037
+    }
+  ],
+  "actual_input_tokens": 1737,
+  "actual_output_tokens": 88,
+  "cost_usd": 0.001235,
+  "elapsed_seconds": 16.354335069656372
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Claude Sonnet 4.5: Features, Benchmarks & Pricing (2026)",
+      "url": "https://www.leanware.co/insights/claude-sonnet-4-5-overview",
+      "snippet": "Comprehensive guide to Claude Sonnet 4.5: Anthropic's best coding model with 77.2%SWE-benchscore, 30+ hour autonomous operation, computer use leadership, and $3/$15pricing."
+    },
+    {
+      "title": "𝜏-Bench: Benchmarking AI agents for the real-world | Sierra",
+      "url": "https://sierra.ai/blog/benchmarking-ai-agents",
+      "snippet": "Jun 20, 2024 ·In our new research paper, we present a new benchmark,𝜏-bench, for evaluating AI agents' performance and reliability in real-world settings with dynamic user and tool interaction."
+    },
+    {
+      "title": "Claude Sonnet 4: Pricing, Context Window, Benchmarks, and More",
+      "url": "https://llm-stats.com/models/claude-sonnet-4-20250514",
+      "snippet": "May 21, 2025 ·It excels in coding (72.7% onSWE-bench) and reasoning, responding more precisely to instructions. Sonnet 4 offers an optimal mix of capability and practicality, with enhanced steerability, and supports extended thinking with tool use."
+    },
+    {
+      "title": "Claude Sonnet 4: Complete API Guide, Pricing & Features",
+      "url": "https://mymeet.ai/blog/anthropic-sonnet-4-guide",
+      "snippet": "Claude Sonnet 4 balances advanced reasoning capabilities withcost-effectivepricing, making it ideal forproductionapplications requiring reliable intelligence without premium modelcosts."
+    },
+    {
+      "title": "Claude Sonnet 4.5: Complete Guide to Anthropic's Best Coding ...",
+      "url": "https://theairankings.com/anthropic/claude-sonnet-4-5/",
+      "snippet": "Sep 29, 2025 ·Opus 4.5 (80.9%SWE-bench) is Anthropic’s most capable model for complex tasks. Sonnet 4.5 (77.2%SWE-bench) offers ~95% of the capability at 60% of theprice($3/$15 vs $5/$25)."
+    }
+  ]
+}

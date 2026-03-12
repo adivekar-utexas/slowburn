@@ -1,0 +1,17 @@
+{
+  "step": 2,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Apache Kafka backpressure mechanisms consumer producer rate limiting"
+      },
+      "result_length": 2181
+    }
+  ],
+  "actual_input_tokens": 1446,
+  "actual_output_tokens": 48,
+  "cost_usd": 0.000137,
+  "elapsed_seconds": 3.2692759037017822
+}

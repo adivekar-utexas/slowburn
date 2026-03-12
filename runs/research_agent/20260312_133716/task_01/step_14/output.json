@@ -1,0 +1,17 @@
+{
+  "step": 14,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "\"production costs\" \"LLM agents\" \"API calls\" \"per task\" dollars SWE-bench"
+      },
+      "result_length": 1968
+    }
+  ],
+  "actual_input_tokens": 7560,
+  "actual_output_tokens": 67,
+  "cost_usd": 0.000302,
+  "elapsed_seconds": 2.0732920169830322
+}

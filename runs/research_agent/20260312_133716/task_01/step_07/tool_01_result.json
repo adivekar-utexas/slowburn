@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Agent Evaluation and Benchmarking for Measuring What Matters",
+      "url": "https://notes.muthu.co/2026/02/agent-evaluation-and-benchmarking-for-measuring-what-matters/",
+      "snippet": "Costawareness: A correct answer that costs 50dollarsinAPIcallsisn’t equivalent to one that costs 5 cents.SWE-benchEvolution (2024–2025).SWE-bench, introduced by Jimenez et al. (2024), has become the de facto standard for coding agent evaluation. Key developments"
+    },
+    {
+      "title": "GPT-5.2: Complete Guide to Pricing, Context Window, Benchmarks...",
+      "url": "https://llm-stats.com/blog/research/gpt-5-2-launch",
+      "snippet": "TheSWE-BenchVerified score of 80% means GPT-5.2 successfully resolves 4 out of 5 real GitHub issues when given the full repository context. These aren't toy problems. They'reproductioncodebases with complex dependencies, test suites, and multi-file changes."
+    },
+    {
+      "title": "SWEData Construction, Automatically!",
+      "url": "https://arxiv.org/html/2506.10954v3",
+      "snippet": "• Cost ($): The average LLMAPIcostpertask.• Empty Patch Rate (%): the proportion of tasks where the model submits an empty patch. • Tool Call Failure Rate (%): the rate of failed toolcallsmade by the model."
+    },
+    {
+      "title": "GPT-5.2 vs Claude Opus 4.5: The Definitive Coding... - Cursor IDE 博客",
+      "url": "https://www.cursor-ide.com/blog/gpt-5-2-vs-claude-4-5-coding-benchmark-2025",
+      "snippet": "Comprehensive comparison of GPT-5.2 and Claude Opus 4.5 for coding tasks. IncludesSWE-benchscores, real-world developer experience, pricing analysis, and workflow recommendations for software engineers."
+    },
+    {
+      "title": "Gemini vs ChatGPT (2026): Which AI Is Actually Better? – Kanaries",
+      "url": "https://docs.kanaries.net/articles/gemini-vs-chatgpt",
+      "snippet": "APIPricing.CostPerTask: Real-World Examples. Coding Ability.SWE-BenchVerified (80.6% vs ~75-78%): Both models are excellent at real-world coding tasks. The difference is small enough that the \"better\" model depends on the specific task."
+    }
+  ]
+}

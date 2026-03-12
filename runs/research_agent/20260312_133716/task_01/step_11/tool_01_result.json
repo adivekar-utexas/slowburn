@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "ClaudeAIPricing2026: Pro $20/mo, Max $100-$200 & Opus4.6 API...",
+      "url": "https://screenapp.io/blog/claude-ai-pricing",
+      "snippet": "ClaudeAPIPricing(Pay-Per-Use): Haiku4.5: $1/$5permilliontokens(input/output) - Fastest, most economical. Sonnet4.5: $3/$15permilliontokens- Balanced intelligence and cost."
+    },
+    {
+      "title": "How LLMs Actually Work: A Simple Breakdown ofTokens,Pricing...",
+      "url": "https://www.linkedin.com/pulse/how-llms-actually-work-simple-breakdown-tokens-pricing-sandeep-jha-dndpc",
+      "snippet": "Output: $15.00permilliontokens.Monthly Tokens: 6,600 tokens x 30 days = 198,000 tokens. Finally, let's calculate the company's cost to serve this user withGPT-4o"
+    },
+    {
+      "title": "ClaudeAI Review 2026: Features,Pricing& Comparison Guide",
+      "url": "https://max-productive.ai/ai-tools/claude/",
+      "snippet": "Pricing: $15input / $75 outputpermilliontokens. Context: 200K tokens.Try instead: Gemini 2.5Flash ($0.55permilliontokens—8x cheaper thanClaudeSonnet) for high-volume cost-sensitive deployments, orGPT-4o mini for basic tasks at lowerpricingtiers."
+    },
+    {
+      "title": "Claude3.5Haiku vsClaude3.5Sonnet - LLM Comparison",
+      "url": "https://anotherwrapper.com/tools/llm-pricing/claude-3-5-haiku/claude-3-5-sonnet",
+      "snippet": "$3.00permilliontokens. Generation. Costpermilliontokensfor model-generated responses."
+    },
+    {
+      "title": "ClaudeHaiku4.5vsGPT-4o-mini (Comparative Analysis) | Galaxy.ai",
+      "url": "https://blog.galaxy.ai/compare/claude-haiku-4-5-vs-gpt-4o-mini",
+      "snippet": "permilliontokens. $0.15.ClaudeHaiku4.5by Anthropic understands both text and images, can use external tools and APIs, offers advanced reasoning, generates structured data. It can handle standard conversations with its 200K token context window."
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_e972ceb2b68a46a9b062f124",
+  "function": "search_web",
+  "arguments": {
+    "query": "\"SWE-bench\" results cost dollars \"Tau-bench\" API pricing production"
+  }
+}

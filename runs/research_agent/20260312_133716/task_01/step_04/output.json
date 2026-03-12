@@ -1,0 +1,17 @@
+{
+  "step": 4,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "GPT-4 Claude Gemini API pricing per token dollars production costs 2024 2025"
+      },
+      "result_length": 1467
+    }
+  ],
+  "actual_input_tokens": 2507,
+  "actual_output_tokens": 68,
+  "cost_usd": 0.000177,
+  "elapsed_seconds": 10.67800784111023
+}

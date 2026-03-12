@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "regex101: email validation (RFC 5322)",
+      "url": "https://regex101.com/r/3uvtNl/1",
+      "snippet": "Regular expression tester with syntax highlighting, explanation, cheat sheet for PHP/PCRE,Python, GO, JavaScript, Java, C#/.NET, Rust."
+    },
+    {
+      "title": "Regex validation of email addresses according to RFC5321/RFC5322",
+      "url": "https://stackoverflow.com/questions/13992403/regex-validation-of-email-addresses-according-to-rfc5321-rfc5322",
+      "snippet": "Does anyone know aregexthat validatesemailaddresses according to RFC5321/RFC5322? Since (nestable) comments make the grammar irregular, only addresses without comments should be regarded."
+    },
+    {
+      "title": "The Ultimate Email Validation Regex (2025 Edition)",
+      "url": "https://www.heybounce.io/email-validation-regex",
+      "snippet": "EmailValidationRegexStop Googling and start validating. Grab a production-readypattern, test cases & language-specific snippets — all on one page.RFC5322-Inspired: Balances correctness & performance. 64/254 Length Guards: Protects local-part & full address limits. Copy-Paste Ready: Works in all majorregexengines."
+    },
+    {
+      "title": "Python: Validate Email Address with Regular Expressions (RegEx)",
+      "url": "https://stackabuse.com/python-validate-email-address-with-regular-expressions-regex/",
+      "snippet": "In this guide, we'll take a look at how to validateemailaddresses inPythonwith Regular Expressions, with a general-purpose simple expression as well as anRFC5322-compliant robustregex."
+    },
+    {
+      "title": "Email Validation Regex | RegEx Snippets",
+      "url": "https://regex-snippets.com/email",
+      "snippet": "Ready-to-useemailvalidation regular expressionpatterns.RFC5322compliantregexwith implementations in JavaScript,Python, Rust, Go, and more."
+    }
+  ]
+}

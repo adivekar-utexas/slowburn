@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_4e55a353ebea4885be6bae2f",
+  "function": "search_web",
+  "arguments": {
+    "query": "OpenAI API pricing GPT-4o GPT-4 \"per million tokens\" 2025"
+  }
+}

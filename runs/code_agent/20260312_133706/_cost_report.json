@@ -1,0 +1,483 @@
+{
+  "summary": {
+    "openrouter/z-ai/glm-4.5": {
+      "calls": 39,
+      "input_tokens": 154403,
+      "output_tokens": 19306,
+      "total_tokens": 173709,
+      "cost_usd": 0.08970300000000002
+    }
+  },
+  "total_cost_usd": 0.089703,
+  "num_calls": 39,
+  "calls": [
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000597,
+      "input_tokens": 723,
+      "output_tokens": 84,
+      "total_tokens": 807,
+      "timestamp": 1773302832.8053749,
+      "metadata": {
+        "step": 1,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000535,
+      "input_tokens": 1070,
+      "output_tokens": 131,
+      "total_tokens": 1201,
+      "timestamp": 1773302837.300601,
+      "metadata": {
+        "step": 2,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001075,
+      "input_tokens": 1645,
+      "output_tokens": 50,
+      "total_tokens": 1695,
+      "timestamp": 1773302845.4254909,
+      "metadata": {
+        "step": 3,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001365,
+      "input_tokens": 2172,
+      "output_tokens": 38,
+      "total_tokens": 2210,
+      "timestamp": 1773302850.394473,
+      "metadata": {
+        "step": 4,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001738,
+      "input_tokens": 2734,
+      "output_tokens": 54,
+      "total_tokens": 2788,
+      "timestamp": 1773302872.214724,
+      "metadata": {
+        "step": 5,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.00367,
+      "input_tokens": 3219,
+      "output_tokens": 800,
+      "total_tokens": 4019,
+      "timestamp": 1773302918.304229,
+      "metadata": {
+        "step": 6,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.003856,
+      "input_tokens": 3733,
+      "output_tokens": 735,
+      "total_tokens": 4468,
+      "timestamp": 1773302953.1833,
+      "metadata": {
+        "step": 7,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.004113,
+      "input_tokens": 4355,
+      "output_tokens": 699,
+      "total_tokens": 5054,
+      "timestamp": 1773302993.579695,
+      "metadata": {
+        "step": 8,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.004118,
+      "input_tokens": 5075,
+      "output_tokens": 505,
+      "total_tokens": 5580,
+      "timestamp": 1773303010.2609768,
+      "metadata": {
+        "step": 9,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000615,
+      "input_tokens": 732,
+      "output_tokens": 80,
+      "total_tokens": 812,
+      "timestamp": 1773303012.09637,
+      "metadata": {
+        "step": 1,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000732,
+      "input_tokens": 1604,
+      "output_tokens": 46,
+      "total_tokens": 1650,
+      "timestamp": 1773303026.540715,
+      "metadata": {
+        "step": 2,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000543,
+      "input_tokens": 2088,
+      "output_tokens": 45,
+      "total_tokens": 2133,
+      "timestamp": 1773303031.617918,
+      "metadata": {
+        "step": 3,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000643,
+      "input_tokens": 2667,
+      "output_tokens": 40,
+      "total_tokens": 2707,
+      "timestamp": 1773303056.11064,
+      "metadata": {
+        "step": 4,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002353,
+      "input_tokens": 3199,
+      "output_tokens": 800,
+      "total_tokens": 3999,
+      "timestamp": 1773303103.951006,
+      "metadata": {
+        "step": 5,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.0038,
+      "input_tokens": 3464,
+      "output_tokens": 800,
+      "total_tokens": 4264,
+      "timestamp": 1773303149.243775,
+      "metadata": {
+        "step": 6,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.00242,
+      "input_tokens": 3984,
+      "output_tokens": 800,
+      "total_tokens": 4784,
+      "timestamp": 1773303170.63651,
+      "metadata": {
+        "step": 7,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.004131,
+      "input_tokens": 4503,
+      "output_tokens": 800,
+      "total_tokens": 5303,
+      "timestamp": 1773303200.771969,
+      "metadata": {
+        "step": 8,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002791,
+      "input_tokens": 5027,
+      "output_tokens": 800,
+      "total_tokens": 5827,
+      "timestamp": 1773303253.204164,
+      "metadata": {
+        "step": 9,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.00262,
+      "input_tokens": 5601,
+      "output_tokens": 800,
+      "total_tokens": 6401,
+      "timestamp": 1773303274.897536,
+      "metadata": {
+        "step": 10,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.00269,
+      "input_tokens": 6186,
+      "output_tokens": 800,
+      "total_tokens": 6986,
+      "timestamp": 1773303335.078691,
+      "metadata": {
+        "step": 11,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.004951,
+      "input_tokens": 6771,
+      "output_tokens": 554,
+      "total_tokens": 7325,
+      "timestamp": 1773303354.363523,
+      "metadata": {
+        "step": 12,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002805,
+      "input_tokens": 6855,
+      "output_tokens": 800,
+      "total_tokens": 7655,
+      "timestamp": 1773303451.970263,
+      "metadata": {
+        "step": 13,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002826,
+      "input_tokens": 7420,
+      "output_tokens": 800,
+      "total_tokens": 8220,
+      "timestamp": 1773303482.026782,
+      "metadata": {
+        "step": 14,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002349,
+      "input_tokens": 8005,
+      "output_tokens": 554,
+      "total_tokens": 8559,
+      "timestamp": 1773303495.864022,
+      "metadata": {
+        "step": 15,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.00064,
+      "input_tokens": 745,
+      "output_tokens": 88,
+      "total_tokens": 833,
+      "timestamp": 1773303497.9085388,
+      "metadata": {
+        "step": 1,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001235,
+      "input_tokens": 1737,
+      "output_tokens": 88,
+      "total_tokens": 1825,
+      "timestamp": 1773303514.265853,
+      "metadata": {
+        "step": 2,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001547,
+      "input_tokens": 2312,
+      "output_tokens": 73,
+      "total_tokens": 2385,
+      "timestamp": 1773303518.5559318,
+      "metadata": {
+        "step": 3,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.001788,
+      "input_tokens": 2738,
+      "output_tokens": 66,
+      "total_tokens": 2804,
+      "timestamp": 1773303543.922862,
+      "metadata": {
+        "step": 4,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002029,
+      "input_tokens": 3126,
+      "output_tokens": 87,
+      "total_tokens": 3213,
+      "timestamp": 1773303575.844672,
+      "metadata": {
+        "step": 5,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.000762,
+      "input_tokens": 3568,
+      "output_tokens": 89,
+      "total_tokens": 3657,
+      "timestamp": 1773303607.567243,
+      "metadata": {
+        "step": 6,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002424,
+      "input_tokens": 4094,
+      "output_tokens": 800,
+      "total_tokens": 4894,
+      "timestamp": 1773303653.3776052,
+      "metadata": {
+        "step": 7,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.004127,
+      "input_tokens": 4498,
+      "output_tokens": 800,
+      "total_tokens": 5298,
+      "timestamp": 1773303681.046259,
+      "metadata": {
+        "step": 8,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002538,
+      "input_tokens": 4813,
+      "output_tokens": 800,
+      "total_tokens": 5613,
+      "timestamp": 1773303710.969888,
+      "metadata": {
+        "step": 9,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002421,
+      "input_tokens": 4876,
+      "output_tokens": 800,
+      "total_tokens": 5676,
+      "timestamp": 1773303740.036542,
+      "metadata": {
+        "step": 10,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002485,
+      "input_tokens": 5174,
+      "output_tokens": 800,
+      "total_tokens": 5974,
+      "timestamp": 1773303773.729672,
+      "metadata": {
+        "step": 11,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002612,
+      "input_tokens": 5488,
+      "output_tokens": 800,
+      "total_tokens": 6288,
+      "timestamp": 1773303797.364169,
+      "metadata": {
+        "step": 12,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002652,
+      "input_tokens": 5811,
+      "output_tokens": 800,
+      "total_tokens": 6611,
+      "timestamp": 1773303830.4364722,
+      "metadata": {
+        "step": 13,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002536,
+      "input_tokens": 6134,
+      "output_tokens": 800,
+      "total_tokens": 6934,
+      "timestamp": 1773303871.973881,
+      "metadata": {
+        "step": 14,
+        "type": "agent_loop"
+      }
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5",
+      "cost_usd": 0.002571,
+      "input_tokens": 6457,
+      "output_tokens": 800,
+      "total_tokens": 7257,
+      "timestamp": 1773303889.958554,
+      "metadata": {
+        "step": 15,
+        "type": "agent_loop"
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_be4a32dfc2784c7ea75e6825",
+  "function": "search_web",
+  "arguments": {
+    "query": "\"Tau-bench\" \"cost per task\" \"API calls\" dollars production"
+  }
+}

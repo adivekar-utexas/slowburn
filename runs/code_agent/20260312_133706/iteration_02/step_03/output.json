@@ -1,0 +1,17 @@
+{
+  "step": 3,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Python input validation best practices docstring examples type hints"
+      },
+      "result_length": 2352
+    }
+  ],
+  "actual_input_tokens": 2088,
+  "actual_output_tokens": 45,
+  "cost_usd": 0.000543,
+  "elapsed_seconds": 2.7200939655303955
+}

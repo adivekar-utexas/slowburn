@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Flow Control - gRPC",
+      "url": "https://grpc.io/docs/guides/flow-control/",
+      "snippet": "5 Oct 2023·Flow control prevents data loss, improves performance and increases reliability. It applies to streaming RPCs and is not relevant for unary RPCs ..."
+    },
+    {
+      "title": "Streaming Backpressue/Flow Control #104 - grpc/grpc-dotnet - GitHub",
+      "url": "https://github.com/grpc/grpc-dotnet/issues/104",
+      "snippet": "18 Feb 2019·In the past I've seen GRPC services accept and buffer streaming messages extremely aggressively.. This lead to heavy memory usage on the server ..."
+    },
+    {
+      "title": "Backpressure / acknowledge streaming messages - gRPC Swift",
+      "url": "https://forums.swift.org/t/backpressure-acknowledge-streaming-messages/71690",
+      "snippet": "8 May 2024·A \"process complete\" message always requires a specific acknowledgement, and grpc doesn't provide a specific mechanism for this."
+    },
+    {
+      "title": "Backpressure explained — the resisted flow of data through software",
+      "url": "https://medium.com/@jayphelps/backpressure-explained-the-flow-of-data-through-software-2350b3e77ce7",
+      "snippet": "31 Jan 2019·Backpressure is when the progress of turning that input to output is resisted in some way. In most cases that resistance is computational speed."
+    },
+    {
+      "title": "How does gRPC client-streaming flow control work in go? - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/57375360/how-does-grpc-client-streaming-flow-control-work-in-go",
+      "snippet": "6 Aug 2019·Is there some kind of backpressure mechanism implemented for the server to tell the client that it is not ready to receive more data? In the ...Does the C# Implementation of gRPC have streaming back-pressure?Can gRPC Java client send multiple requests in parallel over a long ...More results from stackoverflow.com"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_e757c0231b664dcc859f66d2",
+  "function": "search_web",
+  "arguments": {
+    "query": "OpenAI GPT-4 pricing per token 2024 2025 Claude Sonnet Opus pricing"
+  }
+}

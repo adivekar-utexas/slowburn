@@ -1,0 +1,17 @@
+{
+  "step": 9,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "OpenAI GPT-4 pricing per token 2024 2025 Claude Sonnet Opus pricing"
+      },
+      "result_length": 1765
+    }
+  ],
+  "actual_input_tokens": 5282,
+  "actual_output_tokens": 74,
+  "cost_usd": 0.000243,
+  "elapsed_seconds": 4.566583871841431
+}
