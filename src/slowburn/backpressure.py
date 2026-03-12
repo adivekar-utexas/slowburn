@@ -56,7 +56,7 @@ def timed_acquire(limit_set: Any, requested: Dict[str, int], context: str = ""):
             (k for k in requested if "cost" in k.lower()),
             next(iter(requested), "?"),
         )
-        requested_amount = requested.get(cost_key, 0)
+        requested_amount = requested[cost_key]
         if isinstance(requested_amount, (int, float)) and requested_amount > 0:
             dollar_amount = requested_amount / 1_000_000
             amount_str = f"~${dollar_amount:.4f}"

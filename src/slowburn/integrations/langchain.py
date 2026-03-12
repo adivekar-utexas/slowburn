@@ -179,22 +179,21 @@ class SlowBurnCallbackHandler:
         estimated_input = entry["estimated_input"]
 
         token_usage = {}
-        if hasattr(response, "llm_output") and response.llm_output is not None:
+        if response.llm_output is not None:
             token_usage = response.llm_output.get("token_usage", {})
 
-        prompt_tokens = token_usage.get("prompt_tokens", 0)
-        completion_tokens = token_usage.get("completion_tokens", 0)
+        prompt_tokens = token_usage.get("prompt_tokens")
+        completion_tokens = token_usage.get("completion_tokens")
 
-        if prompt_tokens > 0 and completion_tokens > 0:
+        if prompt_tokens is not None and completion_tokens is not None:
             actual_cost = PricingCache.estimate_cost_microdollars(
                 model_name, prompt_tokens, completion_tokens,
             )
         else:
             text = ""
-            if hasattr(response, "generations"):
-                for gen_list in response.generations:
-                    for gen in gen_list:
-                        text += getattr(gen, "text", "")
+            for gen_list in response.generations:
+                for gen in gen_list:
+                    text += gen.text
             completion_tokens = max(len(text) // 3, 1)
             actual_cost = PricingCache.estimate_cost_microdollars(
                 model_name, estimated_input, completion_tokens,
@@ -205,8 +204,8 @@ class SlowBurnCallbackHandler:
         self.reporter.log_call(
             model=model_name,
             cost_usd=microdollars_to_dollars(actual_cost),
-            input_tokens=prompt_tokens if prompt_tokens > 0 else estimated_input,
-            output_tokens=completion_tokens,
+            input_tokens=prompt_tokens if prompt_tokens is not None else estimated_input,
+            output_tokens=completion_tokens if completion_tokens is not None else 0,
         )
 
     def on_llm_error(

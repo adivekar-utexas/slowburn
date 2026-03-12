@@ -42,15 +42,14 @@ logger = logging.getLogger(__name__)
 def _get_model_name(model: Any) -> str:
     """Extract model name string from a LangChain BaseChatModel.
 
-    Raises RuntimeError if no model name can be determined.
+    BaseChatModel always has model_name. Raises AttributeError if not.
     """
-    for attr in ("model_name", "model", "model_id"):
-        name = getattr(model, attr, None)
-        if isinstance(name, str) and len(name) > 0:
-            return name
+    name = model.model_name
+    if isinstance(name, str) and len(name) > 0:
+        return name
     raise RuntimeError(
-        f"SlowBurnMiddleware: Could not determine model name from {type(model).__name__}. "
-        f"Ensure the chat model has a 'model_name' or 'model' attribute."
+        f"SlowBurnMiddleware: model_name on {type(model).__name__} is "
+        f"empty or not a string: {name!r}"
     )
 
 
@@ -58,7 +57,7 @@ def _extract_text_from_messages(messages: list) -> str:
     """Extract text content from LangChain message objects."""
     parts = []
     for msg in messages:
-        content = getattr(msg, "content", None)
+        content = msg.content
         if isinstance(content, str):
             parts.append(content)
         elif isinstance(content, list):
@@ -129,7 +128,7 @@ class SlowBurnMiddleware:
         if request.model_settings is not None:
             max_tokens = request.model_settings.get("max_tokens")
         if max_tokens is None:
-            max_tokens = getattr(request.model, "max_tokens", None)
+            max_tokens = request.model.max_tokens
         if max_tokens is None:
             raise RuntimeError(
                 f"SlowBurnMiddleware: Could not determine max_tokens from model "
@@ -139,7 +138,7 @@ class SlowBurnMiddleware:
 
         total_text = _extract_text_from_messages(request.messages)
         if request.system_message is not None:
-            sys_content = getattr(request.system_message, "content", "")
+            sys_content = request.system_message.content
             if isinstance(sys_content, str):
                 total_text += " " + sys_content
 
@@ -155,16 +154,24 @@ class SlowBurnMiddleware:
             try:
                 response = handler(request)
 
-                response_text = ""
-                resp_message = getattr(response, "message", None) or response
-                content = getattr(resp_message, "content", None)
-                if isinstance(content, str):
-                    response_text = content
+                resp_message = response
+                content = resp_message.content
+                response_text = content if isinstance(content, str) else ""
 
-                usage_metadata = getattr(resp_message, "usage_metadata", None)
+                usage_metadata = resp_message.usage_metadata
                 if usage_metadata is not None:
-                    actual_input = usage_metadata.get("input_tokens", estimated_input)
-                    actual_output = usage_metadata.get("output_tokens", max(len(response_text) // 3, 1))
+                    if "input_tokens" not in usage_metadata:
+                        raise KeyError(
+                            f"usage_metadata missing 'input_tokens': "
+                            f"{list(usage_metadata.keys())}"
+                        )
+                    if "output_tokens" not in usage_metadata:
+                        raise KeyError(
+                            f"usage_metadata missing 'output_tokens': "
+                            f"{list(usage_metadata.keys())}"
+                        )
+                    actual_input = usage_metadata["input_tokens"]
+                    actual_output = usage_metadata["output_tokens"]
                 else:
                     actual_input = estimated_input
                     actual_output = max(len(response_text) // 3, 1)

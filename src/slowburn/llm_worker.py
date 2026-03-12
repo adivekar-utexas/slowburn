@@ -179,7 +179,7 @@ class SlowBurnLLM(Typed):
 
                 response_message = response.choices[0].message
                 response_text = response_message.content
-                tool_calls = getattr(response_message, "tool_calls", None)
+                tool_calls = response_message.tool_calls
 
                 if response_text is None and tool_calls is None:
                     raise ValueError(
@@ -193,7 +193,7 @@ class SlowBurnLLM(Typed):
                     response_text = _json.dumps({
                         "tool_calls": [
                             {
-                                "id": getattr(tc, "id", None),
+                                "id": tc.id,
                                 "function": {
                                     "name": tc.function.name,
                                     "arguments": tc.function.arguments,

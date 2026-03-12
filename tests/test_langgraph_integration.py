@@ -58,22 +58,15 @@ class TestGetModelName:
         model = SimpleNamespace(model_name="gpt-4o-mini")
         assert _get_model_name(model) == "gpt-4o-mini"
 
-    def test_extracts_model_attr(self) -> None:
-        model = SimpleNamespace(model="claude-3-haiku")
-        assert _get_model_name(model) == "claude-3-haiku"
-
-    def test_extracts_model_id_attr(self) -> None:
-        model = SimpleNamespace(model_id="my-custom-model")
-        assert _get_model_name(model) == "my-custom-model"
-
-    def test_raises_when_no_name_found(self) -> None:
+    def test_raises_when_no_model_name(self) -> None:
+        """Model without model_name raises AttributeError — not silently handled."""
         model = SimpleNamespace(something_else="foo")
-        with pytest.raises(RuntimeError, match="Could not determine model name"):
+        with pytest.raises(AttributeError):
             _get_model_name(model)
 
     def test_raises_on_empty_string(self) -> None:
-        model = SimpleNamespace(model_name="", model="")
-        with pytest.raises(RuntimeError, match="Could not determine model name"):
+        model = SimpleNamespace(model_name="")
+        with pytest.raises(RuntimeError, match="empty or not a string"):
             _get_model_name(model)
 
 
@@ -98,9 +91,11 @@ class TestExtractTextFromMessages:
     def test_empty_messages(self) -> None:
         assert _extract_text_from_messages([]) == ""
 
-    def test_no_content_attr(self) -> None:
+    def test_no_content_attr_raises(self) -> None:
+        """Message without .content raises AttributeError."""
         msg = SimpleNamespace(role="user")
-        assert _extract_text_from_messages([msg]) == ""
+        with pytest.raises(AttributeError):
+            _extract_text_from_messages([msg])
 
 
 # ===========================================================================
@@ -187,29 +182,29 @@ class TestSlowBurnMiddlewareWrapModelCall:
         assert mw.reporter.num_calls == 1
 
     def test_raises_if_no_max_tokens(self) -> None:
-        """Should raise RuntimeError if max_tokens is not available anywhere."""
+        """Should raise AttributeError if max_tokens not on model."""
         mw = SlowBurnMiddleware(budget_usd=10.0)
-        model = SimpleNamespace(model_name="gpt-4o-mini")  # no max_tokens
+        model = SimpleNamespace(model_name="gpt-4o-mini")
         request = SimpleNamespace(
             model=model,
             messages=[_make_message("Hi")],
             system_message=None,
             model_settings=None,
         )
-        with pytest.raises(RuntimeError, match="Could not determine max_tokens"):
+        with pytest.raises(AttributeError):
             mw.wrap_model_call(request, lambda req: _make_response())
 
     def test_raises_if_no_model_name(self) -> None:
-        """Should raise RuntimeError if model name can't be determined."""
+        """Should raise AttributeError if model_name not on model."""
         mw = SlowBurnMiddleware(budget_usd=10.0)
-        model = SimpleNamespace(max_tokens=100)  # no name attrs
+        model = SimpleNamespace(max_tokens=100)
         request = SimpleNamespace(
             model=model,
             messages=[_make_message("Hi")],
             system_message=None,
             model_settings=None,
         )
-        with pytest.raises(RuntimeError, match="Could not determine model name"):
+        with pytest.raises(AttributeError):
             mw.wrap_model_call(request, lambda req: _make_response())
 
     def test_includes_system_message_in_estimation(self) -> None:
@@ -244,6 +239,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
         """The return value from handler should be returned by wrap_model_call."""
         mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
         request = _make_request()
-        sentinel = object()
-        result = mw.wrap_model_call(request, lambda req: sentinel)
-        assert result is sentinel
+        response = _make_response(content="passthrough test")
+        result = mw.wrap_model_call(request, lambda req: response)
+        assert result is response
+        assert result.content == "passthrough test"

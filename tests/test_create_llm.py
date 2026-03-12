@@ -87,7 +87,7 @@ class TestCreateLLM:
         """
         from types import SimpleNamespace
         usage = SimpleNamespace(prompt_tokens=30, completion_tokens=15, total_tokens=45)
-        message = SimpleNamespace(content="test output")
+        message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
             usage=usage,

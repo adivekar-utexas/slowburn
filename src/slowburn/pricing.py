@@ -190,7 +190,13 @@ class PricingCache:
                 any pricing source (needed for Tiers 3-4).
         """
         if model is None:
-            model = getattr(response, "model", None)
+            try:
+                model = response.model
+            except AttributeError:
+                raise ModelNotFoundError(
+                    "Could not determine model: 'model' parameter is None and "
+                    "response object has no 'model' attribute."
+                )
 
         # Tier 1: _hidden_params (fastest, most common for non-streaming)
         try:

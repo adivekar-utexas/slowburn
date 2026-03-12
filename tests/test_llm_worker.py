@@ -26,7 +26,7 @@ def _make_acompletion_response(
         completion_tokens=completion_tokens,
         total_tokens=prompt_tokens + completion_tokens,
     )
-    message = SimpleNamespace(content=content)
+    message = SimpleNamespace(content=content, tool_calls=None)
     choice = SimpleNamespace(message=message)
     return SimpleNamespace(
         usage=usage,

@@ -102,6 +102,7 @@ class TestSlowBurnModelClientCreate:
         client.create({
             "messages": [{"role": "user", "content": "test"}],
             "model": "slowburn/gpt-4o-mini",
+            "max_tokens": 100,
         })
 
         call_kwargs = mock_completion.call_args.kwargs
@@ -113,7 +114,7 @@ class TestSlowBurnModelClientCreate:
         client, _, reporter = _make_client()
 
         for _ in range(3):
-            client.create({"messages": [{"role": "user", "content": "test"}]})
+            client.create({"messages": [{"role": "user", "content": "test"}], "max_tokens": 100})
 
         assert reporter.num_calls == 3
         assert reporter.total_cost() == pytest.approx(0.003, abs=1e-5)

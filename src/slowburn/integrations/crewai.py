@@ -89,11 +89,10 @@ class SlowBurnCrewAI:
             ) from e
 
         def check_budget(context: "LLMCallHookContext") -> Optional[bool]:
-            model_name = getattr(context.llm, "model_name", None) or getattr(context.llm, "model", None)
-            if model_name is None:
+            model_name = context.llm.model_name
+            if not isinstance(model_name, str) or len(model_name) == 0:
                 raise RuntimeError(
-                    "SlowBurnCrewAI: Could not determine model name from CrewAI's LLM object. "
-                    "Ensure the agent's LLM has a 'model_name' or 'model' attribute."
+                    "SlowBurnCrewAI: context.llm.model_name is empty or not a string."
                 )
 
             total_text = " ".join(
@@ -102,7 +101,7 @@ class SlowBurnCrewAI:
                 if isinstance(msg.get("content"), str)
             )
             estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-            max_tokens = getattr(context.llm, "max_tokens", None)
+            max_tokens = context.llm.max_tokens
             if max_tokens is None:
                 raise RuntimeError(
                     "SlowBurnCrewAI: Could not determine max_tokens from CrewAI's LLM object. "
@@ -122,10 +121,10 @@ class SlowBurnCrewAI:
             return None
 
         def track_cost(context: "LLMCallHookContext") -> Optional[str]:
-            model_name = getattr(context.llm, "model_name", None) or getattr(context.llm, "model", None)
-            if model_name is None:
+            model_name = context.llm.model_name
+            if not isinstance(model_name, str) or len(model_name) == 0:
                 raise RuntimeError(
-                    "SlowBurnCrewAI.track_cost: Could not determine model name."
+                    "SlowBurnCrewAI.track_cost: model_name is empty or not a string."
                 )
 
             response_text = context.response

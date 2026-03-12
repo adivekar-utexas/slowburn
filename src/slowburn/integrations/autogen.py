@@ -91,11 +91,20 @@ class SlowBurnModelClient:
         Returns:
             litellm completion response object.
         """
-        messages = params.get("messages", [])
+        messages = params.get("messages")
+        if messages is None:
+            raise ValueError(
+                "SlowBurnModelClient.create(): 'messages' is required in params."
+            )
         model = params.get("model", self.litellm_model)
         if model.startswith("slowburn/"):
             model = model.removeprefix("slowburn/")
-        max_tokens = params.get("max_tokens", 1000)
+        max_tokens = params.get("max_tokens")
+        if max_tokens is None:
+            raise ValueError(
+                "SlowBurnModelClient.create(): 'max_tokens' is required in params. "
+                "Set it in the AG2 config_list or pass it per-call."
+            )
 
         # 1. ESTIMATE tokens and cost
         total_text = " ".join(

@@ -40,7 +40,7 @@ def _make_shared_limit_set(budget_usd: float = 1.0, mode: str = "thread") -> Lim
 
 def _make_acompletion_response(cost: float = 0.0001):
     usage = SimpleNamespace(prompt_tokens=50, completion_tokens=20, total_tokens=70)
-    message = SimpleNamespace(content="Shared budget response")
+    message = SimpleNamespace(content="Shared budget response", tool_calls=None)
     choice = SimpleNamespace(message=message)
     return SimpleNamespace(
         usage=usage,
