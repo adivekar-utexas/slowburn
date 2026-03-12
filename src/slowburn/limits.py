@@ -14,7 +14,7 @@ from concurry import RateLimit
 
 MICRODOLLARS_PER_DOLLAR: int = 1_000_000
 
-DEFAULT_COST_LIMIT_KEY: str = "cost_usd"
+DEFAULT_COST_LIMIT_KEY: str = "cost_microdollars"
 
 
 def dollars_to_microdollars(usd: float) -> int:

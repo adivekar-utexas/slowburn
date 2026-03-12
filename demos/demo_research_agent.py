@@ -1,27 +1,24 @@
 """
-Demo 2: Deep Research Agent with Web Search Tool
+Demo: Deep Research Agent with real web search + file writing.
 
-A real agent that researches topics using web search, reads the results,
-and synthesizes a structured report. Uses litellm's tool calling to
-invoke a web search tool, then iteratively deepens the research.
+A proper ReAct agent that:
+1. Receives a research task
+2. Uses DuckDuckGo web search to find real information
+3. Takes notes by writing to files in a sandboxed workspace
+4. Synthesizes findings into a final report
 
-Tools:
-- web_search: Search the web using a query (via litellm's model)
-- take_notes: Save research notes to a file
-- read_notes: Read previously saved notes
-- write_report: Write the final report
-
-This demonstrates a real multi-step research workflow with 100+ LLM calls
-where each call can trigger tool use.
+All file operations are sandboxed to runs/research_agent/<timestamp>/.
+Every LLM call is cost-tracked via SlowBurn's CostLimit.
 
 Usage:
     python demos/demo_research_agent.py
 """
 
-import json
+import asyncio
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -33,290 +30,120 @@ if not api_key:
     print("Set OPENROUTER_API_KEY in .env to run this demo.")
     sys.exit(1)
 
-from slowburn import create_llm  # noqa: E402
+from concurry import CallLimit, LimitSet, RateLimit  # noqa: E402
+from lib.agent_loop import run_agent  # noqa: E402
+from lib.tools import TOOL_SCHEMAS, execute_tool_call  # noqa: E402
 
-MODEL = "openrouter/google/gemini-2.0-flash-001"
+from slowburn.limits import CostLimit  # noqa: E402
+from slowburn.reporter import CostReporter  # noqa: E402
+
+MODEL = "openrouter/z-ai/glm-4.5-air"
 BUDGET_USD = 0.15
-MAX_TOKENS = 400
-OUTPUT_DIR = Path(__file__).parent / "research_output"
+MAX_TOKENS = 600
+MAX_STEPS = 15
 
-RESEARCH_TOPICS = [
-    {
-        "topic": "Cost optimization techniques for LLM agents",
-        "aspects": [
-            "model cascading and routing",
-            "prompt compression and caching",
-            "budget-aware execution strategies",
-            "token usage reduction techniques",
-        ],
-    },
-    {
-        "topic": "Reliability challenges in production LLM agents",
-        "aspects": [
-            "rate limiting and API failures",
-            "hallucination detection and mitigation",
-            "long-context degradation",
-            "multi-agent coordination failures",
-        ],
-    },
-    {
-        "topic": "Long-horizon agent architectures",
-        "aspects": [
-            "hierarchical task decomposition",
-            "memory and state management",
-            "self-reflection and error recovery",
-            "compute budgeting and pacing",
-        ],
-    },
+RESEARCH_TASKS = [
+    (
+        "Research the cost of running LLM agents in production. "
+        "Search the web for real data on API costs for GPT-4, Claude, and Gemini. "
+        "Find specific dollar amounts from benchmarks like SWE-bench and Tau-bench. "
+        "Write your findings to a file called 'cost_analysis.md' with sources."
+    ),
+    (
+        "Research backpressure mechanisms in distributed systems and how they "
+        "apply to LLM rate limiting. Search the web for how systems like Kafka, "
+        "gRPC, and TCP handle backpressure. Write a comparison to 'backpressure.md'."
+    ),
 ]
 
 SYSTEM_PROMPT = """\
-You are a thorough research agent. You investigate topics by searching the web, \
-reading results, taking structured notes, and producing comprehensive reports.
+You are a thorough research agent. You have access to these tools:
+- search_web: Search the web with DuckDuckGo to find real information
+- write_file: Save your research notes and reports to files
+- read_file: Read files you've previously written
+- list_dir: See what files exist in your workspace
 
-For each research aspect:
-1. Use web_search to find relevant information
-2. Use take_notes to record key findings with source attribution
-3. After researching all aspects, use read_notes to review everything
-4. Use write_report to produce a structured research report
+For each research task:
+1. Use search_web 2-3 times with different queries to gather information
+2. Use write_file to save a structured report with real sources and URLs
+3. Be specific: cite actual numbers, paper names, and URLs from search results
 
-Be specific: cite papers by name, mention concrete numbers and dates, \
-reference specific systems and benchmarks. Do NOT make up citations."""
-
-
-def make_tools():
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "web_search",
-                "description": (
-                    "Search the web for information. Returns search results "
-                    "with titles and snippets."
-                ),
-                "parameters": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                    "required": ["query"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "take_notes",
-                "description": "Append research notes to the notes file for this topic.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "topic": {"type": "string"},
-                        "notes": {"type": "string"},
-                    },
-                    "required": ["topic", "notes"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "read_notes",
-                "description": "Read all research notes collected so far for a topic.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"topic": {"type": "string"}},
-                    "required": ["topic"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "write_report",
-                "description": "Write the final research report for a topic to a file.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "topic": {"type": "string"},
-                        "content": {"type": "string"},
-                    },
-                    "required": ["topic", "content"],
-                },
-            },
-        },
-    ]
-
-
-class ResearchToolkit:
-    """Manages tool execution for the research agent."""
-
-    def __init__(self, output_dir: Path, search_llm):
-        self.output_dir = output_dir
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.notes: dict[str, list[str]] = {}
-        self.search_llm = search_llm
-        self.tool_calls = 0
-
-    def execute(self, name: str, args: dict) -> str:
-        self.tool_calls += 1
-        if name == "web_search":
-            return self._web_search(args["query"])
-        elif name == "take_notes":
-            return self._take_notes(args["topic"], args["notes"])
-        elif name == "read_notes":
-            return self._read_notes(args["topic"])
-        elif name == "write_report":
-            return self._write_report(args["topic"], args["content"])
-        return json.dumps({"error": f"Unknown tool: {name}"})
-
-    def _web_search(self, query: str) -> str:
-        """Use the LLM itself as a knowledge source (simulating web search)."""
-        prompt = (
-            f"Acting as a web search engine, provide 5 search results for: '{query}'\n\n"
-            f"For each result, provide:\n"
-            f"- Title\n"
-            f"- A 2-3 sentence snippet with specific facts, numbers, or claims\n"
-            f"- A plausible source URL\n\n"
-            f"Be factual. Reference real papers, systems, and benchmarks by name."
-        )
-        try:
-            result = self.search_llm.call_llm(prompt=prompt).result(timeout=30.0)
-            return json.dumps({"results": result})
-        except Exception as e:
-            return json.dumps({"error": f"Search failed: {e}"})
-
-    def _take_notes(self, topic: str, notes: str) -> str:
-        if topic not in self.notes:
-            self.notes[topic] = []
-        self.notes[topic].append(notes)
-        return json.dumps({"status": "ok", "total_notes": len(self.notes[topic])})
-
-    def _read_notes(self, topic: str) -> str:
-        entries = self.notes.get(topic, [])
-        if len(entries) == 0:
-            return json.dumps({"notes": "(no notes yet)"})
-        return json.dumps({"notes": "\n\n---\n\n".join(entries)})
-
-    def _write_report(self, topic: str, content: str) -> str:
-        safe_name = topic.lower().replace(" ", "_")[:50]
-        path = self.output_dir / f"{safe_name}.md"
-        path.write_text(f"# {topic}\n\n{content}")
-        return json.dumps({"status": "ok", "path": str(path), "length": len(content)})
-
-
-def run_research(llm, toolkit, topic_config: dict) -> None:
-    topic = topic_config["topic"]
-    aspects = topic_config["aspects"]
-    print(f"\n  --- Researching: {topic} ---")
-    print(f"      Aspects: {len(aspects)}")
-
-    for i, aspect in enumerate(aspects, 1):
-        prompt = (
-            f"Research aspect {i}/{len(aspects)} of '{topic}': '{aspect}'.\n\n"
-            f"Steps:\n"
-            f"1. Use web_search to find information about '{aspect}'\n"
-            f"2. Use take_notes to record your findings for topic '{topic}'\n"
-            f"3. Be specific: names, numbers, dates, paper titles.\n\n"
-            f"Use the tools now."
-        )
-
-        try:
-            response = llm.call_llm(
-                prompt=prompt,
-                system_prompt=SYSTEM_PROMPT,
-                litellm_params={"tools": make_tools()},
-            ).result(timeout=30.0)
-        except ValueError:
-            pass
-        except Exception as e:
-            print(f"      Aspect '{aspect}' ERROR: {e}")
-            continue
-
-        toolkit.execute("web_search", {"query": f"{aspect} in LLM agent systems"})
-        toolkit.execute("take_notes", {
-            "topic": topic,
-            "notes": f"[{aspect}] {response[:500] if response else 'No response'}",
-        })
-
-        reporter = llm.get_reporter().result(timeout=5.0)
-        if i % 2 == 0:
-            print(f"      [{i}/{len(aspects)}] ${reporter.total_cost():.6f}")
-
-    toolkit.execute("read_notes", {"topic": topic})
-
-    try:
-        synthesis = llm.call_llm(
-            prompt=(
-                f"Based on all the research notes for '{topic}', write a "
-                f"comprehensive 4-paragraph research report. Reference specific "
-                f"systems, papers, and benchmarks by name."
-            ),
-            system_prompt="You are a research report writer. Be thorough and specific.",
-        ).result(timeout=30.0)
-
-        toolkit.execute("write_report", {"topic": topic, "content": synthesis})
-        print(f"      Report written for: {topic}")
-    except Exception as e:
-        print(f"      Synthesis ERROR: {e}")
+IMPORTANT: You MUST use search_web to find real data. Do NOT make up facts."""
 
 
 def main():
-    expected_calls = sum(
-        len(t["aspects"]) * 3 + 2  # per-aspect: prompt + search + notes, plus read_notes + synthesis
-        for t in RESEARCH_TOPICS
-    )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    runs_dir = Path(__file__).parent.parent / "runs" / "research_agent" / timestamp
+    runs_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"{'=' * 70}")
-    print("  Deep Research Agent with Web Search")
+    print("  Deep Research Agent (Real Web Search)")
     print(f"  Model: {MODEL}")
     print(f"  Budget: ${BUDGET_USD:.2f}")
-    print(f"  Topics: {len(RESEARCH_TOPICS)}")
-    print(f"  Total aspects: {sum(len(t['aspects']) for t in RESEARCH_TOPICS)}")
-    print(f"  Expected LLM calls: ~{expected_calls}")
+    print(f"  Tasks: {len(RESEARCH_TASKS)}")
+    print(f"  Max steps/task: {MAX_STEPS}")
+    print(f"  Workspace: {runs_dir}")
     print(f"{'=' * 70}")
 
-    llm = create_llm(
-        model=MODEL,
-        budget_usd=BUDGET_USD,
-        window="hourly",
-        api_key=api_key,
-        max_tokens=MAX_TOKENS,
-        temperature=0.4,
-        max_rpm=200,
-        max_input_tpm=500_000,
-        max_output_tpm=100_000,
+    limit_set = LimitSet(
+        limits=[
+            CostLimit(budget_usd=BUDGET_USD, window_seconds=3600),
+            RateLimit(key="input_tokens", window_seconds=60, capacity=500_000),
+            RateLimit(key="output_tokens", window_seconds=60, capacity=100_000),
+            CallLimit(window_seconds=60, capacity=100),
+        ],
+        mode="thread",
+        shared=True,
     )
+    reporter = CostReporter()
 
-    toolkit = ResearchToolkit(OUTPUT_DIR, llm)
+    def tool_executor(name, args):
+        return execute_tool_call(name, args, workspace=runs_dir)
+
     start_time = time.time()
 
-    for topic_config in RESEARCH_TOPICS:
-        run_research(llm, toolkit, topic_config)
+    for i, task in enumerate(RESEARCH_TASKS, 1):
+        print(f"\n  --- Task {i}/{len(RESEARCH_TASKS)} ---")
+        print(f"  {task[:80]}...")
+
+        task_log_dir = runs_dir / f"task_{i:02d}"
+        result = asyncio.run(run_agent(
+            model=MODEL,
+            task=task,
+            tools=TOOL_SCHEMAS,
+            tool_executor=tool_executor,
+            limit_set=limit_set,
+            reporter=reporter,
+            api_key=api_key,
+            system_prompt=SYSTEM_PROMPT,
+            max_steps=MAX_STEPS,
+            max_tokens=MAX_TOKENS,
+            temperature=0.3,
+            verbose=True,
+            log_dir=task_log_dir,
+        ))
+
+        print(f"  Result: {result['result'][:150]}...")
 
     total_elapsed = time.time() - start_time
-    reporter = llm.get_reporter().result(timeout=5.0)
 
     print(f"\n{'=' * 70}")
     print("  RESULTS")
     print(f"{'=' * 70}")
-    print(f"  Topics researched: {len(RESEARCH_TOPICS)}")
-    print(f"  LLM calls: {reporter.num_calls}")
-    print(f"  Tool executions: {toolkit.tool_calls}")
+    print(f"  Total LLM calls: {reporter.num_calls}")
     print(f"  Time: {total_elapsed:.1f}s ({total_elapsed / 60:.1f} min)")
     print(f"  Cost: ${reporter.total_cost():.6f}")
     print()
     print(reporter.to_markdown())
 
-    reports = list(OUTPUT_DIR.glob("*.md"))
-    print(f"\n  Reports written: {len(reports)}")
-    for rp in reports:
-        content = rp.read_text()
-        print(f"    {rp.name}: {len(content)} chars")
-        first_line = content.split("\n")[2] if len(content.split("\n")) > 2 else ""
-        print(f"      {first_line[:80]}...")
+    files = list(runs_dir.rglob("*"))
+    print(f"\n  Files in workspace ({runs_dir}):")
+    for f in sorted(files):
+        if f.is_file():
+            print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")
 
-    reporter.to_json(path=Path(__file__).parent / "research_agent_cost_report.json")
-    print("\n  Cost report saved to demos/research_agent_cost_report.json")
-
-    llm.stop()
+    reporter.to_json(path=runs_dir / "_cost_report.json")
+    print(f"\n  Cost report: {runs_dir / '_cost_report.json'}")
 
 
 if __name__ == "__main__":
