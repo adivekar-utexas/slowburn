@@ -1,0 +1,280 @@
+"""
+SlowBurnLLM: AsyncIO worker for cost-controlled LLM calls.
+
+Follows the VLM worker pattern from the astro-llm project:
+estimate tokens -> acquire limits (blocks if budget exhausted) ->
+execute LLM call -> update limits with actuals -> log cost.
+
+The blocking acquire() IS the "SlowBurn" mechanism: when the dollar
+budget or token rate limit is exhausted, the worker's event loop
+sleeps (via asyncio.sleep) until capacity is available rather than
+crashing with an error.
+"""
+
+import asyncio
+import logging
+from typing import Any, Callable, Dict, List, Optional, TypeVar
+
+import litellm
+from concurry import async_gather, worker
+from morphic import Typed
+from pydantic import Field
+
+from .limits import DEFAULT_COST_LIMIT_KEY
+from .pricing import PricingCache
+from .reporter import CostReporter
+
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+logging.getLogger("litellm").setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+def _estimate_tokens(text: str, *, chars_per_token: float = 3.0) -> int:
+    """Rough estimate of token count from character length."""
+    return max(int(len(text) // chars_per_token), 1)
+
+
+@worker(mode="asyncio")
+class SlowBurnLLM(Typed):
+    """AsyncIO worker for concurrent LLM calls with dollar-budget backpressure.
+
+    Wraps litellm.acompletion and integrates with Concurry's LimitSet for
+    rate limiting on tokens, calls, AND dollars (via CostLimit). When any
+    limit is exhausted, acquire() blocks asynchronously until capacity
+    replenishes.
+
+    The worker also maintains a CostReporter that accumulates per-call cost
+    data for later export to JSON, Markdown, or LaTeX.
+
+    Typical setup::
+
+        from slowburn.limits import CostLimit
+        from concurry import LimitSet, RateLimit, CallLimit
+
+        llm = SlowBurnLLM.options(
+            limits=LimitSet(
+                limits=[
+                    CostLimit(budget_usd=5.0, window_seconds=86400),
+                    RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
+                    RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
+                    CallLimit(window_seconds=60, capacity=500),
+                ],
+                mode="asyncio",
+                shared=True,
+            ),
+            num_retries={"call_llm": 3, "*": 0},
+            retry_on={"call_llm": [ValueError, asyncio.TimeoutError], "*": []},
+        ).init(
+            name="my-llm",
+            model_name="gpt-4o-mini",
+            api_key="sk-...",
+        )
+
+        result = llm.call_llm(prompt="Hello world").result()
+        print(llm.reporter.result().total_cost())
+        llm.stop()
+    """
+
+    name: str = Field(..., description="Worker name (for logging)")
+    model_name: str = Field(..., description="litellm model identifier")
+    api_key: str = Field(default="", description="API key (or set via env var)")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1000, ge=1)
+    timeout: float = Field(default=120.0, gt=0.0)
+
+    def post_initialize(self) -> None:
+        self._reporter = CostReporter()
+
+    @property
+    def reporter(self) -> CostReporter:
+        """Access the CostReporter to inspect costs or export reports."""
+        return self._reporter
+
+    async def call_llm(
+        self,
+        *,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        validator: Optional[Callable[[str], T]] = None,
+        verbosity: int = 1,
+    ) -> Any:
+        """Execute a single LLM call with cost-aware backpressure.
+
+        Args:
+            prompt: The user message content.
+            system_prompt: Optional system message prepended to the conversation.
+            validator: Optional callable that parses/validates the response text.
+                If it raises ``ValueError``, the error propagates (and Concurry's
+                retry mechanism can catch it if configured with ``retry_on``).
+            verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
+
+        Returns:
+            The raw response text, or the parsed result from *validator* if provided.
+        """
+        messages: List[Dict[str, str]] = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        # 1. ESTIMATE tokens
+        estimated_text_tokens = _estimate_tokens(prompt)
+        if system_prompt is not None:
+            estimated_text_tokens += _estimate_tokens(system_prompt)
+        estimated_input_tokens = int(estimated_text_tokens * 5.0) + 50
+        estimated_output_tokens = self.max_tokens
+
+        # 2. ESTIMATE cost in microdollars
+        estimated_cost = PricingCache.estimate_cost_microdollars(
+            self.model_name, estimated_input_tokens, estimated_output_tokens,
+        )
+
+        # 3. ACQUIRE (blocks if budget/rate exhausted)
+        requested: Dict[str, int] = {
+            "input_tokens": estimated_input_tokens,
+            "output_tokens": estimated_output_tokens,
+            "call_count": 1,
+            DEFAULT_COST_LIMIT_KEY: estimated_cost,
+        }
+
+        with self.limits.acquire(requested=requested) as acq:
+            try:
+                litellm.drop_params = True
+                response = await asyncio.wait_for(
+                    litellm.acompletion(
+                        model=self.model_name,
+                        messages=messages,
+                        api_key=self.api_key if self.api_key else None,
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                    ),
+                    timeout=self.timeout,
+                )
+
+                actual_input = response.usage.prompt_tokens
+                actual_output = response.usage.completion_tokens
+                response_text: str = response.choices[0].message.content
+                if response_text is None:
+                    raise ValueError(
+                        f"LLM returned null content (model={self.model_name}). "
+                        f"This may indicate a refusal, a tool-call-only response, "
+                        f"or a content filter. Check the raw response."
+                    )
+
+                # 4. GET actual cost
+                actual_cost = PricingCache.actual_cost_microdollars(
+                    response, model=self.model_name,
+                )
+
+                # 5. Apply validator if provided
+                result: Any = response_text
+                if validator is not None:
+                    try:
+                        result = validator(response_text)
+                    except ValueError:
+                        acq.update(usage={
+                            "input_tokens": actual_input,
+                            "output_tokens": actual_output,
+                            "call_count": 1,
+                            DEFAULT_COST_LIMIT_KEY: actual_cost,
+                        })
+                        raise
+                    except Exception as e:
+                        acq.update(usage={
+                            "input_tokens": actual_input,
+                            "output_tokens": actual_output,
+                            "call_count": 1,
+                            DEFAULT_COST_LIMIT_KEY: actual_cost,
+                        })
+                        raise ValueError(f"Validator error: {e}") from e
+
+                # 6. UPDATE limits with actuals (refunds unused budget)
+                acq.update(usage={
+                    "input_tokens": actual_input,
+                    "output_tokens": actual_output,
+                    "call_count": 1,
+                    DEFAULT_COST_LIMIT_KEY: actual_cost,
+                })
+
+                # 7. LOG to reporter
+                from .limits import microdollars_to_dollars
+                self._reporter.log_call(
+                    model=self.model_name,
+                    cost_usd=microdollars_to_dollars(actual_cost),
+                    input_tokens=actual_input,
+                    output_tokens=actual_output,
+                )
+
+                if verbosity >= 2:
+                    logger.info(
+                        f"[{self.name}] {self.model_name}: "
+                        f"{actual_input}+{actual_output} tokens, "
+                        f"${microdollars_to_dollars(actual_cost):.6f}"
+                    )
+
+                return result
+
+            except (ValueError, asyncio.TimeoutError):
+                raise
+            except Exception:
+                acq.update(usage={
+                    "input_tokens": estimated_input_tokens,
+                    "output_tokens": 0,
+                    "call_count": 1,
+                    DEFAULT_COST_LIMIT_KEY: estimated_cost,
+                })
+                raise
+
+    async def call_llm_batch(
+        self,
+        *,
+        prompts: List[str],
+        system_prompt: Optional[str] = None,
+        validator: Optional[Callable[[str], T]] = None,
+        verbosity: int = 1,
+    ) -> List[Any]:
+        """Execute multiple LLM calls concurrently with shared backpressure.
+
+        Args:
+            prompts: List of user message strings.
+            system_prompt: Optional system message applied to all calls.
+            validator: Optional callable applied to each response.
+            verbosity: Logging verbosity.
+
+        Returns:
+            List of results (raw text or parsed validator output).
+        """
+        if len(prompts) == 0:
+            return []
+
+        tasks = [
+            self.call_llm(
+                prompt=p,
+                system_prompt=system_prompt,
+                validator=validator,
+                verbosity=verbosity,
+            )
+            for p in prompts
+        ]
+
+        results: List[Any] = await async_gather(
+            tasks,
+            progress=dict(
+                disable=verbosity < 2,
+                desc=f"{self.name}:{self.model_name}",
+                miniters=max(len(prompts) // 2, 1),
+            ),
+        )
+        return results
+
+    def get_reporter(self) -> CostReporter:
+        """Return the CostReporter for external access.
+
+        Since the worker runs in an asyncio event loop, call this method
+        via the future pattern: ``reporter = llm.get_reporter().result()``.
+        """
+        return self._reporter
