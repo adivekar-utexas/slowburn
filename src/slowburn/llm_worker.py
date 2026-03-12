@@ -86,6 +86,15 @@ class SlowBurnLLM(Typed):
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=1000, ge=1)
     timeout: float = Field(default=120.0, gt=0.0)
+    litellm_params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Additional parameters passed through to litellm.acompletion(). "
+            "Use for tools, response_format, seed, top_p, stop, logprobs, "
+            "or any other litellm-supported parameter. Per-call litellm_params "
+            "in call_llm() merge on top of these defaults."
+        ),
+    )
 
     def post_initialize(self) -> None:
         self._reporter = CostReporter()
@@ -102,6 +111,7 @@ class SlowBurnLLM(Typed):
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
         verbosity: int = 1,
+        litellm_params: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Execute a single LLM call with cost-aware backpressure.
 
@@ -112,6 +122,10 @@ class SlowBurnLLM(Typed):
                 If it raises ``ValueError``, the error propagates (and Concurry's
                 retry mechanism can catch it if configured with ``retry_on``).
             verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
+            litellm_params: Per-call parameters passed through to
+                ``litellm.acompletion()``. Merged on top of the worker-level
+                ``self.litellm_params``. Use for call-specific tools,
+                response_format, seed, etc.
 
         Returns:
             The raw response text, or the parsed result from *validator* if provided.
@@ -120,6 +134,10 @@ class SlowBurnLLM(Typed):
         if system_prompt is not None:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+
+        merged_params: Dict[str, Any] = {**self.litellm_params}
+        if litellm_params is not None:
+            merged_params.update(litellm_params)
 
         # 1. ESTIMATE tokens
         estimated_text_tokens = _estimate_tokens(prompt)
@@ -151,19 +169,39 @@ class SlowBurnLLM(Typed):
                         api_key=self.api_key if self.api_key else None,
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
+                        **merged_params,
                     ),
                     timeout=self.timeout,
                 )
 
                 actual_input = response.usage.prompt_tokens
                 actual_output = response.usage.completion_tokens
-                response_text: str = response.choices[0].message.content
-                if response_text is None:
+
+                response_message = response.choices[0].message
+                response_text = response_message.content
+                tool_calls = getattr(response_message, "tool_calls", None)
+
+                if response_text is None and tool_calls is None:
                     raise ValueError(
-                        f"LLM returned null content (model={self.model_name}). "
-                        f"This may indicate a refusal, a tool-call-only response, "
-                        f"or a content filter. Check the raw response."
+                        f"LLM returned null content with no tool calls "
+                        f"(model={self.model_name}). "
+                        f"This may indicate a refusal or content filter."
                     )
+
+                if response_text is None and tool_calls is not None:
+                    import json as _json
+                    response_text = _json.dumps({
+                        "tool_calls": [
+                            {
+                                "id": getattr(tc, "id", None),
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments,
+                                },
+                            }
+                            for tc in tool_calls
+                        ]
+                    })
 
                 # 4. GET actual cost
                 actual_cost = PricingCache.actual_cost_microdollars(
@@ -236,6 +274,7 @@ class SlowBurnLLM(Typed):
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
         verbosity: int = 1,
+        litellm_params: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
         """Execute multiple LLM calls concurrently with shared backpressure.
 
@@ -244,6 +283,8 @@ class SlowBurnLLM(Typed):
             system_prompt: Optional system message applied to all calls.
             validator: Optional callable applied to each response.
             verbosity: Logging verbosity.
+            litellm_params: Per-call parameters passed through to each
+                ``litellm.acompletion()`` call in the batch.
 
         Returns:
             List of results (raw text or parsed validator output).
@@ -257,6 +298,7 @@ class SlowBurnLLM(Typed):
                 system_prompt=system_prompt,
                 validator=validator,
                 verbosity=verbosity,
+                litellm_params=litellm_params,
             )
             for p in prompts
         ]

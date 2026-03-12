@@ -271,3 +271,162 @@ class TestSlowBurnLLMReporter:
             assert r2.num_calls == 1
         finally:
             w.stop()
+
+
+# ===========================================================================
+# Tests: litellm_params passthrough
+# ===========================================================================
+
+class TestSlowBurnLLMLitellmParams:
+    """Test that litellm_params are passed through to litellm.acompletion."""
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_worker_level_params_passed(self, mock_acompletion) -> None:
+        """Worker-level litellm_params should be passed to every acompletion call.
+
+        Steps:
+        1. Build worker with litellm_params={"seed": 42, "top_p": 0.9}.
+        2. Make a call.
+        3. Verify acompletion received seed=42 and top_p=0.9.
+        """
+        mock_acompletion.return_value = _make_acompletion_response()
+        limit_set = LimitSet(
+            limits=[
+                CostLimit(budget_usd=10.0, window_seconds=3600),
+                RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
+                RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
+                CallLimit(window_seconds=60, capacity=500),
+            ],
+            mode="asyncio",
+            shared=True,
+        )
+        w = SlowBurnLLM.options(
+            mode="asyncio",
+            limits=limit_set,
+        ).init(
+            name="test",
+            model_name="gpt-4o-mini",
+            api_key="test-key",
+            litellm_params={"seed": 42, "top_p": 0.9},
+        )
+        try:
+            w.call_llm(prompt="Hello").result(timeout=10.0)
+            call_kwargs = mock_acompletion.call_args.kwargs
+            assert call_kwargs["seed"] == 42
+            assert call_kwargs["top_p"] == 0.9
+        finally:
+            w.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_per_call_params_passed(self, mock_acompletion) -> None:
+        """Per-call litellm_params should be passed to acompletion.
+
+        Steps:
+        1. Build worker with no litellm_params.
+        2. Call call_llm with litellm_params={"seed": 99}.
+        3. Verify acompletion received seed=99.
+        """
+        mock_acompletion.return_value = _make_acompletion_response()
+        w = _build_worker()
+        try:
+            w.call_llm(prompt="Hello", litellm_params={"seed": 99}).result(timeout=10.0)
+            call_kwargs = mock_acompletion.call_args.kwargs
+            assert call_kwargs["seed"] == 99
+        finally:
+            w.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_per_call_overrides_worker_level(self, mock_acompletion) -> None:
+        """Per-call litellm_params should override worker-level params.
+
+        Steps:
+        1. Worker has litellm_params={"seed": 42, "top_p": 0.9}.
+        2. Call with litellm_params={"seed": 7}.
+        3. Verify seed=7 (overridden) and top_p=0.9 (inherited).
+        """
+        mock_acompletion.return_value = _make_acompletion_response()
+        limit_set = LimitSet(
+            limits=[
+                CostLimit(budget_usd=10.0, window_seconds=3600),
+                RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
+                RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
+                CallLimit(window_seconds=60, capacity=500),
+            ],
+            mode="asyncio",
+            shared=True,
+        )
+        w = SlowBurnLLM.options(
+            mode="asyncio",
+            limits=limit_set,
+        ).init(
+            name="test",
+            model_name="gpt-4o-mini",
+            api_key="test-key",
+            litellm_params={"seed": 42, "top_p": 0.9},
+        )
+        try:
+            w.call_llm(prompt="Hello", litellm_params={"seed": 7}).result(timeout=10.0)
+            call_kwargs = mock_acompletion.call_args.kwargs
+            assert call_kwargs["seed"] == 7
+            assert call_kwargs["top_p"] == 0.9
+        finally:
+            w.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_tools_param_passed(self, mock_acompletion) -> None:
+        """tools parameter should be forwarded to litellm.
+
+        Steps:
+        1. Define a simple tool schema.
+        2. Pass via litellm_params.
+        3. Verify acompletion received the tools list.
+        """
+        mock_acompletion.return_value = _make_acompletion_response()
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get weather for a city",
+                    "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                },
+            }
+        ]
+        w = _build_worker()
+        try:
+            w.call_llm(prompt="What's the weather?", litellm_params={"tools": tools}).result(timeout=10.0)
+            call_kwargs = mock_acompletion.call_args.kwargs
+            assert call_kwargs["tools"] == tools
+            assert len(call_kwargs["tools"]) == 1
+            assert call_kwargs["tools"][0]["function"]["name"] == "get_weather"
+        finally:
+            w.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_empty_litellm_params_no_extra_keys(self, mock_acompletion) -> None:
+        """Default empty litellm_params should not add unexpected keys."""
+        mock_acompletion.return_value = _make_acompletion_response()
+        w = _build_worker()
+        try:
+            w.call_llm(prompt="Hello").result(timeout=10.0)
+            call_kwargs = mock_acompletion.call_args.kwargs
+            assert "seed" not in call_kwargs
+            assert "tools" not in call_kwargs
+            assert "response_format" not in call_kwargs
+        finally:
+            w.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_batch_forwards_litellm_params(self, mock_acompletion) -> None:
+        """call_llm_batch should forward litellm_params to each call."""
+        mock_acompletion.return_value = _make_acompletion_response()
+        w = _build_worker()
+        try:
+            w.call_llm_batch(
+                prompts=["p1", "p2"],
+                litellm_params={"seed": 123},
+            ).result(timeout=15.0)
+            for call_args in mock_acompletion.call_args_list:
+                assert call_args.kwargs["seed"] == 123
+        finally:
+            w.stop()

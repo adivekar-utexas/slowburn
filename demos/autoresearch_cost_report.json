@@ -1,0 +1,1615 @@
+{
+  "summary": {
+    "openrouter/google/gemini-2.0-flash-001": {
+      "calls": 200,
+      "input_tokens": 47847,
+      "output_tokens": 20487,
+      "total_tokens": 68334,
+      "cost_usd": 0.012886000000000007
+    }
+  },
+  "total_cost_usd": 0.012886,
+  "num_calls": 200,
+  "calls": [
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 7.5e-05,
+      "input_tokens": 150,
+      "output_tokens": 150,
+      "total_tokens": 300,
+      "timestamp": 1773286677.3513222
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 55,
+      "total_tokens": 234,
+      "timestamp": 1773286678.569532
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286680.0664341
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.3e-05,
+      "input_tokens": 179,
+      "output_tokens": 63,
+      "total_tokens": 242,
+      "timestamp": 1773286681.221568
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 309,
+      "output_tokens": 150,
+      "total_tokens": 459,
+      "timestamp": 1773286682.615531
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 60,
+      "total_tokens": 239,
+      "timestamp": 1773286683.718849
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 306,
+      "output_tokens": 150,
+      "total_tokens": 456,
+      "timestamp": 1773286685.133087
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 72,
+      "total_tokens": 251,
+      "timestamp": 1773286686.3525681
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 318,
+      "output_tokens": 150,
+      "total_tokens": 468,
+      "timestamp": 1773286688.010037
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 53,
+      "total_tokens": 232,
+      "timestamp": 1773286689.108523
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286690.5512698
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 178,
+      "output_tokens": 47,
+      "total_tokens": 225,
+      "timestamp": 1773286691.667796
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286693.121061
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 178,
+      "output_tokens": 43,
+      "total_tokens": 221,
+      "timestamp": 1773286694.147764
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.8e-05,
+      "input_tokens": 288,
+      "output_tokens": 150,
+      "total_tokens": 438,
+      "timestamp": 1773286695.5657752
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 51,
+      "total_tokens": 229,
+      "timestamp": 1773286696.590627
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 296,
+      "output_tokens": 150,
+      "total_tokens": 446,
+      "timestamp": 1773286698.025634
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 52,
+      "total_tokens": 230,
+      "timestamp": 1773286699.086113
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 298,
+      "output_tokens": 150,
+      "total_tokens": 448,
+      "timestamp": 1773286700.5394938
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 51,
+      "total_tokens": 229,
+      "timestamp": 1773286701.644491
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286703.1596239
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.3e-05,
+      "input_tokens": 178,
+      "output_tokens": 63,
+      "total_tokens": 241,
+      "timestamp": 1773286704.408427
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 309,
+      "output_tokens": 150,
+      "total_tokens": 459,
+      "timestamp": 1773286705.973336
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 178,
+      "output_tokens": 46,
+      "total_tokens": 224,
+      "timestamp": 1773286707.2263832
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286708.6650271
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 52,
+      "total_tokens": 230,
+      "timestamp": 1773286709.714586
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 298,
+      "output_tokens": 150,
+      "total_tokens": 448,
+      "timestamp": 1773286711.205782
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.2e-05,
+      "input_tokens": 178,
+      "output_tokens": 62,
+      "total_tokens": 240,
+      "timestamp": 1773286712.4086442
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 308,
+      "output_tokens": 150,
+      "total_tokens": 458,
+      "timestamp": 1773286713.790689
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 178,
+      "output_tokens": 46,
+      "total_tokens": 224,
+      "timestamp": 1773286714.902826
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286716.3095329
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 178,
+      "output_tokens": 50,
+      "total_tokens": 228,
+      "timestamp": 1773286717.3756218
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 296,
+      "output_tokens": 150,
+      "total_tokens": 446,
+      "timestamp": 1773286718.8816938
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 55,
+      "total_tokens": 233,
+      "timestamp": 1773286719.929286
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286721.38016
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 53,
+      "total_tokens": 231,
+      "timestamp": 1773286722.463964
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286723.843245
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 178,
+      "output_tokens": 48,
+      "total_tokens": 226,
+      "timestamp": 1773286724.929618
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 294,
+      "output_tokens": 150,
+      "total_tokens": 444,
+      "timestamp": 1773286726.3599172
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 178,
+      "output_tokens": 43,
+      "total_tokens": 221,
+      "timestamp": 1773286727.317246
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.8e-05,
+      "input_tokens": 289,
+      "output_tokens": 150,
+      "total_tokens": 439,
+      "timestamp": 1773286728.7562509
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 53,
+      "total_tokens": 231,
+      "timestamp": 1773286729.7570581
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286731.250342
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 53,
+      "total_tokens": 231,
+      "timestamp": 1773286732.538157
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286733.9400299
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 54,
+      "total_tokens": 232,
+      "timestamp": 1773286734.974133
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 300,
+      "output_tokens": 150,
+      "total_tokens": 450,
+      "timestamp": 1773286736.538283
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 178,
+      "output_tokens": 47,
+      "total_tokens": 225,
+      "timestamp": 1773286737.592443
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 293,
+      "output_tokens": 150,
+      "total_tokens": 443,
+      "timestamp": 1773286739.060669
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 178,
+      "output_tokens": 49,
+      "total_tokens": 227,
+      "timestamp": 1773286740.111889
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 295,
+      "output_tokens": 150,
+      "total_tokens": 445,
+      "timestamp": 1773286741.575986
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 178,
+      "output_tokens": 46,
+      "total_tokens": 224,
+      "timestamp": 1773286742.534785
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286744.033692
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 178,
+      "output_tokens": 45,
+      "total_tokens": 223,
+      "timestamp": 1773286745.3072882
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 291,
+      "output_tokens": 150,
+      "total_tokens": 441,
+      "timestamp": 1773286746.697504
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.2e-05,
+      "input_tokens": 178,
+      "output_tokens": 62,
+      "total_tokens": 240,
+      "timestamp": 1773286747.771277
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 308,
+      "output_tokens": 150,
+      "total_tokens": 458,
+      "timestamp": 1773286749.448514
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 53,
+      "total_tokens": 231,
+      "timestamp": 1773286750.4858081
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286751.851507
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.4e-05,
+      "input_tokens": 178,
+      "output_tokens": 42,
+      "total_tokens": 220,
+      "timestamp": 1773286752.8438778
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.8e-05,
+      "input_tokens": 288,
+      "output_tokens": 150,
+      "total_tokens": 438,
+      "timestamp": 1773286754.226136
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 178,
+      "output_tokens": 57,
+      "total_tokens": 235,
+      "timestamp": 1773286755.332756
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 303,
+      "output_tokens": 150,
+      "total_tokens": 453,
+      "timestamp": 1773286756.811717
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 52,
+      "total_tokens": 230,
+      "timestamp": 1773286757.931694
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 298,
+      "output_tokens": 150,
+      "total_tokens": 448,
+      "timestamp": 1773286759.362638
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 51,
+      "total_tokens": 229,
+      "timestamp": 1773286760.34554
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286761.720263
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 178,
+      "output_tokens": 50,
+      "total_tokens": 228,
+      "timestamp": 1773286762.6569011
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 296,
+      "output_tokens": 150,
+      "total_tokens": 446,
+      "timestamp": 1773286764.025774
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.4e-05,
+      "input_tokens": 178,
+      "output_tokens": 66,
+      "total_tokens": 244,
+      "timestamp": 1773286765.187617
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 312,
+      "output_tokens": 150,
+      "total_tokens": 462,
+      "timestamp": 1773286766.566515
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 51,
+      "total_tokens": 229,
+      "timestamp": 1773286767.9293828
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286769.338112
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 178,
+      "output_tokens": 55,
+      "total_tokens": 233,
+      "timestamp": 1773286770.452189
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286771.9389162
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 178,
+      "output_tokens": 51,
+      "total_tokens": 229,
+      "timestamp": 1773286773.029845
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286774.527349
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 178,
+      "output_tokens": 58,
+      "total_tokens": 236,
+      "timestamp": 1773286775.5618382
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 304,
+      "output_tokens": 150,
+      "total_tokens": 454,
+      "timestamp": 1773286777.0796201
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 178,
+      "output_tokens": 58,
+      "total_tokens": 236,
+      "timestamp": 1773286778.196644
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 304,
+      "output_tokens": 150,
+      "total_tokens": 454,
+      "timestamp": 1773286779.688725
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 178,
+      "output_tokens": 59,
+      "total_tokens": 237,
+      "timestamp": 1773286781.0187452
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 305,
+      "output_tokens": 150,
+      "total_tokens": 455,
+      "timestamp": 1773286782.513618
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 68,
+      "total_tokens": 247,
+      "timestamp": 1773286783.676834
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 315,
+      "output_tokens": 150,
+      "total_tokens": 465,
+      "timestamp": 1773286785.182464
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 179,
+      "output_tokens": 52,
+      "total_tokens": 231,
+      "timestamp": 1773286786.230347
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286787.722032
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 56,
+      "total_tokens": 235,
+      "timestamp": 1773286788.764013
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 303,
+      "output_tokens": 150,
+      "total_tokens": 453,
+      "timestamp": 1773286790.1790211
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 49,
+      "total_tokens": 228,
+      "timestamp": 1773286791.2262201
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 296,
+      "output_tokens": 150,
+      "total_tokens": 446,
+      "timestamp": 1773286792.5585752
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.3e-05,
+      "input_tokens": 179,
+      "output_tokens": 65,
+      "total_tokens": 244,
+      "timestamp": 1773286793.688277
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 312,
+      "output_tokens": 150,
+      "total_tokens": 462,
+      "timestamp": 1773286795.102436
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.3e-05,
+      "input_tokens": 179,
+      "output_tokens": 64,
+      "total_tokens": 243,
+      "timestamp": 1773286796.2579432
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 311,
+      "output_tokens": 150,
+      "total_tokens": 461,
+      "timestamp": 1773286797.621514
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 55,
+      "total_tokens": 234,
+      "timestamp": 1773286798.8021
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 302,
+      "output_tokens": 150,
+      "total_tokens": 452,
+      "timestamp": 1773286800.156584
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 54,
+      "total_tokens": 233,
+      "timestamp": 1773286801.19071
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286802.582073
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 50,
+      "total_tokens": 229,
+      "timestamp": 1773286803.601307
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286805.0978508
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 53,
+      "total_tokens": 232,
+      "timestamp": 1773286806.164403
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 300,
+      "output_tokens": 150,
+      "total_tokens": 450,
+      "timestamp": 1773286807.562262
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 60,
+      "total_tokens": 239,
+      "timestamp": 1773286808.8672671
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 307,
+      "output_tokens": 150,
+      "total_tokens": 457,
+      "timestamp": 1773286810.2191832
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.2e-05,
+      "input_tokens": 179,
+      "output_tokens": 61,
+      "total_tokens": 240,
+      "timestamp": 1773286811.482859
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 308,
+      "output_tokens": 150,
+      "total_tokens": 458,
+      "timestamp": 1773286812.861896
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 6.2e-05,
+      "input_tokens": 179,
+      "output_tokens": 112,
+      "total_tokens": 291,
+      "timestamp": 1773286814.296683
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.5e-05,
+      "input_tokens": 359,
+      "output_tokens": 150,
+      "total_tokens": 509,
+      "timestamp": 1773286815.7211452
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 45,
+      "total_tokens": 224,
+      "timestamp": 1773286816.8382661
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286818.24816
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.8e-05,
+      "input_tokens": 179,
+      "output_tokens": 76,
+      "total_tokens": 255,
+      "timestamp": 1773286819.5253918
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.2e-05,
+      "input_tokens": 323,
+      "output_tokens": 150,
+      "total_tokens": 473,
+      "timestamp": 1773286820.9779992
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 50,
+      "total_tokens": 229,
+      "timestamp": 1773286821.936339
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286823.338121
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 50,
+      "total_tokens": 229,
+      "timestamp": 1773286824.358721
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286825.8165839
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 54,
+      "total_tokens": 233,
+      "timestamp": 1773286826.881448
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286828.2212
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 44,
+      "total_tokens": 223,
+      "timestamp": 1773286829.475289
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 291,
+      "output_tokens": 150,
+      "total_tokens": 441,
+      "timestamp": 1773286830.902772
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.4e-05,
+      "input_tokens": 179,
+      "output_tokens": 67,
+      "total_tokens": 246,
+      "timestamp": 1773286832.110743
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 314,
+      "output_tokens": 150,
+      "total_tokens": 464,
+      "timestamp": 1773286833.540419
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 45,
+      "total_tokens": 224,
+      "timestamp": 1773286834.6199439
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286836.02242
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 179,
+      "output_tokens": 52,
+      "total_tokens": 231,
+      "timestamp": 1773286837.065194
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 299,
+      "output_tokens": 150,
+      "total_tokens": 449,
+      "timestamp": 1773286838.40902
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 47,
+      "total_tokens": 226,
+      "timestamp": 1773286839.476064
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 294,
+      "output_tokens": 150,
+      "total_tokens": 444,
+      "timestamp": 1773286840.933686
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 47,
+      "total_tokens": 226,
+      "timestamp": 1773286841.895381
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 294,
+      "output_tokens": 150,
+      "total_tokens": 444,
+      "timestamp": 1773286843.344364
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 179,
+      "output_tokens": 51,
+      "total_tokens": 230,
+      "timestamp": 1773286844.333905
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 298,
+      "output_tokens": 150,
+      "total_tokens": 448,
+      "timestamp": 1773286845.756325
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 57,
+      "total_tokens": 236,
+      "timestamp": 1773286846.8249118
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 304,
+      "output_tokens": 150,
+      "total_tokens": 454,
+      "timestamp": 1773286848.206672
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 60,
+      "total_tokens": 239,
+      "timestamp": 1773286849.534223
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 307,
+      "output_tokens": 150,
+      "total_tokens": 457,
+      "timestamp": 1773286850.884387
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 44,
+      "total_tokens": 223,
+      "timestamp": 1773286852.048952
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 291,
+      "output_tokens": 150,
+      "total_tokens": 441,
+      "timestamp": 1773286853.623329
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 44,
+      "total_tokens": 223,
+      "timestamp": 1773286854.5705779
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 291,
+      "output_tokens": 150,
+      "total_tokens": 441,
+      "timestamp": 1773286856.016031
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 44,
+      "total_tokens": 223,
+      "timestamp": 1773286856.980524
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 291,
+      "output_tokens": 150,
+      "total_tokens": 441,
+      "timestamp": 1773286858.4147651
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 5.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 84,
+      "total_tokens": 263,
+      "timestamp": 1773286859.618737
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.3e-05,
+      "input_tokens": 331,
+      "output_tokens": 150,
+      "total_tokens": 481,
+      "timestamp": 1773286861.126204
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 48,
+      "total_tokens": 227,
+      "timestamp": 1773286862.520442
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 295,
+      "output_tokens": 150,
+      "total_tokens": 445,
+      "timestamp": 1773286864.005694
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 56,
+      "total_tokens": 235,
+      "timestamp": 1773286865.079415
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 303,
+      "output_tokens": 150,
+      "total_tokens": 453,
+      "timestamp": 1773286866.54614
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.4e-05,
+      "input_tokens": 179,
+      "output_tokens": 67,
+      "total_tokens": 246,
+      "timestamp": 1773286867.7732139
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 314,
+      "output_tokens": 150,
+      "total_tokens": 464,
+      "timestamp": 1773286869.223472
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 60,
+      "total_tokens": 239,
+      "timestamp": 1773286870.363507
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 307,
+      "output_tokens": 150,
+      "total_tokens": 457,
+      "timestamp": 1773286871.760844
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 46,
+      "total_tokens": 225,
+      "timestamp": 1773286872.692564
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 293,
+      "output_tokens": 150,
+      "total_tokens": 443,
+      "timestamp": 1773286874.173913
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.4e-05,
+      "input_tokens": 179,
+      "output_tokens": 42,
+      "total_tokens": 221,
+      "timestamp": 1773286875.1702201
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.8e-05,
+      "input_tokens": 289,
+      "output_tokens": 150,
+      "total_tokens": 439,
+      "timestamp": 1773286876.6009119
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 54,
+      "total_tokens": 233,
+      "timestamp": 1773286877.6171432
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286879.0461938
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 72,
+      "total_tokens": 251,
+      "timestamp": 1773286880.342413
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 319,
+      "output_tokens": 150,
+      "total_tokens": 469,
+      "timestamp": 1773286881.753409
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 57,
+      "total_tokens": 236,
+      "timestamp": 1773286882.998168
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 304,
+      "output_tokens": 150,
+      "total_tokens": 454,
+      "timestamp": 1773286884.436082
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 54,
+      "total_tokens": 233,
+      "timestamp": 1773286885.585332
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 301,
+      "output_tokens": 150,
+      "total_tokens": 451,
+      "timestamp": 1773286887.035058
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.1e-05,
+      "input_tokens": 179,
+      "output_tokens": 58,
+      "total_tokens": 237,
+      "timestamp": 1773286888.179012
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 305,
+      "output_tokens": 150,
+      "total_tokens": 455,
+      "timestamp": 1773286889.785423
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 53,
+      "total_tokens": 232,
+      "timestamp": 1773286890.84575
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 300,
+      "output_tokens": 150,
+      "total_tokens": 450,
+      "timestamp": 1773286892.2898781
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.4e-05,
+      "input_tokens": 179,
+      "output_tokens": 42,
+      "total_tokens": 221,
+      "timestamp": 1773286893.333478
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.8e-05,
+      "input_tokens": 289,
+      "output_tokens": 150,
+      "total_tokens": 439,
+      "timestamp": 1773286894.880789
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.2e-05,
+      "input_tokens": 179,
+      "output_tokens": 61,
+      "total_tokens": 240,
+      "timestamp": 1773286896.140002
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 308,
+      "output_tokens": 150,
+      "total_tokens": 458,
+      "timestamp": 1773286897.600846
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.6e-05,
+      "input_tokens": 179,
+      "output_tokens": 46,
+      "total_tokens": 225,
+      "timestamp": 1773286898.663646
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 293,
+      "output_tokens": 150,
+      "total_tokens": 443,
+      "timestamp": 1773286900.0807
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 48,
+      "total_tokens": 227,
+      "timestamp": 1773286901.153284
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 295,
+      "output_tokens": 150,
+      "total_tokens": 445,
+      "timestamp": 1773286902.659623
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 56,
+      "total_tokens": 235,
+      "timestamp": 1773286903.723797
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 303,
+      "output_tokens": 150,
+      "total_tokens": 453,
+      "timestamp": 1773286905.165094
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.7e-05,
+      "input_tokens": 179,
+      "output_tokens": 50,
+      "total_tokens": 229,
+      "timestamp": 1773286906.1924329
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 297,
+      "output_tokens": 150,
+      "total_tokens": 447,
+      "timestamp": 1773286907.626854
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 53,
+      "total_tokens": 232,
+      "timestamp": 1773286908.753668
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 300,
+      "output_tokens": 150,
+      "total_tokens": 450,
+      "timestamp": 1773286910.137438
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4e-05,
+      "input_tokens": 179,
+      "output_tokens": 57,
+      "total_tokens": 236,
+      "timestamp": 1773286912.470756
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 304,
+      "output_tokens": 150,
+      "total_tokens": 454,
+      "timestamp": 1773286913.9094698
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 68,
+      "total_tokens": 247,
+      "timestamp": 1773286914.998949
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 315,
+      "output_tokens": 150,
+      "total_tokens": 465,
+      "timestamp": 1773286916.418446
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 45,
+      "total_tokens": 224,
+      "timestamp": 1773286917.3586571
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 292,
+      "output_tokens": 150,
+      "total_tokens": 442,
+      "timestamp": 1773286918.679379
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.5e-05,
+      "input_tokens": 179,
+      "output_tokens": 68,
+      "total_tokens": 247,
+      "timestamp": 1773286919.910517
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 315,
+      "output_tokens": 150,
+      "total_tokens": 465,
+      "timestamp": 1773286921.765267
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 53,
+      "total_tokens": 232,
+      "timestamp": 1773286922.853246
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 300,
+      "output_tokens": 150,
+      "total_tokens": 450,
+      "timestamp": 1773286924.40401
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.9e-05,
+      "input_tokens": 179,
+      "output_tokens": 55,
+      "total_tokens": 234,
+      "timestamp": 1773286925.5800982
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9e-05,
+      "input_tokens": 302,
+      "output_tokens": 150,
+      "total_tokens": 452,
+      "timestamp": 1773286926.985764
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 3.8e-05,
+      "input_tokens": 179,
+      "output_tokens": 51,
+      "total_tokens": 230,
+      "timestamp": 1773286927.961838
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 8.9e-05,
+      "input_tokens": 298,
+      "output_tokens": 150,
+      "total_tokens": 448,
+      "timestamp": 1773286929.365933
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.4e-05,
+      "input_tokens": 179,
+      "output_tokens": 66,
+      "total_tokens": 245,
+      "timestamp": 1773286930.5338209
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 9.1e-05,
+      "input_tokens": 314,
+      "output_tokens": 150,
+      "total_tokens": 464,
+      "timestamp": 1773286931.845081
+    },
+    {
+      "model": "openrouter/google/gemini-2.0-flash-001",
+      "cost_usd": 4.3e-05,
+      "input_tokens": 179,
+      "output_tokens": 64,
+      "total_tokens": 243,
+      "timestamp": 1773286932.999149
+    }
+  ]
+}

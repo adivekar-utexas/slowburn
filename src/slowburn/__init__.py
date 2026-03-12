@@ -61,6 +61,7 @@ def create_llm(
     timeout: float = 120.0,
     num_retries: int = 3,
     extra_limits: Optional[List[Any]] = None,
+    litellm_params: Optional[dict] = None,
     **kwargs,
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
@@ -84,6 +85,8 @@ def create_llm(
         timeout: Per-call timeout in seconds.
         num_retries: Number of retries on transient errors.
         extra_limits: Additional Limit objects to include in the LimitSet.
+        litellm_params: Additional parameters passed to every litellm.acompletion()
+            call (e.g. tools, response_format, seed, top_p, stop).
 
     Returns:
         A live SlowBurnLLM worker, ready to accept ``call_llm()`` calls.
@@ -138,5 +141,6 @@ def create_llm(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+        litellm_params=litellm_params if litellm_params is not None else {},
     )
     return llm

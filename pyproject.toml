@@ -44,6 +44,8 @@ dependencies = [
 [project.optional-dependencies]
 crewai = ["crewai>=0.80.0"]
 autogen = ["ag2>=0.8.0"]
+langgraph = ["langgraph>=0.3.0", "langchain>=1.0.0"]
+langchain = ["langchain-core>=0.3.0"]
 ray = ["ray>=2.0.0"]
 dev = [
     "pytest>=7.0",
@@ -52,7 +54,7 @@ dev = [
     "ruff>=0.4",
 ]
 all = [
-    "slowburn[crewai,autogen,ray,dev]",
+    "slowburn[crewai,autogen,langgraph,langchain,ray,dev]",
 ]
 
 [project.urls]

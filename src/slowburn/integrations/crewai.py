@@ -46,22 +46,32 @@ class SlowBurnCrewAI:
     """Cost-control middleware for CrewAI via LLM call hooks.
 
     Args:
-        budget_usd: Maximum dollar spend per window.
-        window_seconds: Length of the budget window in seconds (default: 86400 = 1 day).
+        budget_usd: Maximum dollar spend per window. Ignored if ``limit_set`` is provided.
+        window_seconds: Length of the budget window in seconds. Ignored if ``limit_set`` is provided.
+        limit_set: Optional pre-created LimitSet to use. Enables sharing a single budget
+            across multiple SlowBurn integrations (e.g., CrewAI + AutoGen + SlowBurnLLM).
         reporter: Optional pre-existing CostReporter to share with other components.
     """
 
     def __init__(
         self,
-        budget_usd: float,
+        budget_usd: float = 0.0,
         window_seconds: float = 86400,
+        limit_set: Optional[LimitSet] = None,
         reporter: Optional[CostReporter] = None,
     ):
-        self.limit_set = LimitSet(
-            limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
-            mode="thread",
-            shared=True,
-        )
+        if limit_set is not None:
+            self.limit_set = limit_set
+        else:
+            if budget_usd <= 0:
+                raise ValueError(
+                    "SlowBurnCrewAI requires either a positive budget_usd or a pre-created limit_set."
+                )
+            self.limit_set = LimitSet(
+                limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
+                mode="thread",
+                shared=True,
+            )
         self.reporter = reporter if reporter is not None else CostReporter()
         self._installed = False
 
