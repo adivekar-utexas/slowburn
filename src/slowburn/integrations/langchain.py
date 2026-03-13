@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 
 from concurry import LimitSet
 
+from ..cost_accounting import estimate_input_tokens
 from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
 from ..pricing import PricingCache
 from ..reporter import CostReporter
@@ -144,8 +145,7 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
         max_tokens = self._extract_max_tokens(serialized)
 
         total_text = " ".join(prompts)
-        estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-        estimated_output = max_tokens
+        estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
         estimated_cost = PricingCache.estimate_cost_microdollars(
             model_name, estimated_input, estimated_output,
         )

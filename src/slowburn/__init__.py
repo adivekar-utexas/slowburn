@@ -23,6 +23,7 @@ from typing import Any, List, Optional, Union
 from concurry import CallLimit, LimitSet, RateLimit
 
 from .backpressure import set_backpressure_warnings, timed_acquire
+from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
 from .llm_worker import ImageInput, SlowBurnLLM
 from .pricing import ModelNotFoundError, PricingCache
@@ -32,6 +33,9 @@ __all__: list[str] = [
     "create_llm",
     "set_backpressure_warnings",
     "timed_acquire",
+    "CostCallContext",
+    "cost_controlled_call",
+    "estimate_input_tokens",
     "CostLimit",
     "ImageInput",
     "SlowBurnLLM",

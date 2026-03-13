@@ -32,6 +32,7 @@ from typing import Any, Callable, Optional
 
 from concurry import LimitSet
 
+from ..cost_accounting import cost_controlled_call, estimate_input_tokens
 from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
 from ..pricing import PricingCache
 from ..reporter import CostReporter
@@ -142,54 +143,41 @@ class SlowBurnMiddleware:
             if isinstance(sys_content, str):
                 total_text += " " + sys_content
 
-        estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-        estimated_output = max_tokens
-        estimated_cost = PricingCache.estimate_cost_microdollars(
-            model_name, estimated_input, estimated_output,
-        )
+        est_input, est_output = estimate_input_tokens(total_text, max_tokens)
 
-        with self.limit_set.acquire(
-            requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-        ) as acq:
-            try:
-                response = handler(request)
+        with cost_controlled_call(
+            self.limit_set, self.reporter, model_name, est_input, est_output,
+        ) as ctx:
+            response = handler(request)
 
-                resp_message = response
-                content = resp_message.content
-                response_text = content if isinstance(content, str) else ""
+            resp_message = response
+            content = resp_message.content
+            response_text = content if isinstance(content, str) else ""
 
-                usage_metadata = resp_message.usage_metadata
-                if usage_metadata is not None:
-                    if "input_tokens" not in usage_metadata:
-                        raise KeyError(
-                            f"usage_metadata missing 'input_tokens': "
-                            f"{list(usage_metadata.keys())}"
-                        )
-                    if "output_tokens" not in usage_metadata:
-                        raise KeyError(
-                            f"usage_metadata missing 'output_tokens': "
-                            f"{list(usage_metadata.keys())}"
-                        )
-                    actual_input = usage_metadata["input_tokens"]
-                    actual_output = usage_metadata["output_tokens"]
-                else:
-                    actual_input = estimated_input
-                    actual_output = max(len(response_text) // 3, 1)
+            usage_metadata = resp_message.usage_metadata
+            if usage_metadata is not None:
+                if "input_tokens" not in usage_metadata:
+                    raise KeyError(
+                        f"usage_metadata missing 'input_tokens': "
+                        f"{list(usage_metadata.keys())}"
+                    )
+                if "output_tokens" not in usage_metadata:
+                    raise KeyError(
+                        f"usage_metadata missing 'output_tokens': "
+                        f"{list(usage_metadata.keys())}"
+                    )
+                actual_input = usage_metadata["input_tokens"]
+                actual_output = usage_metadata["output_tokens"]
+            else:
+                actual_input = est_input
+                actual_output = max(len(response_text) // 3, 1)
 
-                actual_cost = PricingCache.estimate_cost_microdollars(
-                    model_name, actual_input, actual_output,
-                )
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(actual_cost, 1)})
-
-                self.reporter.log_call(
-                    model=model_name,
-                    cost_usd=microdollars_to_dollars(actual_cost),
-                    input_tokens=actual_input,
-                    output_tokens=actual_output,
-                )
-
-                return response
-
-            except BaseException:
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: estimated_cost})
-                raise
+            actual_cost = PricingCache.estimate_cost_microdollars(
+                model_name, actual_input, actual_output,
+            )
+            ctx.set_actual(
+                cost=max(actual_cost, 1),
+                input_tokens=actual_input,
+                output_tokens=actual_output,
+            )
+            return response

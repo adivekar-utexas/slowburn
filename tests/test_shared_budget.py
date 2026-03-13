@@ -188,7 +188,7 @@ class TestSharedBudgetCrewAI:
         """
         shared = _make_shared_limit_set(budget_usd=5.0)
         from slowburn.integrations.crewai import SlowBurnCrewAI
-        sb = SlowBurnCrewAI(limit_set=shared)
+        sb = SlowBurnCrewAI(limit_set=shared, max_tokens=1000)
         assert sb.limit_set is shared
 
     def test_crewai_requires_budget_or_limit_set(self) -> None:

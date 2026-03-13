@@ -35,6 +35,7 @@ from typing import Any, Dict, List, Optional
 
 import litellm
 
+from ..cost_accounting import cost_controlled_call, estimate_input_tokens
 from ..limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from ..pricing import PricingCache
 from ..reporter import CostReporter
@@ -112,44 +113,31 @@ class SlowBurnModelClient:
             for msg in messages
             if isinstance(msg.get("content"), str)
         )
-        estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-        estimated_output = max_tokens
-        estimated_cost = PricingCache.estimate_cost_microdollars(
-            model, estimated_input, estimated_output,
-        )
+        est_input, est_output = estimate_input_tokens(total_text, max_tokens)
 
-        # 2. ACQUIRE (blocks until budget available)
-        with self.limit_set.acquire(
-            requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-        ) as acq:
-            try:
-                # 3. EXECUTE via litellm
-                response = litellm.completion(
-                    model=model,
-                    messages=messages,
-                    temperature=params.get("temperature", 0.7),
-                    max_tokens=max_tokens,
-                )
+        # 2. ACQUIRE → EXECUTE → UPDATE → LOG (via shared context manager)
+        with cost_controlled_call(
+            self.limit_set, self.reporter, model, est_input, est_output,
+        ) as ctx:
+            # Pass through all params from AG2 to litellm, only overriding
+            # model/messages/max_tokens which we already extracted above.
+            litellm_params = {
+                k: v for k, v in params.items()
+                if k not in ("messages", "model")
+            }
+            response = litellm.completion(
+                model=model,
+                messages=messages,
+                **litellm_params,
+            )
 
-                # 4. GET actual cost
-                actual_cost_micro = PricingCache.actual_cost_microdollars(response, model=model)
-                actual_cost_usd = microdollars_to_dollars(actual_cost_micro)
-
-                # 5. UPDATE limits with actual cost
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: actual_cost_micro})
-
-                # 6. LOG
-                self.reporter.log_call(
-                    model=model,
-                    cost_usd=actual_cost_usd,
-                    input_tokens=response.usage.prompt_tokens,
-                    output_tokens=response.usage.completion_tokens,
-                )
-
-                return response
-            except BaseException:
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: estimated_cost})
-                raise
+            actual_cost_micro = PricingCache.actual_cost_microdollars(response, model=model)
+            ctx.set_actual(
+                cost=actual_cost_micro,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+            )
+            return response
 
     def cost(self, response: Any) -> float:
         """Return cost in USD for this response.

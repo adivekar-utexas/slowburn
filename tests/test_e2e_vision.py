@@ -1,42 +1,27 @@
 """
-End-to-end integration test: real VLM calls with images.
+End-to-end integration tests: real VLM calls with images.
 
-Sends each of the 10 test fixture images to a vision-capable LLM,
-prints the description it returns, and validates that the description
-contains keywords consistent with the actual image content.
+Sends test fixture images to a vision-capable LLM, prints the descriptions,
+and validates that each description contains keywords matching the actual
+image content.
 
-Run manually:
-    python tests/test_e2e_vision.py
+API keys are loaded from .env by conftest.py at session startup.
 """
 
-import os
-import sys
 import time
 from pathlib import Path
+from typing import Dict, List
 
-from dotenv import load_dotenv
+import pytest
 
-env_path = Path(__file__).parent.parent / ".env"
-if not env_path.exists():
-    print(f"SKIP: {env_path} not found.")
-    sys.exit(0)
-load_dotenv(env_path)
+from slowburn import create_llm
 
-api_key = os.getenv("OPENROUTER_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
-if not api_key:
-    print("SKIP: No OPENROUTER_API_KEY or OPENAI_API_KEY found in .env.")
-    sys.exit(0)
-
-from slowburn import create_llm  # noqa: E402
+from .conftest import skip_no_api_key
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "images"
 ALL_TEST_IMAGES = sorted(FIXTURES_DIR.glob("test_image_*.jpg"))
 
-# What I (the developer) actually see in each image, used for validation.
-# Each entry is a list of keywords — the LLM description must contain at
-# least 2 of them to pass. These are intentionally generous to avoid
-# false failures from phrasing differences.
-EXPECTED_KEYWORDS = {
+EXPECTED_KEYWORDS: Dict[str, List[str]] = {
     "test_image_1.jpg": ["person", "woman", "sunset", "sun", "silhouette", "back", "plaid", "shirt", "golden", "light"],
     "test_image_2.jpg": ["prayer flags", "flags", "mountain", "colorful", "valley", "mist", "cloud", "tibet", "nepal"],
     "test_image_3.jpg": ["mountain", "aerial", "haze", "fog", "ridge", "landscape", "above", "clouds", "range"],
@@ -51,40 +36,6 @@ EXPECTED_KEYWORDS = {
 
 MIN_KEYWORD_MATCHES = 2
 
-
-def separator(title):
-    print(f"\n{'=' * 70}")
-    print(f"  {title}")
-    print(f"{'=' * 70}")
-
-
-# ===================================================================
-separator("Vision E2E: Setting up LLM worker")
-# ===================================================================
-
-if os.getenv("OPENROUTER_API_KEY"):
-    model = "openrouter/google/gemini-2.0-flash-001"
-    key = os.getenv("OPENROUTER_API_KEY")
-else:
-    model = "gpt-4o-mini"
-    key = os.getenv("OPENAI_API_KEY")
-
-llm = create_llm(
-    model=model,
-    budget_usd=2.0,
-    window="hourly",
-    api_key=key,
-    max_tokens=300,
-    temperature=0.2,
-)
-
-print(f"Model: {model}")
-print(f"Test images: {len(ALL_TEST_IMAGES)} in {FIXTURES_DIR}")
-
-# ===================================================================
-separator("Vision E2E: Single-image descriptions (all 10 images)")
-# ===================================================================
-
 SYSTEM_PROMPT = (
     "You are a precise image description assistant. "
     "Describe what you see in the image in one detailed paragraph. "
@@ -92,71 +43,125 @@ SYSTEM_PROMPT = (
     "Be specific and factual."
 )
 
-all_passed = True
-descriptions = {}
 
-for img_path in ALL_TEST_IMAGES:
-    img_name = img_path.name
-    expected = EXPECTED_KEYWORDS.get(img_name, [])
+@skip_no_api_key
+class TestVisionSingleImage:
+    """Send each of the 10 test images to a vision LLM and validate descriptions."""
 
-    start = time.time()
-    description = llm.call_llm(
-        prompt="Describe this image in detail.",
-        images=[img_path],
-        system_prompt=SYSTEM_PROMPT,
-        image_detail="high",
-    ).result(timeout=60.0)
-    elapsed = time.time() - start
+    @pytest.fixture(autouse=True)
+    def _setup_llm(self, llm_model_and_key):
+        model, key = llm_model_and_key
+        self.llm = create_llm(
+            model=model,
+            budget_usd=2.0,
+            window="hourly",
+            api_key=key,
+            max_tokens=300,
+            temperature=0.2,
+        )
+        yield
+        self.llm.stop()
 
-    descriptions[img_name] = description
-    desc_lower = description.lower()
+    @pytest.mark.parametrize(
+        "img_path",
+        ALL_TEST_IMAGES,
+        ids=[p.name for p in ALL_TEST_IMAGES],
+    )
+    def test_describe_image(self, img_path: Path) -> None:
+        """LLM should describe the image with keywords matching actual content.
 
-    matched = [kw for kw in expected if kw.lower() in desc_lower]
-    match_count = len(matched)
-    passed = match_count >= MIN_KEYWORD_MATCHES
+        Steps:
+        1. Send image to the LLM with a description prompt.
+        2. Print the full description (always visible for manual inspection).
+        3. Check that at least MIN_KEYWORD_MATCHES keywords from the expected
+           list appear in the description.
+        """
+        img_name = img_path.name
+        expected = EXPECTED_KEYWORDS.get(img_name, [])
 
-    print(f"\n--- {img_name} ({elapsed:.1f}s) ---")
-    print(f"  Description: {description}")
-    print(f"  Keywords matched: {matched} ({match_count}/{len(expected)})")
-    print(f"  Status: {'PASS' if passed else 'FAIL'}")
+        start = time.time()
+        description = self.llm.call_llm(
+            prompt="Describe this image in detail.",
+            images=[img_path],
+            system_prompt=SYSTEM_PROMPT,
+            image_detail="high",
+        ).result(timeout=60.0)
+        elapsed = time.time() - start
 
-    if not passed:
-        print(f"  EXPECTED at least {MIN_KEYWORD_MATCHES} of: {expected}")
-        all_passed = False
+        desc_lower = description.lower()
+        matched = [kw for kw in expected if kw.lower() in desc_lower]
 
-# ===================================================================
-separator("Vision E2E: Multi-image batch call")
-# ===================================================================
+        print(f"\n--- {img_name} ({elapsed:.1f}s) ---")
+        print(f"  Description: {description}")
+        print(f"  Keywords matched: {matched} ({len(matched)}/{len(expected)})")
 
-start = time.time()
-batch_results = llm.call_llm_batch(
-    prompts=[f"In one sentence, what is in this image?" for _ in ALL_TEST_IMAGES[:5]],
-    images_per_prompt=[[img] for img in ALL_TEST_IMAGES[:5]],
-    system_prompt="Answer in exactly one sentence.",
-).result(timeout=120.0)
-elapsed = time.time() - start
+        assert len(matched) >= MIN_KEYWORD_MATCHES, (
+            f"{img_name}: only {len(matched)} keyword matches ({matched}), "
+            f"expected >= {MIN_KEYWORD_MATCHES} of {expected}"
+        )
 
-print(f"\nBatch of 5 images completed in {elapsed:.1f}s:")
-for i, (img, result) in enumerate(zip(ALL_TEST_IMAGES[:5], batch_results)):
-    print(f"  [{img.name}] {result}")
 
-assert len(batch_results) == 5, f"Expected 5 results, got {len(batch_results)}"
-print("PASS")
+@skip_no_api_key
+class TestVisionBatch:
+    """Batch vision calls with multiple images."""
 
-# ===================================================================
-separator("Vision E2E: Cost report")
-# ===================================================================
+    def test_batch_five_images(self, llm_model_and_key) -> None:
+        """Batch of 5 image descriptions should all return non-empty results."""
+        model, key = llm_model_and_key
+        llm = create_llm(
+            model=model,
+            budget_usd=2.0,
+            window="hourly",
+            api_key=key,
+            max_tokens=100,
+            temperature=0.2,
+        )
+        try:
+            start = time.time()
+            results = llm.call_llm_batch(
+                prompts=["In one sentence, what is in this image?"] * 5,
+                images_per_prompt=[[img] for img in ALL_TEST_IMAGES[:5]],
+                system_prompt="Answer in exactly one sentence.",
+            ).result(timeout=120.0)
+            elapsed = time.time() - start
 
-reporter = llm.get_reporter().result(timeout=5.0)
-print(f"Total calls: {reporter.num_calls}")
-print(f"Total cost:  ${reporter.total_cost():.6f}")
-print(reporter.to_markdown())
+            print(f"\nBatch of 5 images completed in {elapsed:.1f}s:")
+            for img, result in zip(ALL_TEST_IMAGES[:5], results):
+                print(f"  [{img.name}] {result.strip()}")
 
-llm.stop()
+            assert len(results) == 5
+            for r in results:
+                assert len(r.strip()) > 0
+        finally:
+            llm.stop()
 
-# ===================================================================
-if all_passed:
-    separator("ALL VISION TESTS PASSED")
-else:
-    separator("SOME VISION TESTS FAILED — see details above")
-    sys.exit(1)
+
+@skip_no_api_key
+class TestVisionCostReport:
+    """Verify cost tracking works for vision calls."""
+
+    def test_cost_tracked(self, llm_model_and_key) -> None:
+        """A vision call should log positive cost to the reporter."""
+        model, key = llm_model_and_key
+        llm = create_llm(
+            model=model,
+            budget_usd=1.0,
+            window="hourly",
+            api_key=key,
+            max_tokens=100,
+            temperature=0.2,
+        )
+        try:
+            llm.call_llm(
+                prompt="What is in this image?",
+                images=[ALL_TEST_IMAGES[0]],
+            ).result(timeout=60.0)
+
+            reporter = llm.get_reporter().result(timeout=5.0)
+            print(f"Vision call cost: ${reporter.total_cost():.6f}")
+            print(reporter.to_markdown())
+
+            assert reporter.num_calls == 1
+            assert reporter.total_cost() > 0
+        finally:
+            llm.stop()

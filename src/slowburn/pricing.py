@@ -54,7 +54,7 @@ def _fetch_openrouter_pricing() -> Dict[str, Dict[str, str]]:
             "https://openrouter.ai/api/v1/models",
             headers={"User-Agent": "SlowBurn/0.1"},
         )
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
         result = {}
         for model in data.get("data", []):

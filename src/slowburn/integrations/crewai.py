@@ -30,6 +30,7 @@ from typing import Optional
 
 from concurry import LimitSet
 
+from ..cost_accounting import estimate_input_tokens
 from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
 from ..pricing import PricingCache
 from ..reporter import CostReporter
@@ -54,6 +55,7 @@ class SlowBurnCrewAI:
         self,
         budget_usd: float = 0.0,
         window_seconds: float = 86400,
+        max_tokens: Optional[int] = None,
         limit_set: Optional[LimitSet] = None,
         reporter: Optional[CostReporter] = None,
     ):
@@ -69,6 +71,13 @@ class SlowBurnCrewAI:
                 mode="thread",
                 shared=True,
             )
+        if max_tokens is None:
+            raise ValueError(
+                "SlowBurnCrewAI requires max_tokens (the max output tokens "
+                "configured on your CrewAI LLM). This is needed for cost "
+                "estimation because CrewAI's event bus does not expose it."
+            )
+        self.max_tokens = max_tokens
         self.reporter = reporter if reporter is not None else CostReporter()
         self._installed = False
         self._backend = None
@@ -101,6 +110,7 @@ class SlowBurnCrewAI:
 
         limit_set = self.limit_set
         reporter = self.reporter
+        max_tokens = self.max_tokens
 
         @crewai_event_bus.on(LLMCallStartedEvent)
         def _on_llm_start(source, event: LLMCallStartedEvent):
@@ -111,8 +121,7 @@ class SlowBurnCrewAI:
                 msg.get("content", "") if isinstance(msg, dict) else str(getattr(msg, "content", ""))
                 for msg in messages
             )
-            estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-            estimated_output = 500
+            estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
             estimated_cost = PricingCache.estimate_cost_microdollars(
                 model_name, estimated_input, estimated_output,
@@ -168,9 +177,13 @@ class SlowBurnCrewAI:
                 for msg in context.messages
                 if isinstance(msg.get("content"), str)
             )
-            estimated_input = int(max(len(total_text) // 3, 1) * 5.0) + 50
-            max_tokens = context.llm.max_tokens or 500
-            estimated_output = max_tokens
+            max_tokens = context.llm.max_tokens
+            if max_tokens is None:
+                raise RuntimeError(
+                    f"SlowBurnCrewAI: max_tokens is not set on LLM '{model_name}'. "
+                    f"Set max_tokens on the CrewAI LLM to enable cost estimation."
+                )
+            estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
             estimated_cost = PricingCache.estimate_cost_microdollars(
                 model_name, estimated_input, estimated_output,

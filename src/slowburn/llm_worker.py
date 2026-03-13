@@ -23,7 +23,8 @@ from concurry import async_gather, worker
 from morphic import Typed
 from pydantic import Field
 
-from .limits import DEFAULT_COST_LIMIT_KEY
+from .cost_accounting import estimate_input_tokens
+from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import PricingCache
 from .reporter import CostReporter
 
@@ -222,18 +223,16 @@ class SlowBurnLLM(Typed):
             merged_params.update(litellm_params)
 
         # 1. ESTIMATE tokens
-        estimated_text_tokens = _estimate_tokens(prompt)
+        prompt_text = prompt
         if system_prompt is not None:
-            estimated_text_tokens += _estimate_tokens(system_prompt)
-        estimated_input_tokens = int(estimated_text_tokens * 5.0) + 50
+            prompt_text += " " + system_prompt
+        estimated_input_tokens, estimated_output_tokens = estimate_input_tokens(
+            prompt_text, self.max_tokens,
+        )
 
-        # Account for image tokens (high-detail images use ~1000 tokens each,
-        # low-detail ~85; "auto" is treated as high for safety)
         if images is not None and len(images) > 0:
             tokens_per_image = 85 if image_detail == "low" else 1000
             estimated_input_tokens += tokens_per_image * len(images)
-
-        estimated_output_tokens = self.max_tokens
 
         # 2. ESTIMATE cost in microdollars
         estimated_cost = PricingCache.estimate_cost_microdollars(
@@ -328,7 +327,6 @@ class SlowBurnLLM(Typed):
                 })
 
                 # 7. LOG to reporter
-                from .limits import microdollars_to_dollars
                 self._reporter.log_call(
                     model=self.model_name,
                     cost_usd=microdollars_to_dollars(actual_cost),
