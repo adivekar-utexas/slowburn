@@ -147,7 +147,7 @@ class SlowBurnModelClient:
                 )
 
                 return response
-            except Exception:
+            except BaseException:
                 acq.update(usage={DEFAULT_COST_LIMIT_KEY: estimated_cost})
                 raise
 

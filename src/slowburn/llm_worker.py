@@ -12,8 +12,11 @@ crashing with an error.
 """
 
 import asyncio
+import base64
 import logging
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+import mimetypes
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 import litellm
 from concurry import async_gather, worker
@@ -37,6 +40,62 @@ T = TypeVar("T")
 def _estimate_tokens(text: str, *, chars_per_token: float = 3.0) -> int:
     """Rough estimate of token count from character length."""
     return max(int(len(text) // chars_per_token), 1)
+
+
+def _mime_type_for_path(image_path: Path) -> str:
+    """Infer MIME type from file extension, defaulting to image/png."""
+    mime, _ = mimetypes.guess_type(str(image_path))
+    if mime is not None and mime.startswith("image/"):
+        return mime
+    return "image/png"
+
+
+def _encode_image_to_data_url(image_path: Path) -> str:
+    """Read an image file and return a base64 data-URL string.
+
+    Raises:
+        FileNotFoundError: If the image file does not exist.
+        ValueError: If the file is empty or unreadable.
+    """
+    if not image_path.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    raw = image_path.read_bytes()
+    if len(raw) == 0:
+        raise ValueError(f"Image file is empty: {image_path}")
+    encoded = base64.b64encode(raw).decode("utf-8")
+    mime = _mime_type_for_path(image_path)
+    return f"data:{mime};base64,{encoded}"
+
+
+ImageInput = Union[str, Path]
+
+
+def _resolve_image_inputs(images: List[ImageInput]) -> List[str]:
+    """Convert a list of image inputs to data-URL strings.
+
+    Each element may be:
+    - A ``Path`` or path-like string pointing to a local file (encoded to base64).
+    - A string starting with ``http://`` or ``https://`` (passed through as-is).
+    - A string starting with ``data:`` (already a data-URL, passed through).
+
+    Returns:
+        List of URL strings suitable for the ``image_url`` message content part.
+    """
+    urls: List[str] = []
+    for img in images:
+        if isinstance(img, Path):
+            urls.append(_encode_image_to_data_url(img))
+        elif isinstance(img, str):
+            if img.startswith(("http://", "https://", "data:")):
+                urls.append(img)
+            else:
+                urls.append(_encode_image_to_data_url(Path(img)))
+        else:
+            raise TypeError(
+                f"Image input must be a Path, URL string, or data-URL string, "
+                f"got {type(img).__name__}"
+            )
+    return urls
 
 
 @worker(mode="asyncio")
@@ -108,8 +167,10 @@ class SlowBurnLLM(Typed):
         self,
         *,
         prompt: str,
+        images: Optional[List[ImageInput]] = None,
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
+        image_detail: str = "auto",
         verbosity: int = 1,
         litellm_params: Optional[Dict[str, Any]] = None,
     ) -> Any:
@@ -117,10 +178,18 @@ class SlowBurnLLM(Typed):
 
         Args:
             prompt: The user message content.
+            images: Optional list of images to include in the message. Each
+                element can be a ``pathlib.Path`` to a local file, a URL string
+                (``http://`` / ``https://``), or an already-encoded data-URL
+                string (``data:image/...;base64,...``). Local files are
+                automatically base64-encoded. Pass ``None`` (default) for a
+                text-only call.
             system_prompt: Optional system message prepended to the conversation.
             validator: Optional callable that parses/validates the response text.
                 If it raises ``ValueError``, the error propagates (and Concurry's
                 retry mechanism can catch it if configured with ``retry_on``).
+            image_detail: Detail level for vision queries sent to the API.
+                One of ``"low"``, ``"high"``, or ``"auto"`` (default).
             verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
             litellm_params: Per-call parameters passed through to
                 ``litellm.acompletion()``. Merged on top of the worker-level
@@ -130,10 +199,23 @@ class SlowBurnLLM(Typed):
         Returns:
             The raw response text, or the parsed result from *validator* if provided.
         """
-        messages: List[Dict[str, str]] = []
+        messages: List[Dict[str, Any]] = []
         if system_prompt is not None:
             messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+
+        if images is not None and len(images) > 0:
+            image_urls = _resolve_image_inputs(images)
+            content_parts: List[Dict[str, Any]] = [
+                {"type": "text", "text": prompt},
+            ]
+            for url in image_urls:
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": url, "detail": image_detail},
+                })
+            messages.append({"role": "user", "content": content_parts})
+        else:
+            messages.append({"role": "user", "content": prompt})
 
         merged_params: Dict[str, Any] = {**self.litellm_params}
         if litellm_params is not None:
@@ -144,6 +226,13 @@ class SlowBurnLLM(Typed):
         if system_prompt is not None:
             estimated_text_tokens += _estimate_tokens(system_prompt)
         estimated_input_tokens = int(estimated_text_tokens * 5.0) + 50
+
+        # Account for image tokens (high-detail images use ~1000 tokens each,
+        # low-detail ~85; "auto" is treated as high for safety)
+        if images is not None and len(images) > 0:
+            tokens_per_image = 85 if image_detail == "low" else 1000
+            estimated_input_tokens += tokens_per_image * len(images)
+
         estimated_output_tokens = self.max_tokens
 
         # 2. ESTIMATE cost in microdollars
@@ -258,7 +347,7 @@ class SlowBurnLLM(Typed):
 
             except (ValueError, asyncio.TimeoutError):
                 raise
-            except Exception:
+            except BaseException:
                 acq.update(usage={
                     "input_tokens": estimated_input_tokens,
                     "output_tokens": 0,
@@ -271,8 +360,10 @@ class SlowBurnLLM(Typed):
         self,
         *,
         prompts: List[str],
+        images_per_prompt: Optional[List[Optional[List[ImageInput]]]] = None,
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
+        image_detail: str = "auto",
         verbosity: int = 1,
         litellm_params: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
@@ -280,8 +371,13 @@ class SlowBurnLLM(Typed):
 
         Args:
             prompts: List of user message strings.
+            images_per_prompt: Optional list, same length as *prompts*, where
+                each element is either ``None`` (text-only call) or a list of
+                ``ImageInput`` for that prompt. Pass ``None`` (default) if no
+                prompts use images.
             system_prompt: Optional system message applied to all calls.
             validator: Optional callable applied to each response.
+            image_detail: Detail level for vision queries ("low", "high", "auto").
             verbosity: Logging verbosity.
             litellm_params: Per-call parameters passed through to each
                 ``litellm.acompletion()`` call in the batch.
@@ -292,15 +388,26 @@ class SlowBurnLLM(Typed):
         if len(prompts) == 0:
             return []
 
+        if images_per_prompt is not None and len(images_per_prompt) != len(prompts):
+            raise ValueError(
+                f"images_per_prompt length ({len(images_per_prompt)}) "
+                f"must match prompts length ({len(prompts)})"
+            )
+
+        if images_per_prompt is None:
+            images_per_prompt = [None] * len(prompts)
+
         tasks = [
             self.call_llm(
                 prompt=p,
+                images=imgs,
                 system_prompt=system_prompt,
                 validator=validator,
+                image_detail=image_detail,
                 verbosity=verbosity,
                 litellm_params=litellm_params,
             )
-            for p in prompts
+            for p, imgs in zip(prompts, images_per_prompt)
         ]
 
         results: List[Any] = await async_gather(
