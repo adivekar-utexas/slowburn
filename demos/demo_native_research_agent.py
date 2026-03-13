@@ -73,7 +73,7 @@ IMPORTANT: You MUST use search_web to find real data. Do NOT make up facts."""
 
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    runs_dir = Path(__file__).parent.parent / "runs" / "research_agent" / timestamp
+    runs_dir = Path(__file__).parent / "runs" / "research_agent" / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"{'=' * 70}")

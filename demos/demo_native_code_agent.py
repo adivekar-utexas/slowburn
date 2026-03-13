@@ -101,7 +101,7 @@ IMPORTANT: Always use your tools. Do NOT just describe changes — actually writ
 
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    runs_dir = Path(__file__).parent.parent / "runs" / "code_agent" / timestamp
+    runs_dir = Path(__file__).parent / "runs" / "code_agent" / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     (runs_dir / "solution.py").write_text(SEED_CODE)

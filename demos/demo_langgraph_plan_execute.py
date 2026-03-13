@@ -87,7 +87,7 @@ def main():
     from slowburn.reporter import CostReporter
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    runs_dir = Path(__file__).parent.parent / "runs" / "langgraph_plan_execute" / timestamp
+    runs_dir = Path(__file__).parent / "runs" / "langgraph_plan_execute" / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     reporter = CostReporter()
