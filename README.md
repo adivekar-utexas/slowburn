@@ -1,6 +1,6 @@
-# SlowBurn
+# SlowBurn: Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents
 
-**Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents**
+**Abhishek Divekar** - *NSF-Simons AI Institute for Cosmic Origins / Amazon*
 
 [![PyPI version](https://img.shields.io/pypi/v/slowburn.svg)](https://pypi.org/project/slowburn/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -17,7 +17,7 @@
 <p align="center">
   <a href="https://drive.google.com/drive/folders/1_CWYaP9WP-p0X0_RVAJv1rrX-KNF2C1w?usp=drive_link">
     <picture>
-      <img src="figures/architecture.png" alt="SlowBurn Architecture — Click to Watch Demo Video" width="800"/>
+      <img src="images/architecture.png" alt="SlowBurn Architecture - Click to Watch Demo Video" width="800"/>
     </picture>
   </a>
   <br/>
@@ -34,11 +34,11 @@ SlowBurn takes a different approach: **when the budget is exhausted, the agent p
 
 **What SlowBurn provides:**
 
-- **CostLimit** — a dollar-denominated rate limit that composes with token and request rate limits, and blocks rather than terminates when exhausted
-- **SlowBurnLLM** — an asyncio LLM worker with automatic per-call cost tracking, supporting 100+ models via [litellm](https://github.com/BerriAI/litellm) (text and vision)
-- **Framework integrations** — drop-in hooks for [CrewAI](https://github.com/crewAIInc/crewAI), [AutoGen (AG2)](https://github.com/ag2ai/ag2), [LangGraph](https://github.com/langchain-ai/langgraph), and [LangChain](https://github.com/langchain-ai/langchain) that share a unified budget
-- **CostReporter** — per-call, per-model cost attribution with JSON, Markdown, and LaTeX export
-- **Global config** — all defaults centralized in `slowburn_config`, overridable at runtime via `temp_config()`
+- **CostLimit**: a dollar-denominated rate limit that composes with token and request rate limits, and blocks rather than terminates when exhausted
+- **SlowBurnLLM**: an asyncio LLM worker with automatic per-call cost tracking, supporting 100+ models via [litellm](https://github.com/BerriAI/litellm) (text and vision)
+- **Framework integrations**: drop-in hooks for [CrewAI](https://github.com/crewAIInc/crewAI), [AutoGen (AG2)](https://github.com/ag2ai/ag2), [LangGraph](https://github.com/langchain-ai/langgraph), and [LangChain](https://github.com/langchain-ai/langchain) that share a unified budget
+- **CostReporter**: per-call, per-model cost attribution with JSON, Markdown, and LaTeX export
+- **Global config**: all defaults centralized in `slowburn_config`, overridable at runtime via `temp_config()`
 
 ## Quick Start
 
@@ -265,6 +265,20 @@ cd demos && python demo_native_research_agent.py
 
 # Code improvement agent (terminal)
 cd demos && python demo_native_code_agent.py
+```
+
+## Citation
+
+If you use SlowBurn in your research, please cite:
+
+```bibtex
+@inproceedings{divekar2025slowburn,
+  title     = {{SlowBurn}: Cost-Sustainable Concurrent Execution for Long-Horizon {LLM} Agents},
+  author    = {Divekar, Abhishek},
+  booktitle = {European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Databases (ECML-PKDD), Demo Track},
+  year      = {2025},
+  url       = {https://github.com/adivekar-utexas/slowburn}
+}
 ```
 
 ## License
