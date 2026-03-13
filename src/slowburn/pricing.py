@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import litellm
 
+from .config import slowburn_config
 from .limits import MICRODOLLARS_PER_DOLLAR
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def _fetch_openrouter_pricing() -> Dict[str, Dict[str, str]]:
             "https://openrouter.ai/api/v1/models",
             headers={"User-Agent": "SlowBurn/0.1"},
         )
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=slowburn_config.defaults.openrouter_fetch_timeout) as resp:
             data = json.loads(resp.read().decode())
         result = {}
         for model in data.get("data", []):
@@ -233,7 +234,7 @@ class PricingCache:
         # Tier 4: Estimate from response text length (raises if model unknown)
         try:
             text = response.choices[0].message.content or ""
-            est_output_tokens = len(text) // 3
+            est_output_tokens = int(len(text) / slowburn_config.defaults.chars_per_token)
             if model is not None:
                 _, output_rate = PricingCache.get_token_costs(model)
                 cost_usd = output_rate * est_output_tokens

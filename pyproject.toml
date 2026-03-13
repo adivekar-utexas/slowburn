@@ -52,6 +52,10 @@ dev = [
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
     "ruff>=0.4",
+    "jupyterlab>=4.5.6",
+    "ipython",
+    "ipykernel",
+    "ipywidgets",
 ]
 all = [
     "slowburn[crewai,autogen,langgraph,langchain,ray,dev]",

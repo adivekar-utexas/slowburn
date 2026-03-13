@@ -33,6 +33,7 @@ from typing import Any, Dict, List, Optional
 
 from concurry import LimitSet
 
+from ..config import slowburn_config
 from ..cost_accounting import estimate_input_tokens
 from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
 from ..pricing import PricingCache
@@ -73,10 +74,12 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
     def __init__(
         self,
         budget_usd: float = 0.0,
-        window_seconds: float = 86400,
+        window_seconds: Optional[float] = None,
         limit_set: Optional[LimitSet] = None,
         reporter: Optional[CostReporter] = None,
     ):
+        if window_seconds is None:
+            window_seconds = slowburn_config.defaults.default_window_seconds
         if limit_set is not None:
             self.limit_set = limit_set
         else:
@@ -202,7 +205,7 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
             for gen_list in response.generations:
                 for gen in gen_list:
                     text += gen.text
-            completion_tokens = max(len(text) // 3, 1)
+            completion_tokens = max(int(len(text) / slowburn_config.defaults.chars_per_token), 1)
             actual_cost = PricingCache.estimate_cost_microdollars(
                 model_name, estimated_input, completion_tokens,
             )

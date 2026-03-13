@@ -17,24 +17,20 @@ Three utilities:
 from contextlib import contextmanager
 from typing import Any, Generator, Tuple
 
+from .config import slowburn_config
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import PricingCache
 from .reporter import CostReporter
-
-CHARS_PER_TOKEN: float = 3.0
-SAFETY_MULTIPLIER: float = 5.0
-BASE_OVERHEAD_TOKENS: int = 50
 
 
 def estimate_input_tokens(text: str, max_tokens: int) -> Tuple[int, int]:
     """Estimate input and output token counts from raw text.
 
     Applies the shared formula used across all SlowBurn integrations:
-    ``int(max(len(text) / CHARS_PER_TOKEN, 1) * SAFETY_MULTIPLIER) + BASE_OVERHEAD_TOKENS``
+    ``int(max(len(text) / chars_per_token, 1) * token_safety_multiplier) + base_overhead_tokens``
 
-    The safety multiplier accounts for system messages, JSON formatting,
-    role tags, and other overhead that inflates the actual token count
-    well beyond the raw character estimate.
+    All three constants are read from ``slowburn_config.defaults`` at call
+    time, so they can be tuned globally via ``temp_config()``.
 
     Args:
         text: Concatenated text of all messages (user + system).
@@ -44,8 +40,9 @@ def estimate_input_tokens(text: str, max_tokens: int) -> Tuple[int, int]:
         ``(estimated_input_tokens, estimated_output_tokens)`` where the output
         estimate is simply ``max_tokens`` passed through.
     """
-    raw_estimate = max(int(len(text) / CHARS_PER_TOKEN), 1)
-    estimated_input = int(raw_estimate * SAFETY_MULTIPLIER) + BASE_OVERHEAD_TOKENS
+    cfg = slowburn_config.defaults
+    raw_estimate = max(int(len(text) / cfg.chars_per_token), 1)
+    estimated_input = int(raw_estimate * cfg.token_safety_multiplier) + cfg.base_overhead_tokens
     return estimated_input, max_tokens
 
 

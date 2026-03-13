@@ -141,7 +141,7 @@ class TestAutoGenModelClient:
             "model": model,
             "max_tokens": 50,
             "temperature": 0.0,
-            "timeout": 30.0,
+            "timeout": 120.0,
         })
 
         content = response.choices[0].message.content

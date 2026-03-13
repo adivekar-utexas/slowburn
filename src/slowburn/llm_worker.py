@@ -23,6 +23,7 @@ from concurry import async_gather, worker
 from morphic import Typed
 from pydantic import Field
 
+from .config import _NO_ARG, is_no_arg, slowburn_config
 from .cost_accounting import estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import PricingCache
@@ -38,9 +39,13 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def _estimate_tokens(text: str, *, chars_per_token: float = 3.0) -> int:
-    """Rough estimate of token count from character length."""
-    return max(int(len(text) // chars_per_token), 1)
+def _estimate_tokens(text: str) -> int:
+    """Rough estimate of token count from character length.
+
+    Reads ``chars_per_token`` from ``slowburn_config.defaults`` at call time.
+    """
+    cfg = slowburn_config.defaults
+    return max(int(len(text) // cfg.chars_per_token), 1)
 
 
 def _mime_type_for_path(image_path: Path) -> str:
@@ -143,9 +148,9 @@ class SlowBurnLLM(Typed):
     name: str = Field(..., description="Worker name (for logging)")
     model_name: str = Field(..., description="litellm model identifier")
     api_key: str = Field(default="", description="API key (or set via env var)")
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1000, ge=1)
-    timeout: float = Field(default=120.0, gt=0.0)
+    temperature: Any = Field(default=_NO_ARG, description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.")
+    max_tokens: Any = Field(default=_NO_ARG, description="Max output tokens. Defaults to slowburn_config.defaults.max_tokens.")
+    timeout: Any = Field(default=_NO_ARG, description="Per-call timeout in seconds. Defaults to slowburn_config.defaults.timeout.")
     litellm_params: Dict[str, Any] = Field(
         default_factory=dict,
         description=(
@@ -157,6 +162,13 @@ class SlowBurnLLM(Typed):
     )
 
     def post_initialize(self) -> None:
+        cfg = slowburn_config.defaults
+        if is_no_arg(self.temperature):
+            object.__setattr__(self, "temperature", cfg.temperature)
+        if is_no_arg(self.max_tokens):
+            object.__setattr__(self, "max_tokens", cfg.max_tokens)
+        if is_no_arg(self.timeout):
+            object.__setattr__(self, "timeout", cfg.timeout)
         self._reporter = CostReporter()
 
     @property
@@ -172,7 +184,7 @@ class SlowBurnLLM(Typed):
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
         image_detail: str = "auto",
-        verbosity: int = 1,
+        verbosity: Any = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Execute a single LLM call with cost-aware backpressure.
@@ -192,6 +204,7 @@ class SlowBurnLLM(Typed):
             image_detail: Detail level for vision queries sent to the API.
                 One of ``"low"``, ``"high"``, or ``"auto"`` (default).
             verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
+                Defaults to slowburn_config.defaults.verbosity.
             litellm_params: Per-call parameters passed through to
                 ``litellm.acompletion()``. Merged on top of the worker-level
                 ``self.litellm_params``. Use for call-specific tools,
@@ -200,6 +213,9 @@ class SlowBurnLLM(Typed):
         Returns:
             The raw response text, or the parsed result from *validator* if provided.
         """
+        if is_no_arg(verbosity):
+            verbosity = slowburn_config.defaults.verbosity
+
         messages: List[Dict[str, Any]] = []
         if system_prompt is not None:
             messages.append({"role": "system", "content": system_prompt})
@@ -231,7 +247,8 @@ class SlowBurnLLM(Typed):
         )
 
         if images is not None and len(images) > 0:
-            tokens_per_image = 85 if image_detail == "low" else 1000
+            cfg = slowburn_config.defaults
+            tokens_per_image = cfg.image_tokens_low_detail if image_detail == "low" else cfg.image_tokens_high_detail
             estimated_input_tokens += tokens_per_image * len(images)
 
         # 2. ESTIMATE cost in microdollars
@@ -362,7 +379,7 @@ class SlowBurnLLM(Typed):
         system_prompt: Optional[str] = None,
         validator: Optional[Callable[[str], T]] = None,
         image_detail: str = "auto",
-        verbosity: int = 1,
+        verbosity: Any = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
         """Execute multiple LLM calls concurrently with shared backpressure.
@@ -376,13 +393,15 @@ class SlowBurnLLM(Typed):
             system_prompt: Optional system message applied to all calls.
             validator: Optional callable applied to each response.
             image_detail: Detail level for vision queries ("low", "high", "auto").
-            verbosity: Logging verbosity.
+            verbosity: Logging verbosity. Defaults to slowburn_config.defaults.verbosity.
             litellm_params: Per-call parameters passed through to each
                 ``litellm.acompletion()`` call in the batch.
 
         Returns:
             List of results (raw text or parsed validator output).
         """
+        if is_no_arg(verbosity):
+            verbosity = slowburn_config.defaults.verbosity
         if len(prompts) == 0:
             return []
 

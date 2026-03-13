@@ -10,7 +10,11 @@ When the budget is exhausted, acquire() blocks (backpressure) until the time
 window rolls over. The agent slows down rather than crashing.
 """
 
+from typing import Optional
+
 from concurry import RateLimit
+
+from .config import _NO_ARG, is_no_arg, slowburn_config
 
 MICRODOLLARS_PER_DOLLAR: int = 1_000_000
 
@@ -66,10 +70,12 @@ class CostLimit(RateLimit):
     def __init__(
         self,
         budget_usd: float,
-        window_seconds: float = 86400,
+        window_seconds: Optional[float] = None,
         key: str = DEFAULT_COST_LIMIT_KEY,
         **kwargs,
     ):
+        if window_seconds is None:
+            window_seconds = slowburn_config.defaults.default_window_seconds
         capacity_microdollars = dollars_to_microdollars(budget_usd)
         super().__init__(
             key=key,

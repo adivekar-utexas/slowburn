@@ -23,6 +23,7 @@ from typing import Any, List, Optional, Union
 from concurry import CallLimit, LimitSet, RateLimit
 
 from .backpressure import set_backpressure_warnings, timed_acquire
+from .config import _NO_ARG, SlowBurnConfig, SlowBurnDefaults, is_no_arg, slowburn_config, temp_config
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
 from .llm_worker import ImageInput, SlowBurnLLM
@@ -45,6 +46,10 @@ __all__: list[str] = [
     "dollars_to_microdollars",
     "microdollars_to_dollars",
     "DEFAULT_COST_LIMIT_KEY",
+    "slowburn_config",
+    "temp_config",
+    "SlowBurnConfig",
+    "SlowBurnDefaults",
 ]
 
 _WINDOW_ALIASES = {
@@ -56,18 +61,18 @@ _WINDOW_ALIASES = {
 
 def create_llm(
     model: str,
-    budget_usd: float = 5.0,
+    budget_usd: Any = _NO_ARG,
     window: Union[str, int, float] = "daily",
-    max_rpm: int = 500,
-    max_input_tpm: int = 1_000_000,
-    max_output_tpm: int = 200_000,
+    max_rpm: Any = _NO_ARG,
+    max_input_tpm: Any = _NO_ARG,
+    max_output_tpm: Any = _NO_ARG,
     api_key: str = "",
     backend: str = "asyncio",
     name: Optional[str] = None,
-    temperature: float = 0.7,
-    max_tokens: int = 1000,
-    timeout: float = 120.0,
-    num_retries: int = 3,
+    temperature: Any = _NO_ARG,
+    max_tokens: Any = _NO_ARG,
+    timeout: Any = _NO_ARG,
+    num_retries: Any = _NO_ARG,
     extra_limits: Optional[List[Any]] = None,
     litellm_params: Optional[dict] = None,
     **kwargs,
@@ -78,20 +83,31 @@ def create_llm(
     token rate limits, a call limit, and an asyncio SlowBurnLLM worker
     in one function call.
 
+    All defaults are read from ``slowburn_config.defaults`` at call time,
+    so they can be tuned globally via ``temp_config()`` or by mutating
+    ``slowburn_config.defaults`` directly.
+
     Args:
         model: litellm model identifier (e.g. "gpt-4o-mini", "claude-3-5-haiku-20241022").
-        budget_usd: Maximum dollar spend per window.
+        budget_usd: Maximum dollar spend per window. Defaults to slowburn_config.defaults.budget_usd.
         window: Budget window — "daily", "hourly", "minutely", or seconds (int/float).
         max_rpm: Maximum requests per minute (CallLimit capacity).
+            Defaults to slowburn_config.defaults.max_rpm.
         max_input_tpm: Maximum input tokens per minute.
+            Defaults to slowburn_config.defaults.max_input_tpm.
         max_output_tpm: Maximum output tokens per minute.
+            Defaults to slowburn_config.defaults.max_output_tpm.
         api_key: API key string (or set via environment variable for the provider).
         backend: Execution backend — "asyncio" (default) or "ray".
         name: Worker name for logging. Defaults to the model name.
         temperature: LLM sampling temperature.
+            Defaults to slowburn_config.defaults.temperature.
         max_tokens: Maximum output tokens per call.
+            Defaults to slowburn_config.defaults.max_tokens.
         timeout: Per-call timeout in seconds.
+            Defaults to slowburn_config.defaults.timeout.
         num_retries: Number of retries on transient errors.
+            Defaults to slowburn_config.defaults.num_retries.
         extra_limits: Additional Limit objects to include in the LimitSet.
         litellm_params: Additional parameters passed to every litellm.acompletion()
             call (e.g. tools, response_format, seed, top_p, stop).
@@ -109,6 +125,24 @@ def create_llm(
         print(f"Cost so far: ${reporter.total_cost():.4f}")
         llm.stop()
     """
+    cfg = slowburn_config.defaults
+    if is_no_arg(budget_usd):
+        budget_usd = cfg.budget_usd
+    if is_no_arg(max_rpm):
+        max_rpm = cfg.max_rpm
+    if is_no_arg(max_input_tpm):
+        max_input_tpm = cfg.max_input_tpm
+    if is_no_arg(max_output_tpm):
+        max_output_tpm = cfg.max_output_tpm
+    if is_no_arg(temperature):
+        temperature = cfg.temperature
+    if is_no_arg(max_tokens):
+        max_tokens = cfg.max_tokens
+    if is_no_arg(timeout):
+        timeout = cfg.timeout
+    if is_no_arg(num_retries):
+        num_retries = cfg.num_retries
+
     if isinstance(window, str):
         window_seconds = _WINDOW_ALIASES.get(window.lower())
         if window_seconds is None:

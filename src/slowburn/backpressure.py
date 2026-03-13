@@ -12,18 +12,21 @@ import time
 from contextlib import contextmanager
 from typing import Any, Dict
 
+from .config import slowburn_config
+from .limits import MICRODOLLARS_PER_DOLLAR
+
 logger = logging.getLogger("slowburn.backpressure")
 
 _warnings_enabled: bool = True
-
-BACKPRESSURE_THRESHOLD_SECONDS: float = 0.5
 
 
 def set_backpressure_warnings(enabled: bool) -> None:
     """Enable or disable backpressure warning messages.
 
     When enabled (default), SlowBurn logs a WARNING whenever an acquire()
-    call blocks for more than 0.5 seconds due to budget exhaustion.
+    call blocks for more than the configured threshold (see
+    ``slowburn_config.defaults.backpressure_threshold_seconds``) due to
+    budget exhaustion.
     """
     global _warnings_enabled
     _warnings_enabled = enabled
@@ -37,7 +40,8 @@ def backpressure_warnings_enabled() -> bool:
 def timed_acquire(limit_set: Any, requested: Dict[str, int], context: str = ""):
     """Context manager that wraps limit_set.acquire() with backpressure timing.
 
-    If acquire() blocks for longer than BACKPRESSURE_THRESHOLD_SECONDS,
+    If acquire() blocks for longer than the configured threshold
+    (``slowburn_config.defaults.backpressure_threshold_seconds``),
     logs a warning with the wait duration and context.
 
     Usage::
@@ -51,14 +55,15 @@ def timed_acquire(limit_set: Any, requested: Dict[str, int], context: str = ""):
     acq = limit_set.acquire(requested=requested)
     elapsed = time.monotonic() - start
 
-    if _warnings_enabled and elapsed > BACKPRESSURE_THRESHOLD_SECONDS:
+    threshold = slowburn_config.defaults.backpressure_threshold_seconds
+    if _warnings_enabled and elapsed > threshold:
         cost_key = next(
             (k for k in requested if "cost" in k.lower()),
             next(iter(requested), "?"),
         )
         requested_amount = requested[cost_key]
         if isinstance(requested_amount, (int, float)) and requested_amount > 0:
-            dollar_amount = requested_amount / 1_000_000
+            dollar_amount = requested_amount / MICRODOLLARS_PER_DOLLAR
             amount_str = f"~${dollar_amount:.4f}"
         else:
             amount_str = str(requested_amount)
