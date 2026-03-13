@@ -1,6 +1,5 @@
 # SlowBurn: Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents
-
-**Abhishek Divekar** - *NSF-Simons AI Institute for Cosmic Origins / Amazon*
+**Authors**: Abhishek Divekar
 
 [![PyPI version](https://img.shields.io/pypi/v/slowburn.svg)](https://pypi.org/project/slowburn/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -42,6 +41,8 @@ SlowBurn takes a different approach: **when the budget is exhausted, the agent p
 
 ## Quick Start
 
+Create a cost-controlled LLM worker with a daily dollar budget, make calls, and inspect the cost report:
+
 ```python
 from slowburn import create_llm
 
@@ -59,7 +60,9 @@ print(reporter.to_markdown())
 llm.stop()
 ```
 
-### Vision calls
+### Vision-Language Agents
+
+Pass local files, URLs, or data-URLs as images for multimodal (VLM) calls:
 
 ```python
 from pathlib import Path
@@ -73,6 +76,8 @@ result = llm.call_llm(
 
 ### Batch calls (concurrent)
 
+Send multiple prompts in one call; they execute concurrently on the asyncio event loop under the same budget:
+
 ```python
 results = llm.call_llm_batch(
     prompts=["Capital of France?", "Capital of Japan?", "Capital of Brazil?"],
@@ -81,6 +86,8 @@ results = llm.call_llm_batch(
 ```
 
 ### Structured output with validators
+
+Attach a validator function to parse and type-check the response; `ValueError` triggers an automatic retry:
 
 ```python
 import re
@@ -99,6 +106,8 @@ answer = llm.call_llm(
 ```
 
 ### Global configuration
+
+Override defaults (temperature, budget, timeouts) for a specific run using a context manager that restores on exit:
 
 ```python
 from slowburn import slowburn_config, temp_config
@@ -272,12 +281,11 @@ cd demos && python demo_native_code_agent.py
 If you use SlowBurn in your research, please cite:
 
 ```bibtex
-@inproceedings{divekar2025slowburn,
-  title     = {{SlowBurn}: Cost-Sustainable Concurrent Execution for Long-Horizon {LLM} Agents},
-  author    = {Divekar, Abhishek},
-  booktitle = {European Conference on Machine Learning and Principles and Practice of Knowledge Discovery in Databases (ECML-PKDD), Demo Track},
-  year      = {2025},
-  url       = {https://github.com/adivekar-utexas/slowburn}
+@misc{divekar2026slowburn,
+  author       = {Divekar, Abhishek},
+  title        = {{SlowBurn}: Cost-Sustainable Concurrent Execution for Long-Horizon {LLM} Agents},
+  year         = {2026},
+  howpublished = {\url{https://github.com/adivekar-utexas/slowburn}},
 }
 ```
 
