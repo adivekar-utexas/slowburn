@@ -220,10 +220,7 @@ class PricingCache:
             usage = response.usage
             if usage is not None and model is not None:
                 input_rate, output_rate = PricingCache.get_token_costs(model)
-                cost_usd = (
-                    input_rate * usage.prompt_tokens
-                    + output_rate * usage.completion_tokens
-                )
+                cost_usd = input_rate * usage.prompt_tokens + output_rate * usage.completion_tokens
                 if cost_usd > 0:
                     return max(int(cost_usd * MICRODOLLARS_PER_DOLLAR), 1)
         except ModelNotFoundError:

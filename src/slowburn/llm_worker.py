@@ -99,8 +99,7 @@ def _resolve_image_inputs(images: List[ImageInput]) -> List[str]:
                 urls.append(_encode_image_to_data_url(Path(img)))
         else:
             raise TypeError(
-                f"Image input must be a Path, URL string, or data-URL string, "
-                f"got {type(img).__name__}"
+                f"Image input must be a Path, URL string, or data-URL string, got {type(img).__name__}"
             )
     return urls
 
@@ -149,9 +148,17 @@ class SlowBurnLLM(Typed):
     name: str = Field(..., description="Worker name (for logging)")
     model_name: str = Field(..., description="litellm model identifier")
     api_key: str = Field(default="", description="API key (or set via env var)")
-    temperature: Union[Optional[float], _NO_ARG_TYPE] = Field(default=_NO_ARG, description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.")
-    max_tokens: Union[int, _NO_ARG_TYPE] = Field(default=_NO_ARG, description="Max output tokens. Defaults to slowburn_config.defaults.max_tokens.")
-    timeout: Union[float, _NO_ARG_TYPE] = Field(default=_NO_ARG, description="Per-call timeout in seconds. Defaults to slowburn_config.defaults.timeout.")
+    temperature: Union[Optional[float], _NO_ARG_TYPE] = Field(
+        default=_NO_ARG,
+        description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.",
+    )
+    max_tokens: Union[int, _NO_ARG_TYPE] = Field(
+        default=_NO_ARG, description="Max output tokens. Defaults to slowburn_config.defaults.max_tokens."
+    )
+    timeout: Union[float, _NO_ARG_TYPE] = Field(
+        default=_NO_ARG,
+        description="Per-call timeout in seconds. Defaults to slowburn_config.defaults.timeout.",
+    )
     tools: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         description="Default tool schemas (OpenAI format) for all calls. Overridable per-call.",
@@ -224,9 +231,7 @@ class SlowBurnLLM(Typed):
 
         if history is not None:
             messages = list(history)
-            if system_prompt is not None and (
-                len(messages) == 0 or messages[0].get("role") != "system"
-            ):
+            if system_prompt is not None and (len(messages) == 0 or messages[0].get("role") != "system"):
                 messages.insert(0, {"role": "system", "content": system_prompt})
 
             if len(prompt) > 0:
@@ -236,10 +241,12 @@ class SlowBurnLLM(Typed):
                         {"type": "text", "text": prompt},
                     ]
                     for url in image_urls:
-                        content_parts.append({
-                            "type": "image_url",
-                            "image_url": {"url": url, "detail": image_detail},
-                        })
+                        content_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": url, "detail": image_detail},
+                            }
+                        )
                     messages.append({"role": "user", "content": content_parts})
                 else:
                     messages.append({"role": "user", "content": prompt})
@@ -255,10 +262,12 @@ class SlowBurnLLM(Typed):
                 {"type": "text", "text": prompt},
             ]
             for url in image_urls:
-                content_parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": url, "detail": image_detail},
-                })
+                content_parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": url, "detail": image_detail},
+                    }
+                )
             messages.append({"role": "user", "content": content_parts})
         else:
             messages.append({"role": "user", "content": prompt})
@@ -268,8 +277,8 @@ class SlowBurnLLM(Typed):
     @validate
     async def call_llm(
         self,
-        *,
         prompt: Union[str, List[Dict[str, Any]]],
+        *,
         images: Optional[List[ImageInput]] = None,
         system_prompt: Optional[str] = None,
         history: Optional[List[Dict[str, Any]]] = None,
@@ -357,17 +366,24 @@ class SlowBurnLLM(Typed):
         if system_prompt is not None:
             prompt_text += " " + system_prompt
         estimated_input_tokens, estimated_output_tokens = estimate_input_tokens(
-            prompt_text, self.max_tokens,
+            prompt_text,
+            self.max_tokens,
         )
 
         if images is not None and len(images) > 0:
             defaults = slowburn_config.defaults
-            tokens_per_image = defaults.image_tokens_low_detail if image_detail == "low" else defaults.image_tokens_high_detail
+            tokens_per_image = (
+                defaults.image_tokens_low_detail
+                if image_detail == "low"
+                else defaults.image_tokens_high_detail
+            )
             estimated_input_tokens += tokens_per_image * len(images)
 
         # 2. ESTIMATE cost in microdollars
         estimated_cost = PricingCache.estimate_cost_microdollars(
-            self.model_name, estimated_input_tokens, estimated_output_tokens,
+            self.model_name,
+            estimated_input_tokens,
+            estimated_output_tokens,
         )
 
         # 3. ACQUIRE (blocks if budget/rate exhausted)
@@ -409,22 +425,26 @@ class SlowBurnLLM(Typed):
 
                 if response_text is None and tool_calls is not None:
                     import json as _json
-                    response_text = _json.dumps({
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in tool_calls
-                        ]
-                    })
+
+                    response_text = _json.dumps(
+                        {
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "function": {
+                                        "name": tc.function.name,
+                                        "arguments": tc.function.arguments,
+                                    },
+                                }
+                                for tc in tool_calls
+                            ]
+                        }
+                    )
 
                 # 4. GET actual cost
                 actual_cost = PricingCache.actual_cost_microdollars(
-                    response, model=self.model_name,
+                    response,
+                    model=self.model_name,
                 )
 
                 # 5. Apply validator if provided (skipped when returning messages)
@@ -453,31 +473,37 @@ class SlowBurnLLM(Typed):
                     try:
                         result = validator(response_text)
                     except ValueError:
-                        acquisition.update(usage={
-                            "input_tokens": actual_input,
-                            "output_tokens": actual_output,
-                            "call_count": 1,
-                            DEFAULT_COST_LIMIT_KEY: actual_cost,
-                        })
+                        acquisition.update(
+                            usage={
+                                "input_tokens": actual_input,
+                                "output_tokens": actual_output,
+                                "call_count": 1,
+                                DEFAULT_COST_LIMIT_KEY: actual_cost,
+                            }
+                        )
                         raise
                     except Exception as e:
-                        acquisition.update(usage={
-                            "input_tokens": actual_input,
-                            "output_tokens": actual_output,
-                            "call_count": 1,
-                            DEFAULT_COST_LIMIT_KEY: actual_cost,
-                        })
+                        acquisition.update(
+                            usage={
+                                "input_tokens": actual_input,
+                                "output_tokens": actual_output,
+                                "call_count": 1,
+                                DEFAULT_COST_LIMIT_KEY: actual_cost,
+                            }
+                        )
                         raise ValueError(f"Validator error: {e}") from e
                 else:
                     result = response_text
 
                 # 6. UPDATE limits with actuals (refunds unused budget)
-                acquisition.update(usage={
-                    "input_tokens": actual_input,
-                    "output_tokens": actual_output,
-                    "call_count": 1,
-                    DEFAULT_COST_LIMIT_KEY: actual_cost,
-                })
+                acquisition.update(
+                    usage={
+                        "input_tokens": actual_input,
+                        "output_tokens": actual_output,
+                        "call_count": 1,
+                        DEFAULT_COST_LIMIT_KEY: actual_cost,
+                    }
+                )
 
                 # 7. LOG to reporter
                 self._reporter.log_call(
@@ -499,19 +525,21 @@ class SlowBurnLLM(Typed):
             except (ValueError, asyncio.TimeoutError):
                 raise
             except BaseException:
-                acquisition.update(usage={
-                    "input_tokens": estimated_input_tokens,
-                    "output_tokens": 0,
-                    "call_count": 1,
-                    DEFAULT_COST_LIMIT_KEY: estimated_cost,
-                })
+                acquisition.update(
+                    usage={
+                        "input_tokens": estimated_input_tokens,
+                        "output_tokens": 0,
+                        "call_count": 1,
+                        DEFAULT_COST_LIMIT_KEY: estimated_cost,
+                    }
+                )
                 raise
 
     @validate
     async def call_llm_batch(
         self,
-        *,
         prompts: List[Union[str, List[Dict[str, Any]]]],
+        *,
         images_per_prompt: Optional[List[Optional[List[ImageInput]]]] = None,
         system_prompt: Optional[str] = None,
         history_per_prompt: Optional[List[Optional[List[Dict[str, Any]]]]] = None,
@@ -579,7 +607,9 @@ class SlowBurnLLM(Typed):
                 litellm_params=litellm_params,
             )
             for prompt_item, images_item, history_item in zip(
-                prompts, images_per_prompt, history_per_prompt,
+                prompts,
+                images_per_prompt,
+                history_per_prompt,
             )
         ]
 
@@ -587,7 +617,7 @@ class SlowBurnLLM(Typed):
             tasks,
             progress=dict(
                 disable=verbosity < 2,
-                desc=f"{self.name}:{self.model_name}",
+                desc=f"{self.model_name}",
                 miniters=max(len(prompts) // 2, 1),
             ),
         )

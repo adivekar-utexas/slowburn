@@ -14,7 +14,7 @@ from typing import Optional
 
 from concurry import RateLimit
 
-from .config import _NO_ARG, is_no_arg, slowburn_config
+from .config import slowburn_config
 
 MICRODOLLARS_PER_DOLLAR: int = 1_000_000
 

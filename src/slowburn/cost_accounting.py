@@ -59,7 +59,11 @@ class CostCallContext:
     """
 
     __slots__ = (
-        "estimated_cost", "actual_cost", "actual_input", "actual_output", "updated",
+        "estimated_cost",
+        "actual_cost",
+        "actual_input",
+        "actual_output",
+        "updated",
     )
 
     def __init__(self, estimated_cost: int) -> None:
@@ -70,7 +74,11 @@ class CostCallContext:
         self.updated: bool = False
 
     def set_actual(
-        self, *, cost: int, input_tokens: int, output_tokens: int,
+        self,
+        *,
+        cost: int,
+        input_tokens: int,
+        output_tokens: int,
     ) -> None:
         """Record the actual usage from a completed LLM call.
 
@@ -123,12 +131,12 @@ def cost_controlled_call(
         estimated_output: Estimated output tokens (typically max_tokens).
     """
     estimated_cost = PricingCache.estimate_cost_microdollars(
-        model, estimated_input, estimated_output,
+        model,
+        estimated_input,
+        estimated_output,
     )
 
-    with limit_set.acquire(
-        requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-    ) as acq:
+    with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
         ctx = CostCallContext(estimated_cost=estimated_cost)
         try:
             yield ctx

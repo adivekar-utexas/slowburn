@@ -73,6 +73,7 @@ def timed_acquire(limit_set: Any, requested: Dict[str, int], context: str = ""):
         )
         if not logger.handlers and not logging.getLogger().handlers:
             import sys
+
             print(
                 f"  ** SlowBurn: backpressure active — waited {elapsed:.1f}s "
                 f"for budget (requested {amount_str}, {context}) **",

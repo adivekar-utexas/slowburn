@@ -13,7 +13,7 @@ for LLM parameters (e.g., ``temperature=None`` means "let the model decide").
 """
 
 from contextlib import contextmanager
-from typing import Any, Generator, Optional, Type
+from typing import Any, Generator, Optional
 
 from morphic import MutableTyped
 from pydantic import ConfigDict, Field, confloat, conint
@@ -154,10 +154,7 @@ def temp_config(**overrides: Any) -> Generator[SlowBurnConfig, None, None]:
 
     unknown = set(overrides.keys()) - valid_fields
     if len(unknown) > 0:
-        raise ValueError(
-            f"Unknown config key(s): {sorted(unknown)}. "
-            f"Valid keys: {sorted(valid_fields)}"
-        )
+        raise ValueError(f"Unknown config key(s): {sorted(unknown)}. Valid keys: {sorted(valid_fields)}")
 
     saved = {}
     for key in overrides:
