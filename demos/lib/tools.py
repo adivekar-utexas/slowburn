@@ -49,9 +49,9 @@ def search_web(query: str, max_results: int = 5) -> str:
         try:
             from duckduckgo_search import DDGS
         except ImportError:
-            return json.dumps({
-                "error": "Neither ddgs nor duckduckgo-search is installed. Run: pip install ddgs"
-            })
+            return json.dumps(
+                {"error": "Neither ddgs nor duckduckgo-search is installed. Run: pip install ddgs"}
+            )
 
     try:
         with DDGS() as ddgs:
@@ -125,12 +125,14 @@ def list_dir(path: str = ".", workspace: Path = None) -> str:
         entries = []
         for item in sorted(resolved.iterdir()):
             rel = item.relative_to(workspace.resolve())
-            entries.append({
-                "name": item.name,
-                "path": str(rel),
-                "type": "dir" if item.is_dir() else "file",
-                "size": item.stat().st_size if item.is_file() else None,
-            })
+            entries.append(
+                {
+                    "name": item.name,
+                    "path": str(rel),
+                    "type": "dir" if item.is_dir() else "file",
+                    "size": item.stat().st_size if item.is_file() else None,
+                }
+            )
         return json.dumps({"path": path, "entries": entries})
     except Exception as e:
         return json.dumps({"error": f"List failed: {e}"})
@@ -169,8 +171,7 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                     "path": {
                         "type": "string",
                         "description": (
-                            "File path relative to workspace root, "
-                            "e.g. 'report.md' or 'src/main.py'."
+                            "File path relative to workspace root, e.g. 'report.md' or 'src/main.py'."
                         ),
                     },
                 },
@@ -259,10 +260,9 @@ def execute_tool_call(
     fn = TOOL_FUNCTIONS[tool_name]
     if tool_name in ("read_file", "write_file", "list_dir"):
         if not isinstance(tool_args, dict):
-            return json.dumps({
-                "error": f"Invalid arguments type: expected dict, "
-                f"got {type(tool_args).__name__}"
-            })
+            return json.dumps(
+                {"error": f"Invalid arguments type: expected dict, got {type(tool_args).__name__}"}
+            )
         tool_args = {**tool_args, "workspace": workspace}
 
     try:

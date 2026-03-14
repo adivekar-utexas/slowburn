@@ -15,6 +15,7 @@ import asyncio
 import base64
 import logging
 import mimetypes
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
@@ -24,8 +25,7 @@ from morphic import Typed, validate
 from pydantic import Field
 
 from .config import _NO_ARG, _NO_ARG_TYPE, is_no_arg, slowburn_config
-from .constants import ImageDetailLevel, ToolChoiceOption
-from .cost_accounting import estimate_input_tokens
+from .constants import BackpressureNotify, BudgetOverflowAction, ImageDetailLevel, ToolChoiceOption
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import PricingCache
 from .reporter import CostReporter
@@ -176,6 +176,23 @@ class SlowBurnLLM(Typed):
             "in call_llm() merge on top of these defaults."
         ),
     )
+    backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = Field(
+        default=_NO_ARG,
+        description=(
+            'When "warn", logs a warning if acquire() blocks longer than '
+            "backpressure_threshold_seconds. When \"ignore\", silent. "
+            "Defaults to slowburn_config.defaults.backpressure_notify."
+        ),
+    )
+    on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = Field(
+        default=_NO_ARG,
+        description=(
+            "Action when a single call's estimated cost exceeds the budget capacity. "
+            '"warn" (default): proceed with the call but log a warning. '
+            '"error": raise ValueError. "ignore": proceed silently. '
+            "Defaults to slowburn_config.defaults.on_budget_overflow."
+        ),
+    )
 
     def post_initialize(self) -> None:
         defaults = slowburn_config.defaults
@@ -185,6 +202,10 @@ class SlowBurnLLM(Typed):
             object.__setattr__(self, "max_tokens", defaults.max_tokens)
         if is_no_arg(self.timeout):
             object.__setattr__(self, "timeout", defaults.timeout)
+        if is_no_arg(self.backpressure_notify):
+            object.__setattr__(self, "backpressure_notify", defaults.backpressure_notify)
+        if is_no_arg(self.on_budget_overflow):
+            object.__setattr__(self, "on_budget_overflow", defaults.on_budget_overflow)
         self._reporter = CostReporter()
 
     @property
@@ -361,23 +382,21 @@ class SlowBurnLLM(Typed):
         if resolved_tool_choice is not None:
             merged_params["tool_choice"] = resolved_tool_choice
 
-        # 1. ESTIMATE tokens
-        prompt_text = prompt if isinstance(prompt, str) else ""
-        if system_prompt is not None:
-            prompt_text += " " + system_prompt
-        estimated_input_tokens, estimated_output_tokens = estimate_input_tokens(
-            prompt_text,
-            self.max_tokens,
+        # 1. ESTIMATE tokens using litellm's local tokenizer
+        # This accounts for the full messages list (history, tool schemas,
+        # tool results, images) rather than just the current prompt string.
+        # A safety multiplier and buffer are applied on top to account for
+        # differences between litellm's tokenizer and the actual provider.
+        defaults = slowburn_config.defaults
+        base_input_tokens = litellm.token_counter(
+            model=self.model_name,
+            messages=messages,
+            tools=resolved_tools,
+            tool_choice=resolved_tool_choice,
+            use_default_image_token_count=True,
         )
-
-        if images is not None and len(images) > 0:
-            defaults = slowburn_config.defaults
-            tokens_per_image = (
-                defaults.image_tokens_low_detail
-                if image_detail == "low"
-                else defaults.image_tokens_high_detail
-            )
-            estimated_input_tokens += tokens_per_image * len(images)
+        estimated_input_tokens = int(base_input_tokens * defaults.input_token_estimate_multiplier) + defaults.input_token_estimate_overhead
+        estimated_output_tokens = int(self.max_tokens * defaults.output_token_estimate_multiplier) + defaults.output_token_estimate_overhead
 
         # 2. ESTIMATE cost in microdollars
         estimated_cost = PricingCache.estimate_cost_microdollars(
@@ -394,7 +413,47 @@ class SlowBurnLLM(Typed):
             DEFAULT_COST_LIMIT_KEY: estimated_cost,
         }
 
-        with self.limits.acquire(requested=requested) as acquisition:
+        try:
+            acquire_start = time.monotonic()
+            context_manager = self.limits.acquire(requested=requested)
+            acquire_elapsed = time.monotonic() - acquire_start
+        except ValueError as acquire_error:
+            if "exceeds capacity" not in str(acquire_error):
+                raise
+
+            overflow_message = (
+                f"A single call_llm() call to {self.model_name} is estimated to cost "
+                f"${microdollars_to_dollars(estimated_cost):.6f} "
+                f"(~{estimated_input_tokens} input + {estimated_output_tokens} output tokens), "
+                f"which exceeds your budget_usd per window. "
+                f"Fix by: (1) increasing the budget while creating the LLM, "
+                f"(2) reducing max_tokens (currently {self.max_tokens}), "
+                f"or (3) using a more budget-friendly model."
+            )
+
+            if self.on_budget_overflow == "error":
+                raise ValueError(overflow_message) from acquire_error
+
+            if self.on_budget_overflow == "warn":
+                logger.warning(f"[{self.name}] Budget overflow: {overflow_message}")
+
+            capped_requested = dict(requested)
+            capped_requested[DEFAULT_COST_LIMIT_KEY] = 1
+            acquire_start = time.monotonic()
+            context_manager = self.limits.acquire(requested=capped_requested)
+            acquire_elapsed = time.monotonic() - acquire_start
+
+        if self.backpressure_notify == "warn":
+            threshold = slowburn_config.defaults.backpressure_threshold_seconds
+            if acquire_elapsed > threshold:
+                logger.warning(
+                    f"[{self.name}] Backpressure: blocked {acquire_elapsed:.1f}s "
+                    f"waiting for budget/rate capacity "
+                    f"(estimated ${microdollars_to_dollars(estimated_cost):.6f}, "
+                    f"~{estimated_input_tokens} input + {estimated_output_tokens} output tokens)"
+                )
+
+        with context_manager as acquisition:
             try:
                 litellm.drop_params = True
                 response = await asyncio.wait_for(
@@ -412,11 +471,24 @@ class SlowBurnLLM(Typed):
                 actual_input = response.usage.prompt_tokens
                 actual_output = response.usage.completion_tokens
 
+                actual_cost = PricingCache.actual_cost_microdollars(
+                    response,
+                    model=self.model_name,
+                )
+
                 response_message = response.choices[0].message
                 response_text = response_message.content
                 tool_calls = response_message.tool_calls
 
                 if response_text is None and tool_calls is None:
+                    acquisition.update(
+                        usage={
+                            "input_tokens": actual_input,
+                            "output_tokens": actual_output,
+                            "call_count": 1,
+                            DEFAULT_COST_LIMIT_KEY: actual_cost,
+                        }
+                    )
                     raise ValueError(
                         f"LLM returned null content with no tool calls "
                         f"(model={self.model_name}). "
@@ -440,12 +512,6 @@ class SlowBurnLLM(Typed):
                             ]
                         }
                     )
-
-                # 4. GET actual cost
-                actual_cost = PricingCache.actual_cost_microdollars(
-                    response,
-                    model=self.model_name,
-                )
 
                 # 5. Apply validator if provided (skipped when returning messages)
                 result: Union[str, List[Dict[str, Any]]]
@@ -522,9 +588,9 @@ class SlowBurnLLM(Typed):
 
                 return result
 
-            except (ValueError, asyncio.TimeoutError):
+            except ValueError:
                 raise
-            except BaseException:
+            except (asyncio.TimeoutError, BaseException):
                 acquisition.update(
                     usage={
                         "input_tokens": estimated_input_tokens,

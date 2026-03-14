@@ -23,7 +23,6 @@ from typing import Any, Dict, List, Optional, Union
 from concurry import CallLimit, LimitSet, RateLimit
 from morphic import validate
 
-from .backpressure import set_backpressure_warnings, timed_acquire
 from .config import (
     _NO_ARG,
     _NO_ARG_TYPE,
@@ -33,7 +32,14 @@ from .config import (
     slowburn_config,
     temp_config,
 )
-from .constants import WINDOW_ALIAS_SECONDS, ExecutionBackend, ToolChoiceOption, WindowAlias
+from .constants import (
+    WINDOW_ALIAS_SECONDS,
+    BackpressureNotify,
+    BudgetOverflowAction,
+    ExecutionBackend,
+    ToolChoiceOption,
+    WindowAlias,
+)
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
 from .llm_worker import ImageInput, SlowBurnLLM
@@ -42,8 +48,6 @@ from .reporter import CostReporter
 
 __all__: List[str] = [
     "create_llm",
-    "set_backpressure_warnings",
-    "timed_acquire",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
@@ -82,6 +86,8 @@ def create_llm(
     tool_choice: Optional[ToolChoiceOption] = None,
     extra_limits: Optional[List[object]] = None,
     litellm_params: Optional[Dict[str, object]] = None,
+    backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = _NO_ARG,
+    on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = _NO_ARG,
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
 
@@ -124,6 +130,14 @@ def create_llm(
         extra_limits: Additional Limit objects to include in the LimitSet.
         litellm_params: Additional parameters passed to every litellm.acompletion()
             call (e.g. response_format, seed, top_p, stop).
+        backpressure_notify: When "warn", logs a warning if acquire() blocks
+            longer than backpressure_threshold_seconds waiting for budget/rate
+            capacity. When "ignore", silent.
+            Defaults to slowburn_config.defaults.backpressure_notify.
+        on_budget_overflow: Action when a single call's estimated cost exceeds
+            the budget capacity. "warn" (default): proceed with the call but
+            log a warning. "error": raise ValueError. "ignore": proceed silently.
+            Defaults to slowburn_config.defaults.on_budget_overflow.
 
     Returns:
         A live SlowBurnLLM worker, ready to accept ``call_llm()`` calls.
@@ -196,5 +210,7 @@ def create_llm(
         tools=tools,
         tool_choice=tool_choice,
         litellm_params=litellm_params if litellm_params is not None else {},
+        backpressure_notify=backpressure_notify,
+        on_budget_overflow=on_budget_overflow,
     )
     return llm

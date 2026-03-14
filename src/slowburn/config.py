@@ -18,7 +18,7 @@ from typing import Any, Generator, Optional
 from morphic import MutableTyped
 from pydantic import ConfigDict, Field, confloat, conint
 
-from .constants import ImageDetailLevel, WindowAlias
+from .constants import BackpressureNotify, BudgetOverflowAction, ImageDetailLevel, WindowAlias
 
 
 class _NoArgType:
@@ -65,10 +65,13 @@ class SlowBurnDefaults(MutableTyped):
         validate_assignment=True,
     )
 
-    # Token estimation
+    # Token estimation (applied on top of litellm.token_counter for input,
+    # and on top of max_tokens for output)
     chars_per_token: confloat(gt=0) = 3.0
-    token_safety_multiplier: confloat(ge=1.0) = 5.0
-    base_overhead_tokens: conint(ge=0) = 50
+    input_token_estimate_multiplier: confloat(ge=1.0) = 1.25
+    input_token_estimate_overhead: conint(ge=0) = 10
+    output_token_estimate_multiplier: confloat(gt=0.0, le=1.0) = 1.0
+    output_token_estimate_overhead: conint(ge=0) = 0
 
     # LLM call defaults
     temperature: Optional[confloat(ge=0.0, le=2.0)] = 0.7
@@ -91,6 +94,8 @@ class SlowBurnDefaults(MutableTyped):
 
     # Backpressure
     backpressure_threshold_seconds: confloat(ge=0.0) = 0.5
+    backpressure_notify: BackpressureNotify = "ignore"
+    on_budget_overflow: BudgetOverflowAction = "warn"
 
     # Verbosity
     verbosity: conint(ge=0) = 1
