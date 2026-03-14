@@ -1,0 +1,14 @@
+{
+  "step": 15,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "shared engineering challenges tokamak stellarator magnetic fusion plasma stability materials"
+      },
+      "result_length": 2231
+    }
+  ],
+  "elapsed_seconds": 16.422348260879517
+}

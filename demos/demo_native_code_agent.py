@@ -154,6 +154,7 @@ def main():
             max_steps=MAX_STEPS,
             verbose=True,
             log_dir=iter_log_dir,
+            workspace=runs_dir,
         )
 
         print(f"  Steps: {result['steps']}, Tool calls: {result['tool_calls']}")

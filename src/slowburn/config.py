@@ -68,7 +68,7 @@ class SlowBurnDefaults(MutableTyped):
     # Token estimation (applied on top of litellm.token_counter for input,
     # and on top of max_tokens for output)
     chars_per_token: confloat(gt=0) = 3.0
-    input_token_estimate_multiplier: confloat(ge=1.0) = 1.25
+    input_token_estimate_multiplier: confloat(ge=1.0) = 1.5
     input_token_estimate_overhead: conint(ge=0) = 10
     output_token_estimate_multiplier: confloat(gt=0.0, le=1.0) = 1.0
     output_token_estimate_overhead: conint(ge=0) = 0

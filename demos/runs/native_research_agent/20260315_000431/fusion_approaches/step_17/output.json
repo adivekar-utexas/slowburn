@@ -1,0 +1,14 @@
+{
+  "step": 17,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "tokamak engineering challenges magnetic confinement fusion 2024-2025 plasma stability disruptions"
+      },
+      "result_length": 1686
+    }
+  ],
+  "elapsed_seconds": 17.267428874969482
+}

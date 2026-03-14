@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_62b21f45f3af47a78e443633",
+  "function": "search_web",
+  "arguments": {
+    "query": "Wendelstein 7-X latest milestone funding timeline stellarator"
+  }
+}

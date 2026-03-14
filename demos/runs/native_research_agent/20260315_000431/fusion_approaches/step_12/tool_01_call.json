@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_dfa13a647a454ac383c5e46a",
+  "function": "append_findings",
+  "arguments": {
+    "content": "### Private Fusion Ventures - TAE Technologies Update\n\n**TAE Technologies**\n- **Latest Milestones**: Exceeded fusion reactor performance goals by 250% with significant scientific achievements in their current Norman reactor\n- **Funding Status**: Closed $250 million financing round, bringing total funding to $1.2 billion to date; recent capital injection surpassed initial targets for this round\n- **Key Investors**: Received investments from long-term partner Google and other strategic backers\n- **Technology**: Developing proprietary field-reversed configuration (FRC) approach with hydrogen-boron (p-B11) fuel to create compact, scalable reactors\n- **Status**: Based in Foothill Ranch, California, has emerged as a leader in the fusion energy sector and is nearing fusion power breakthrough"
+  }
+}

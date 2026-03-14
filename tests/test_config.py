@@ -42,7 +42,7 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.chars_per_token == 3.0
 
     def test_default_input_token_estimate_multiplier(self) -> None:
-        assert slowburn_config.defaults.input_token_estimate_multiplier == 1.25
+        assert slowburn_config.defaults.input_token_estimate_multiplier == 1.5
 
     def test_default_input_token_estimate_overhead(self) -> None:
         assert slowburn_config.defaults.input_token_estimate_overhead == 10

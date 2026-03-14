@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_2603122e7ae544d8954d9ab2",
+  "function": "search_web",
+  "arguments": {
+    "query": "Helion fusion milestones timeline funding 2024"
+  }
+}

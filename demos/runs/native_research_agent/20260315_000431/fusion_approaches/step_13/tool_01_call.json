@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_7b3d66a6f5bd402a822ab364",
+  "function": "search_web",
+  "arguments": {
+    "query": "fusion energy engineering challenges tokamak stellarator inertial confinement magnetic confinement plasma control"
+  }
+}

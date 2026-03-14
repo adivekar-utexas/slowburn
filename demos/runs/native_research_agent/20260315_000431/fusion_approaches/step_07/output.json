@@ -1,0 +1,14 @@
+{
+  "step": 7,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "ITER fusion reactor funding budget 2024 2025 latest cost"
+      },
+      "result_length": 1967
+    }
+  ],
+  "elapsed_seconds": 9.866274118423462
+}

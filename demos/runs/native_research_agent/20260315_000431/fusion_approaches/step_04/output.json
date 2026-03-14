@@ -1,0 +1,14 @@
+{
+  "step": 4,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "append_findings",
+      "arguments": {
+        "content": "### Stellarator Approach\n\n**Wendelstein 7-X**\n- World's largest stellarator facility located in Germany\n- Recently achieved a breakthrough by generating high-energy helium-3 ions for the first time using radio waves\n- Germany's stellarator fusion reactor projected to deliver power by 2031\n- Offers inherent stability advantages and is leading candidate for sustained fusion energy\n\n### Private Fusion Ventures\n\n**Proxima Fusion**\n- Secured €130M in Series A funding, joining ranks of well-funded nuclear startups\n- Develops its own stellarator design called \"Stellaris\"\n- Positioned with proximity to Germany's Wendelstein 7-X, the world's largest stellarator\n- Part of Germany's €2b plan for commercial fusion plants by 2030\n\n### Engineering Challenges and Commercial Outlook\n- Stellarators like Wendelstein 7-X promise 24/7 clean energy without disruptions\n- Advancement in magnetic confinement fusion continues to eliminate plasma disruptions\n- Private funding patterns for fusion companies resemble other high-tech venture capital trajectories\n- Commercialization timelines vary between publicly funded projects (longer) and private ventures (shorter)"
+      },
+      "result_length": 75
+    }
+  ],
+  "elapsed_seconds": 17.167625904083252
+}

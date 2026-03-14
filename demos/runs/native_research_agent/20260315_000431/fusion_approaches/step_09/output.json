@@ -1,0 +1,14 @@
+{
+  "step": 9,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Helion fusion milestones timeline funding 2024"
+      },
+      "result_length": 1821
+    }
+  ],
+  "elapsed_seconds": 16.16763210296631
+}

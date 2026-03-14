@@ -1,4 +1,4 @@
-# SlowBurn: Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents
+# SlowBurn 🐢🔥 - Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents
 **Authors**: Abhishek Divekar
 
 [![PyPI version](https://img.shields.io/pypi/v/slowburn.svg)](https://pypi.org/project/slowburn/)

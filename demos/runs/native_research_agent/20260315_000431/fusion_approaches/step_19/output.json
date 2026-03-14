@@ -1,0 +1,14 @@
+{
+  "step": 19,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Wendelstein 7-X latest engineering challenges 2024 stellarator problems"
+      },
+      "result_length": 2367
+    }
+  ],
+  "elapsed_seconds": 14.915482997894287
+}

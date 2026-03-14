@@ -40,12 +40,14 @@ MAX_STEPS = 15
 
 RESEARCH_TASKS = [
     (
+        "cost_analysis.md",
         "Research the cost of running LLM agents in production. "
         "Search the web for real data on API costs for GPT-4, Claude, and Gemini. "
         "Find specific dollar amounts from benchmarks like SWE-bench and Tau-bench. "
-        "Write your findings to a file called 'cost_analysis.md' with sources."
+        "Write your findings to 'cost_analysis.md' with sources."
     ),
     (
+        "backpressure.md",
         "Research backpressure mechanisms in distributed systems and how they "
         "apply to LLM rate limiting. Search the web for how systems like Kafka, "
         "gRPC, and TCP handle backpressure. Write a comparison to 'backpressure.md'."
@@ -69,7 +71,7 @@ IMPORTANT: You MUST use search_web to find real data. Do NOT make up facts."""
 
 def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    runs_dir = Path(__file__).parent / "runs" / "research_agent" / timestamp
+    runs_dir = Path(__file__).parent / "runs" / "native_research_agent" / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"{'=' * 70}")
@@ -95,20 +97,23 @@ def main():
 
     start_time = time.time()
 
-    for i, task in enumerate(RESEARCH_TASKS, 1):
-        print(f"\n  --- Task {i}/{len(RESEARCH_TASKS)} ---")
+    for i, (output_file, task) in enumerate(RESEARCH_TASKS, 1):
+        print(f"\n  --- Task {i}/{len(RESEARCH_TASKS)}: {output_file} ---")
         print(f"  {task[:80]}...")
 
-        task_log_dir = runs_dir / f"task_{i:02d}"
+        task_name = Path(output_file).stem
+        task_log_dir = runs_dir / task_name
         result = run_agent(
             llm=llm,
             task=task,
             tools=TOOL_SCHEMAS,
             tool_executor=tool_executor,
             system_prompt=SYSTEM_PROMPT,
+            output_file=output_file,
             max_steps=MAX_STEPS,
             verbose=True,
             log_dir=task_log_dir,
+            workspace=runs_dir,
         )
 
         print(f"  Result: {result['result'][:150]}...")

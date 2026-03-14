@@ -1,0 +1,14 @@
+{
+  "step": 8,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "append_findings",
+      "arguments": {
+        "content": "### ITER Updates (Latest Information)\n- **Cost Overruns**: ITER has confirmed more delays and around €5 billion in additional costs, bringing the total estimated cost to approximately $28 billion\n- **Construction Status**: Recently completed installation of its last magnetic coil - a significant construction milestone\n- **Timeline**: Current end goal remains 2025, though delays are acknowledged\n- **International Scope**: Involves 35 nations collaborating on the world's largest fusion reactor\n- **Latest Development**: In early 2024, China announced the launch of \"Fusion Energy Inc,\" a fusion consortium that aims to build an industrial prototype fusion reactor\n\n### Funding and Commercialization Trends (Updated)\n- ITER's $28 billion total cost highlights the immense financial requirements of large-scale fusion projects\n- Private fusion companies are following different funding trajectories compared to publicly funded projects like ITER\n- Commercial fusion ventures aim for shorter timelines and potentially more cost-effective approaches\n\n### Note: Incomplete Information\nThe above search focused specifically on ITER updates. Complete information about other fusion approaches (stellarator, inertial confinement, and private ventures) including their latest milestones, funding, timelines, and engineering challenges still needs to be gathered to fulfill the full comparison task."
+      },
+      "result_length": 75
+    }
+  ],
+  "elapsed_seconds": 12.78349494934082
+}

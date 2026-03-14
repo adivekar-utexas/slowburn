@@ -1,0 +1,14 @@
+{
+  "step": 11,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "TAE Technologies fusion energy funding milestones 2024 2025"
+      },
+      "result_length": 2190
+    }
+  ],
+  "elapsed_seconds": 19.908766984939575
+}

@@ -1,0 +1,175 @@
+{
+  "summary": {
+    "openrouter/z-ai/glm-4.5-air": {
+      "calls": 20,
+      "input_tokens": 39646,
+      "output_tokens": 7547,
+      "total_tokens": 47193,
+      "cost_usd": 0.010509000000000001
+    }
+  },
+  "total_cost_usd": 0.010509,
+  "num_calls": 20,
+  "calls": [
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000207,
+      "input_tokens": 596,
+      "output_tokens": 168,
+      "total_tokens": 764,
+      "timestamp": 1773513281.597784
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000439,
+      "input_tokens": 1242,
+      "output_tokens": 389,
+      "total_tokens": 1631,
+      "timestamp": 1773513291.508047
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000322,
+      "input_tokens": 1185,
+      "output_tokens": 261,
+      "total_tokens": 1446,
+      "timestamp": 1773513296.542378
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000518,
+      "input_tokens": 1403,
+      "output_tokens": 459,
+      "total_tokens": 1862,
+      "timestamp": 1773513316.303446
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000314,
+      "input_tokens": 1425,
+      "output_tokens": 217,
+      "total_tokens": 1642,
+      "timestamp": 1773513321.1034062
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000595,
+      "input_tokens": 1758,
+      "output_tokens": 496,
+      "total_tokens": 2254,
+      "timestamp": 1773513332.4681442
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000358,
+      "input_tokens": 1759,
+      "output_tokens": 217,
+      "total_tokens": 1976,
+      "timestamp": 1773513342.34553
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000638,
+      "input_tokens": 1931,
+      "output_tokens": 520,
+      "total_tokens": 2451,
+      "timestamp": 1773513356.7215738
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000395,
+      "input_tokens": 1970,
+      "output_tokens": 229,
+      "total_tokens": 2199,
+      "timestamp": 1773513372.896668
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000543,
+      "input_tokens": 2170,
+      "output_tokens": 372,
+      "total_tokens": 2542,
+      "timestamp": 1773513383.771195
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000482,
+      "input_tokens": 2070,
+      "output_tokens": 316,
+      "total_tokens": 2386,
+      "timestamp": 1773513403.6864069
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000543,
+      "input_tokens": 2437,
+      "output_tokens": 331,
+      "total_tokens": 2768,
+      "timestamp": 1773513412.9136
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000426,
+      "input_tokens": 2206,
+      "output_tokens": 230,
+      "total_tokens": 2436,
+      "timestamp": 1773513432.534975
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000791,
+      "input_tokens": 2584,
+      "output_tokens": 600,
+      "total_tokens": 3184,
+      "timestamp": 1773513447.874395
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000493,
+      "input_tokens": 2248,
+      "output_tokens": 301,
+      "total_tokens": 2549,
+      "timestamp": 1773513464.303808
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000793,
+      "input_tokens": 2601,
+      "output_tokens": 600,
+      "total_tokens": 3201,
+      "timestamp": 1773513477.641068
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000541,
+      "input_tokens": 2389,
+      "output_tokens": 336,
+      "total_tokens": 2725,
+      "timestamp": 1773513494.929068
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000788,
+      "input_tokens": 2560,
+      "output_tokens": 600,
+      "total_tokens": 3160,
+      "timestamp": 1773513509.1122172
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.0005,
+      "input_tokens": 2278,
+      "output_tokens": 305,
+      "total_tokens": 2583,
+      "timestamp": 1773513524.031926
+    },
+    {
+      "model": "openrouter/z-ai/glm-4.5-air",
+      "cost_usd": 0.000823,
+      "input_tokens": 2834,
+      "output_tokens": 600,
+      "total_tokens": 3434,
+      "timestamp": 1773513539.171206
+    }
+  ]
+}

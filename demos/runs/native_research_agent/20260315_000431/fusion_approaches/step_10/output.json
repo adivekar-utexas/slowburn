@@ -1,0 +1,14 @@
+{
+  "step": 10,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "append_findings",
+      "arguments": {
+        "content": "### Private Fusion Ventures - Helion Energy Update\n\n**Helion Energy**\n- **Latest Milestones**: Completed construction of its Polaris reactor prototype at the end of 2024; began operating its 7th-generation Polaris prototype in late 2024\n- **Funding Status**: Closed $0.5 billion Series E with additional $1.7 billion commitments tied to specific milestones; raised $425 million in fresh funding, bringing total investment to $1 billion\n- **Timeline**: Hopes to demonstrate electricity from fusion from the Polaris reactor as soon as 2025/2026\n- **Recent Development**: Announced a significant fusion milestone and is moving closer to commercial deployment (February 2026 announcement)\n- **Status**: Based in Everett, Washington, founded in 2013, positioning itself as a leader in private fusion development"
+      },
+      "result_length": 74
+    }
+  ],
+  "elapsed_seconds": 8.795738935470581
+}

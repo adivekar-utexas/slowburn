@@ -1,0 +1,14 @@
+{
+  "step": 6,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "append_findings",
+      "arguments": {
+        "content": "### Inertial Confinement Fusion\n\n**National Ignition Facility (NIF)**\n- **Latest Milestones**: Achieved record 8.6 megajoules output in recent experiments, with prior shots yielding 5.2 megajoules. The eighth ignition experiment on April 7, 2025 set new records for net-positive fusion energy gains.\n- **Funding Status**: Pursuing funding for Enhanced Yield Capability (EYC) project to increase laser power from 2.2 megajoules to 2.6 megajoules. Operated by Lawrence Livermore National Laboratory under U.S. Department of Energy.\n- **Engineering Challenges**: Despite achieving ignition, proving more challenging than first expected, the path to practical fusion energy remains long-term. The facility primarily supports nuclear stockpile stewardship while advancing fusion science.\n\n### Private Fusion Ventures Update\n\n**Proxima Fusion**\n- Secured €130M in Series A funding\n- Developing \"Stellaris\" stellarator design\n- Positioned near Germany's Wendelstein 7-X facility\n- Part of Germany's €2 billion plan for commercial fusion plants by 2030\n\n**Helion & TAE Technologies**\n- Additional private fusion companies making strides in commercial fusion development\n- Following venture capital funding patterns similar to other high-tech startups\n- Aiming for shorter commercialization timelines compared to publicly funded projects"
+      },
+      "result_length": 75
+    }
+  ],
+  "elapsed_seconds": 9.429780960083008
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Tailoring tokamak error fields to control plasma instabilities and ...",
+      "url": "https://www.nature.com/articles/s41467-024-45454-1",
+      "snippet": "Unlike the sun, which uses gravity to confinefusionplasmas, atokamakuses a strongmagneticfield forplasmaconfinement aiming to generate clean energy without carbon emission and long-lived ..."
+    },
+    {
+      "title": "AI Tackles Disruptive Tearing Instability in Fusion Plasma",
+      "url": "https://www.energy.gov/science/fes/articles/ai-tackles-disruptive-tearing-instability-fusion-plasma",
+      "snippet": "The researchers then tested the AI/DRL model on the DIII-Dtokamak, integrating data from a vast array of sensors and adjusting actuators to maintainplasmastability. This controller successfully maintainedplasmastabilityduring dynamic and complex conditions under which tearing instabilities usually arise, including the ITER baseline scenario."
+    },
+    {
+      "title": "Tailoring tokamak error fields to control plasma instabilities and ...",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10858871/",
+      "snippet": "Atokamakrelies on the axisymmetricmagneticfields to confinefusionplasmasand aims to deliver sustainable and clean energy. However, misalignments arise inevitably in thetokamakconstruction, leading to small asymmetries in themagneticfield ..."
+    },
+    {
+      "title": "A promising approach to steady-state fusion: High-temperature ...",
+      "url": "https://www.sciencedirect.com/science/article/pii/S2666675823001650",
+      "snippet": "China'smagneticconfinementfusionresearch has been mainly focused on thetokamakapproach, partially because of the difficulty of manufacturing three-dimensional (3D) coils ofstellarators, among other reasons. Thestellaratorhas inherent advantages over thetokamakin achieving steady-state operation and reducing recirculating power."
+    },
+    {
+      "title": "AI approach elevates plasma performance and stability across fusion ...",
+      "url": "https://engineering.princeton.edu/news/2024/06/03/ai-approach-elevates-plasma-performance-and-stability-across-fusion-devices",
+      "snippet": "Fusionresearchers led by engineers at Princeton and PPPL have successfully deployed machine learning methods to suppress harmful edge instabilities without sacrificingplasmaperformance."
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "step": 1,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "tokamak fusion ITER SPARC Commonwealth Fusion latest milestones funding timeline"
+      },
+      "result_length": 1951
+    }
+  ],
+  "elapsed_seconds": 4.433733701705933
+}

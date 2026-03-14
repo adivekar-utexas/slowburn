@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_ebaeb36a07af464989e91bdc",
+  "function": "append_findings",
+  "arguments": {
+    "content": "## Major Fusion Energy Approaches - Initial Findings\n\n### Tokamak Approach\n\n**ITER (International Thermonuclear Experimental Reactor)**\n- Currently the largest and most internationally funded fusion project\n- Involves 35 nations collaborating\n- Despite its scale and funding, faces inherent inefficiencies due to multinational coordination\n- Known as the \"Great Hot\" fusion project in some circles\n\n**Commonwealth Fusion Systems SPARC**\n- Commercial fusion company proposing tokamak construction\n- Located in Devens, Massachusetts\n- Using tokamak design (donut-shaped machine) as the most scientifically proven way to recreate sun's power\n- Part of the push toward commercial fusion energy\n- Funding history resembles that of OpenAI in terms of trajectory (though CFS is younger)\n\n### Funding and Commercialization Trends\n- Several commercial fusion companies have proposed tokamak construction in recent years\n- Private funding for fusion projects is growing, with patterns similar to other high-tech ventures\n- Both ITER and SPARC largely use the same tokamak physics knowledge base\n- Timeline differences exist between publicly funded projects and private ventures"
+  }
+}
