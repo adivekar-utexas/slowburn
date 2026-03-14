@@ -20,6 +20,8 @@ from slowburn.limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from slowburn.llm_worker import SlowBurnLLM
 from slowburn.reporter import CostReporter
 
+from .conftest import MOCK_MODEL_NAME
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -45,7 +47,7 @@ def _make_acompletion_response(cost: float = 0.0001):
     return SimpleNamespace(
         usage=usage,
         choices=[choice],
-        model="gpt-4o-mini",
+        model=MOCK_MODEL_NAME,
         _hidden_params={"response_cost": cost},
     )
 
@@ -57,16 +59,16 @@ def _make_completion_response(cost: float = 0.0001):
     return SimpleNamespace(
         usage=usage,
         choices=[choice],
-        model="gpt-4o-mini",
+        model=MOCK_MODEL_NAME,
         _hidden_params={"response_cost": cost},
     )
 
 
-def _make_langgraph_model(model_name: str = "gpt-4o-mini", max_tokens: int = 500):
+def _make_langgraph_model(model_name: str = MOCK_MODEL_NAME, max_tokens: int = 500):
     return SimpleNamespace(model_name=model_name, max_tokens=max_tokens)
 
 
-def _make_langgraph_request(model_name: str = "gpt-4o-mini", max_tokens: int = 500):
+def _make_langgraph_request(model_name: str = MOCK_MODEL_NAME, max_tokens: int = 500):
     return SimpleNamespace(
         model=_make_langgraph_model(model_name, max_tokens),
         messages=[SimpleNamespace(content="Hello from LangGraph")],
@@ -79,7 +81,7 @@ def _make_langgraph_response(content: str = "LangGraph response"):
     return SimpleNamespace(content=content, usage_metadata=None)
 
 
-def _make_langchain_serialized(model_name: str = "gpt-4o-mini", max_tokens: int = 500):
+def _make_langchain_serialized(model_name: str = MOCK_MODEL_NAME, max_tokens: int = 500):
     return {"kwargs": {"model_name": model_name, "max_tokens": max_tokens}}
 
 
@@ -122,10 +124,10 @@ class TestSharedBudgetTwoWorkers:
         shared = _make_shared_limit_set(budget_usd=1.0, mode="asyncio")
 
         w_a = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
-            name="worker-a", model_name="gpt-4o-mini", api_key="test",
+            name="worker-a", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         w_b = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
-            name="worker-b", model_name="gpt-4o-mini", api_key="test",
+            name="worker-b", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         try:
             for _ in range(3):
@@ -219,7 +221,7 @@ class TestSharedBudgetAutoGen:
         reporter = CostReporter()
 
         client = SlowBurnModelClient(
-            config={"model": "gpt-4o-mini"},
+            config={"model": MOCK_MODEL_NAME},
             limit_set=shared,
             reporter=reporter,
         )
@@ -317,10 +319,10 @@ class TestCrossFrameworkSharedBudget:
         reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
-            name="native-llm", model_name="gpt-4o-mini", api_key="test",
+            name="native-llm", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         ag_client = SlowBurnModelClient(
-            config={"model": "gpt-4o-mini"},
+            config={"model": MOCK_MODEL_NAME},
             limit_set=shared,
             reporter=reporter,
         )
@@ -347,7 +349,7 @@ class TestCrossFrameworkSharedBudget:
         lg_reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
-            name="native", model_name="gpt-4o-mini", api_key="test",
+            name="native", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         mw = SlowBurnMiddleware(limit_set=shared, reporter=lg_reporter)
 
@@ -373,7 +375,7 @@ class TestCrossFrameworkSharedBudget:
         lc_reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
-            name="native", model_name="gpt-4o-mini", api_key="test",
+            name="native", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         cb = SlowBurnCallbackHandler(limit_set=shared, reporter=lc_reporter)
 
@@ -414,7 +416,7 @@ class TestSharedReporter:
         reporter = CostReporter()
 
         ag_client = SlowBurnModelClient(
-            config={"model": "gpt-4o-mini"},
+            config={"model": MOCK_MODEL_NAME},
             limit_set=shared,
             reporter=reporter,
         )

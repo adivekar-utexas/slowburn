@@ -6,6 +6,8 @@ from uuid import uuid4
 
 import pytest
 
+from .conftest import MOCK_MODEL_NAME
+
 from slowburn.integrations.langchain import SlowBurnCallbackHandler
 
 # ---------------------------------------------------------------------------
@@ -13,7 +15,7 @@ from slowburn.integrations.langchain import SlowBurnCallbackHandler
 # ---------------------------------------------------------------------------
 
 def _make_serialized(
-    model_name: str = "gpt-4o-mini",
+    model_name: str = MOCK_MODEL_NAME,
     max_tokens: int = 500,
 ) -> dict:
     """Fake LangChain serialized LLM config dict."""
@@ -85,8 +87,8 @@ class TestExtractModelName:
 
     def test_from_kwargs_model_name(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0)
-        serialized = {"kwargs": {"model_name": "gpt-4o-mini"}}
-        assert cb._extract_model_name(serialized) == "gpt-4o-mini"
+        serialized = {"kwargs": {"model_name": MOCK_MODEL_NAME}}
+        assert cb._extract_model_name(serialized) == MOCK_MODEL_NAME
 
     def test_from_kwargs_model(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0)
@@ -129,7 +131,7 @@ class TestExtractMaxTokens:
 
     def test_raises_when_missing(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0)
-        serialized = {"kwargs": {"model_name": "gpt-4o-mini"}}
+        serialized = {"kwargs": {"model_name": MOCK_MODEL_NAME}}
         with pytest.raises(RuntimeError, match="Could not determine max_tokens"):
             cb._extract_max_tokens(serialized)
 
@@ -158,8 +160,8 @@ class TestCallbackFullCycle:
         assert cb.reporter.num_calls == 1
         assert cb.reporter.total_cost() > 0
         summary = cb.reporter.summary()
-        assert summary["gpt-4o-mini"]["input_tokens"] == 15
-        assert summary["gpt-4o-mini"]["output_tokens"] == 5
+        assert summary[MOCK_MODEL_NAME]["input_tokens"] == 15
+        assert summary[MOCK_MODEL_NAME]["output_tokens"] == 5
 
     def test_multiple_cycles(self) -> None:
         """Multiple start/end cycles should accumulate correctly."""
@@ -307,6 +309,6 @@ class TestCallbackStartValidation:
 
     def test_raises_if_no_max_tokens(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=10.0)
-        serialized = {"kwargs": {"model_name": "gpt-4o-mini"}}
+        serialized = {"kwargs": {"model_name": MOCK_MODEL_NAME}}
         with pytest.raises(RuntimeError, match="Could not determine max_tokens"):
             cb.on_llm_start(serialized, ["Hello"], run_id=uuid4())

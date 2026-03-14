@@ -6,6 +6,8 @@ from unittest.mock import patch
 import pytest
 from concurry import LimitSet
 
+from .conftest import MOCK_MODEL_NAME
+
 from slowburn.integrations.autogen import SlowBurnModelClient
 from slowburn.limits import CostLimit
 from slowburn.reporter import CostReporter
@@ -15,7 +17,7 @@ def _make_completion_response(
     content: str = "AG2 response",
     prompt_tokens: int = 80,
     completion_tokens: int = 40,
-    model: str = "gpt-4o-mini",
+    model: str = MOCK_MODEL_NAME,
     cost: float = 0.002,
 ):
     usage = SimpleNamespace(
@@ -35,7 +37,7 @@ def _make_completion_response(
 
 def _make_client(
     budget_usd: float = 10.0,
-    model: str = "slowburn/gpt-4o-mini",
+    model: str = f"slowburn/{MOCK_MODEL_NAME}",
 ) -> tuple:
     limit_set = LimitSet(
         limits=[CostLimit(budget_usd=budget_usd, window_seconds=3600)],
@@ -51,12 +53,12 @@ def _make_client(
 class TestSlowBurnModelClientInit:
 
     def test_strips_slowburn_prefix(self) -> None:
-        client, _, _ = _make_client(model="slowburn/gpt-4o-mini")
-        assert client.litellm_model == "gpt-4o-mini"
+        client, _, _ = _make_client(model=f"slowburn/{MOCK_MODEL_NAME}")
+        assert client.litellm_model == MOCK_MODEL_NAME
 
     def test_no_prefix(self) -> None:
-        client, _, _ = _make_client(model="gpt-4o-mini")
-        assert client.litellm_model == "gpt-4o-mini"
+        client, _, _ = _make_client(model=MOCK_MODEL_NAME)
+        assert client.litellm_model == MOCK_MODEL_NAME
 
     def test_missing_model_raises(self) -> None:
         """Config without 'model' key should raise ValueError."""
@@ -72,7 +74,7 @@ class TestSlowBurnModelClientInit:
             limits=[CostLimit(budget_usd=1.0)],
             mode="thread", shared=True,
         )
-        client = SlowBurnModelClient(config={"model": "gpt-4o-mini"}, limit_set=limit_set, reporter=None)
+        client = SlowBurnModelClient(config={"model": MOCK_MODEL_NAME}, limit_set=limit_set, reporter=None)
         assert client.reporter is not None
 
 
@@ -86,7 +88,7 @@ class TestSlowBurnModelClientCreate:
 
         response = client.create({
             "messages": [{"role": "user", "content": "Hello"}],
-            "model": "gpt-4o-mini",
+            "model": MOCK_MODEL_NAME,
             "max_tokens": 100,
         })
 
@@ -101,12 +103,12 @@ class TestSlowBurnModelClientCreate:
 
         client.create({
             "messages": [{"role": "user", "content": "test"}],
-            "model": "slowburn/gpt-4o-mini",
+            "model": f"slowburn/{MOCK_MODEL_NAME}",
             "max_tokens": 100,
         })
 
         call_kwargs = mock_completion.call_args.kwargs
-        assert call_kwargs["model"] == "gpt-4o-mini"
+        assert call_kwargs["model"] == MOCK_MODEL_NAME
 
     @patch("slowburn.integrations.autogen.litellm.completion")
     def test_multiple_creates_accumulate(self, mock_completion) -> None:

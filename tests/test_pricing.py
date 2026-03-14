@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+from .conftest import MOCK_MODEL_NAME
+
 from slowburn.pricing import ModelNotFoundError, PricingCache
 
 # ---------------------------------------------------------------------------
@@ -17,7 +19,7 @@ def _make_response(
     prompt_tokens: int = 100,
     completion_tokens: int = 50,
     content: str = "Hello world",
-    model: str = "gpt-4o-mini",
+    model: str = MOCK_MODEL_NAME,
 ) -> SimpleNamespace:
     """Build a mock litellm response with configurable fields."""
     usage = SimpleNamespace(
@@ -45,7 +47,7 @@ class TestGetTokenCosts:
 
     def test_known_model(self) -> None:
         """gpt-4o-mini should be in litellm's cost map and return real rates."""
-        input_rate, output_rate = PricingCache.get_token_costs("gpt-4o-mini")
+        input_rate, output_rate = PricingCache.get_token_costs(MOCK_MODEL_NAME)
         assert input_rate > 0
         assert output_rate > 0
         assert output_rate >= input_rate
@@ -73,7 +75,7 @@ class TestGetTokenCosts:
         with patch("slowburn.pricing.litellm.model_cost") as mock_cost:
             mock_cost.get.side_effect = RuntimeError("boom")
             with pytest.raises(RuntimeError, match="boom"):
-                PricingCache.get_token_costs("gpt-4o-mini")
+                PricingCache.get_token_costs(MOCK_MODEL_NAME)
 
 
 # ===========================================================================
@@ -84,19 +86,19 @@ class TestEstimateCostMicrodollars:
     """Test pre-call cost estimation."""
 
     def test_positive_result(self) -> None:
-        cost = PricingCache.estimate_cost_microdollars("gpt-4o-mini", 1000, 500)
+        cost = PricingCache.estimate_cost_microdollars(MOCK_MODEL_NAME, 1000, 500)
         assert cost >= 1
         assert isinstance(cost, int)
 
     def test_minimum_one_microdollar(self) -> None:
         """Even zero tokens should return at least 1 microdollar."""
-        cost = PricingCache.estimate_cost_microdollars("gpt-4o-mini", 0, 0)
+        cost = PricingCache.estimate_cost_microdollars(MOCK_MODEL_NAME, 0, 0)
         assert cost >= 1
 
     def test_scales_with_tokens(self) -> None:
         """More tokens should cost more."""
-        small = PricingCache.estimate_cost_microdollars("gpt-4o-mini", 100, 50)
-        large = PricingCache.estimate_cost_microdollars("gpt-4o-mini", 10_000, 5_000)
+        small = PricingCache.estimate_cost_microdollars(MOCK_MODEL_NAME, 100, 50)
+        large = PricingCache.estimate_cost_microdollars(MOCK_MODEL_NAME, 10_000, 5_000)
         assert large > small
 
     def test_unknown_model_raises(self) -> None:
@@ -115,13 +117,13 @@ class TestActualCostMicrodollars:
     def test_tier1_hidden_params(self) -> None:
         """Tier 1: Uses response._hidden_params['response_cost'] when available."""
         response = _make_response(hidden_cost=0.05)
-        cost = PricingCache.actual_cost_microdollars(response, model="gpt-4o-mini")
+        cost = PricingCache.actual_cost_microdollars(response, model=MOCK_MODEL_NAME)
         assert cost == 50_000
 
     def test_tier1_skipped_when_zero(self) -> None:
         """Tier 1 is skipped when response_cost is 0.0 (falls to lower tier)."""
         response = _make_response(hidden_cost=0.0)
-        cost = PricingCache.actual_cost_microdollars(response, model="gpt-4o-mini")
+        cost = PricingCache.actual_cost_microdollars(response, model=MOCK_MODEL_NAME)
         assert cost >= 1
 
     def test_tier2_completion_cost(self) -> None:
@@ -129,7 +131,7 @@ class TestActualCostMicrodollars:
         response = _make_response()
         response._hidden_params = {}
         with patch("slowburn.pricing.litellm.completion_cost", return_value=0.03):
-            cost = PricingCache.actual_cost_microdollars(response, model="gpt-4o-mini")
+            cost = PricingCache.actual_cost_microdollars(response, model=MOCK_MODEL_NAME)
         assert cost == 30_000
 
     def test_tier3_manual_calc(self) -> None:
@@ -137,7 +139,7 @@ class TestActualCostMicrodollars:
         response = _make_response(prompt_tokens=1000, completion_tokens=500)
         response._hidden_params = {}
         with patch("slowburn.pricing.litellm.completion_cost", side_effect=Exception("nope")):
-            cost = PricingCache.actual_cost_microdollars(response, model="gpt-4o-mini")
+            cost = PricingCache.actual_cost_microdollars(response, model=MOCK_MODEL_NAME)
         assert cost >= 1
 
     def test_tier4_text_length(self) -> None:
@@ -146,10 +148,10 @@ class TestActualCostMicrodollars:
             _hidden_params={},
             usage=None,
             choices=[SimpleNamespace(message=SimpleNamespace(content="A" * 300))],
-            model="gpt-4o-mini",
+            model=MOCK_MODEL_NAME,
         )
         with patch("slowburn.pricing.litellm.completion_cost", side_effect=Exception("nope")):
-            cost = PricingCache.actual_cost_microdollars(response, model="gpt-4o-mini")
+            cost = PricingCache.actual_cost_microdollars(response, model=MOCK_MODEL_NAME)
         assert cost >= 1
 
     def test_unknown_model_tier3_raises(self) -> None:
@@ -175,6 +177,6 @@ class TestActualCostMicrodollars:
 
     def test_model_from_response(self) -> None:
         """If model arg is None, reads model from response.model."""
-        response = _make_response(hidden_cost=0.01, model="gpt-4o-mini")
+        response = _make_response(hidden_cost=0.01, model=MOCK_MODEL_NAME)
         cost = PricingCache.actual_cost_microdollars(response, model=None)
         assert cost == 10_000

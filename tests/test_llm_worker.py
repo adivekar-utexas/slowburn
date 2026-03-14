@@ -9,6 +9,8 @@ from concurry import CallLimit, LimitSet, RateLimit
 from slowburn.limits import CostLimit
 from slowburn.llm_worker import SlowBurnLLM, _estimate_tokens
 
+from .conftest import MOCK_MODEL_NAME
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -17,7 +19,7 @@ def _make_acompletion_response(
     content: str = "Hello from the LLM",
     prompt_tokens: int = 50,
     completion_tokens: int = 20,
-    model: str = "gpt-4o-mini",
+    model: str = MOCK_MODEL_NAME,
     cost: float = 0.001,
 ):
     """Build a mock litellm acompletion response."""
@@ -54,7 +56,7 @@ def _build_worker(budget_usd: float = 10.0) -> SlowBurnLLM:
         num_retries={"call_llm": 0, "*": 0},
     ).init(
         name="test-llm",
-        model_name="gpt-4o-mini",
+        model_name=MOCK_MODEL_NAME,
         api_key="test-key",
         temperature=0.5,
         max_tokens=100,
@@ -305,7 +307,7 @@ class TestSlowBurnLLMLitellmParams:
             limits=limit_set,
         ).init(
             name="test",
-            model_name="gpt-4o-mini",
+            model_name=MOCK_MODEL_NAME,
             api_key="test-key",
             litellm_params={"seed": 42, "top_p": 0.9},
         )
@@ -360,7 +362,7 @@ class TestSlowBurnLLMLitellmParams:
             limits=limit_set,
         ).init(
             name="test",
-            model_name="gpt-4o-mini",
+            model_name=MOCK_MODEL_NAME,
             api_key="test-key",
             litellm_params={"seed": 42, "top_p": 0.9},
         )

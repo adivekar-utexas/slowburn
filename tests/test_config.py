@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from .conftest import MOCK_MODEL_NAME
+
 from slowburn.config import (
     SlowBurnDefaults,
     _NO_ARG,
@@ -39,11 +41,11 @@ class TestSlowBurnDefaults:
     def test_default_chars_per_token(self) -> None:
         assert slowburn_config.defaults.chars_per_token == 3.0
 
-    def test_default_token_safety_multiplier(self) -> None:
-        assert slowburn_config.defaults.token_safety_multiplier == 5.0
+    def test_default_input_token_estimate_multiplier(self) -> None:
+        assert slowburn_config.defaults.input_token_estimate_multiplier == 1.25
 
-    def test_default_base_overhead_tokens(self) -> None:
-        assert slowburn_config.defaults.base_overhead_tokens == 50
+    def test_default_input_token_estimate_overhead(self) -> None:
+        assert slowburn_config.defaults.input_token_estimate_overhead == 10
 
     def test_default_temperature(self) -> None:
         assert slowburn_config.defaults.temperature == 0.7
@@ -227,7 +229,7 @@ class TestConfigAffectsComponents:
         from slowburn.cost_accounting import estimate_input_tokens
 
         result_default, _ = estimate_input_tokens("hello world", 100)
-        with temp_config(token_safety_multiplier=1.0, base_overhead_tokens=0):
+        with temp_config(input_token_estimate_multiplier=1.0, input_token_estimate_overhead=0):
             result_tuned, _ = estimate_input_tokens("hello world", 100)
         assert result_tuned < result_default
 
@@ -268,12 +270,12 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model="gpt-4o-mini",
+            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 
         with temp_config(temperature=0.0, max_tokens=500, timeout=30.0):
-            llm = create_llm(model="gpt-4o-mini")
+            llm = create_llm(model=MOCK_MODEL_NAME)
             try:
                 result = llm.call_llm(prompt="Hi").result(timeout=10.0)
                 assert result == "test output"
@@ -292,12 +294,12 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model="gpt-4o-mini",
+            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 
         with temp_config(temperature=0.0):
-            llm = create_llm(model="gpt-4o-mini", temperature=0.9)
+            llm = create_llm(model=MOCK_MODEL_NAME, temperature=0.9)
             try:
                 llm.call_llm(prompt="Hi").result(timeout=10.0)
                 call_kwargs = mock_acompletion.call_args.kwargs
@@ -314,11 +316,11 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model="gpt-4o-mini",
+            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 
-        llm = create_llm(model="gpt-4o-mini", temperature=None)
+        llm = create_llm(model=MOCK_MODEL_NAME, temperature=None)
         try:
             llm.call_llm(prompt="Hi").result(timeout=10.0)
             call_kwargs = mock_acompletion.call_args.kwargs

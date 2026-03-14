@@ -6,6 +6,8 @@ import pytest
 
 from slowburn import create_llm
 
+from .conftest import MOCK_MODEL_NAME
+
 
 class TestCreateLLM:
     """Test create_llm() factory function setup and parameter handling."""
@@ -18,7 +20,7 @@ class TestCreateLLM:
         2. Verify the worker is alive (get_reporter succeeds).
         3. Stop the worker.
         """
-        llm = create_llm(model="gpt-4o-mini")
+        llm = create_llm(model=MOCK_MODEL_NAME)
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter.num_calls == 0
@@ -27,7 +29,7 @@ class TestCreateLLM:
 
     def test_daily_window_alias(self) -> None:
         """window='daily' should set a 86400-second budget window."""
-        llm = create_llm(model="gpt-4o-mini", window="daily")
+        llm = create_llm(model=MOCK_MODEL_NAME, window="daily")
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -36,7 +38,7 @@ class TestCreateLLM:
 
     def test_hourly_window_alias(self) -> None:
         """window='hourly' should work."""
-        llm = create_llm(model="gpt-4o-mini", window="hourly")
+        llm = create_llm(model=MOCK_MODEL_NAME, window="hourly")
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -45,7 +47,7 @@ class TestCreateLLM:
 
     def test_minutely_window_alias(self) -> None:
         """window='minutely' should work."""
-        llm = create_llm(model="gpt-4o-mini", window="minutely")
+        llm = create_llm(model=MOCK_MODEL_NAME, window="minutely")
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -54,7 +56,7 @@ class TestCreateLLM:
 
     def test_numeric_window(self) -> None:
         """A numeric window (seconds) should work."""
-        llm = create_llm(model="gpt-4o-mini", window=7200)
+        llm = create_llm(model=MOCK_MODEL_NAME, window=7200)
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -65,11 +67,11 @@ class TestCreateLLM:
         """An unrecognized string window should be rejected by @validate."""
         from pydantic import ValidationError
         with pytest.raises(ValidationError, match="daily.*hourly.*minutely"):
-            create_llm(model="gpt-4o-mini", window="biweekly")
+            create_llm(model=MOCK_MODEL_NAME, window="biweekly")
 
     def test_custom_name(self) -> None:
         """Passing name= should set the worker name."""
-        llm = create_llm(model="gpt-4o-mini", name="my-custom-worker")
+        llm = create_llm(model=MOCK_MODEL_NAME, name="my-custom-worker")
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -93,10 +95,10 @@ class TestCreateLLM:
         mock_acompletion.return_value = SimpleNamespace(
             usage=usage,
             choices=[choice],
-            model="gpt-4o-mini",
+            model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
-        llm = create_llm(model="gpt-4o-mini", budget_usd=1.0, window="hourly")
+        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=1.0, window="hourly")
         try:
             result = llm.call_llm(prompt="Hi").result(timeout=10.0)
             assert result == "test output"

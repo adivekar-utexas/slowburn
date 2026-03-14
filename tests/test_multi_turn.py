@@ -10,6 +10,8 @@ from concurry import CallLimit, LimitSet, RateLimit
 from slowburn.limits import CostLimit
 from slowburn.llm_worker import SlowBurnLLM
 
+from .conftest import MOCK_MODEL_NAME
+
 
 def _make_response(
     content: Optional[str] = "Hello",
@@ -28,7 +30,7 @@ def _make_response(
     return SimpleNamespace(
         usage=usage,
         choices=[choice],
-        model="gpt-4o-mini",
+        model=MOCK_MODEL_NAME,
         _hidden_params={"response_cost": cost},
     )
 
@@ -58,7 +60,7 @@ def _build_worker(**init_kwargs: Any) -> SlowBurnLLM:
     )
     worker_defaults: Dict[str, Any] = dict(
         name="test-llm",
-        model_name="gpt-4o-mini",
+        model_name=MOCK_MODEL_NAME,
         api_key="test-key",
         temperature=0.5,
         max_tokens=100,

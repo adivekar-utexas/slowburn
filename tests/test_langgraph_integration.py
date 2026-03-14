@@ -4,6 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from .conftest import MOCK_MODEL_NAME
+
 from slowburn.integrations.langgraph import (
     SlowBurnMiddleware,
     _extract_text_from_messages,
@@ -14,7 +16,7 @@ from slowburn.integrations.langgraph import (
 # Helpers: build fake LangGraph-style objects
 # ---------------------------------------------------------------------------
 
-def _make_model(model_name: str = "gpt-4o-mini", max_tokens: int = 500):
+def _make_model(model_name: str = MOCK_MODEL_NAME, max_tokens: int = 500):
     """Fake BaseChatModel with model_name and max_tokens attributes."""
     return SimpleNamespace(model_name=model_name, max_tokens=max_tokens)
 
@@ -25,7 +27,7 @@ def _make_message(content: str = "Hello world"):
 
 
 def _make_request(
-    model_name: str = "gpt-4o-mini",
+    model_name: str = MOCK_MODEL_NAME,
     max_tokens: int = 500,
     messages: list = None,
     system_message: object = None,
@@ -55,8 +57,8 @@ def _make_response(content: str = "Response text", usage_metadata: dict = None):
 class TestGetModelName:
 
     def test_extracts_model_name_attr(self) -> None:
-        model = SimpleNamespace(model_name="gpt-4o-mini")
-        assert _get_model_name(model) == "gpt-4o-mini"
+        model = SimpleNamespace(model_name=MOCK_MODEL_NAME)
+        assert _get_model_name(model) == MOCK_MODEL_NAME
 
     def test_raises_when_no_model_name(self) -> None:
         """Model without model_name raises AttributeError — not silently handled."""
@@ -165,13 +167,13 @@ class TestSlowBurnMiddlewareWrapModelCall:
         mw.wrap_model_call(request, lambda req: response)
 
         summary = mw.reporter.summary()
-        assert summary["gpt-4o-mini"]["input_tokens"] == 100
-        assert summary["gpt-4o-mini"]["output_tokens"] == 50
+        assert summary[MOCK_MODEL_NAME]["input_tokens"] == 100
+        assert summary[MOCK_MODEL_NAME]["output_tokens"] == 50
 
     def test_max_tokens_from_model_settings(self) -> None:
         """max_tokens should be read from model_settings if present."""
         mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
-        model = SimpleNamespace(model_name="gpt-4o-mini")  # no max_tokens attr
+        model = SimpleNamespace(model_name=MOCK_MODEL_NAME)  # no max_tokens attr
         request = SimpleNamespace(
             model=model,
             messages=[_make_message("Hi")],
@@ -184,7 +186,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
     def test_raises_if_no_max_tokens(self) -> None:
         """Should raise AttributeError if max_tokens not on model."""
         mw = SlowBurnMiddleware(budget_usd=10.0)
-        model = SimpleNamespace(model_name="gpt-4o-mini")
+        model = SimpleNamespace(model_name=MOCK_MODEL_NAME)
         request = SimpleNamespace(
             model=model,
             messages=[_make_message("Hi")],
