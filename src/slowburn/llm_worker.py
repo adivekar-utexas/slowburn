@@ -238,6 +238,9 @@ class SlowBurnLLM(Typed):
         if litellm_params is not None:
             merged_params.update(litellm_params)
 
+        if "messages" in merged_params:
+            messages = merged_params.pop("messages")
+
         # 1. ESTIMATE tokens
         prompt_text = prompt
         if system_prompt is not None:

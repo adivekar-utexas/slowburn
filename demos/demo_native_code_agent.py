@@ -1,20 +1,18 @@
 """
 Demo: Autonomous Code Agent with real file operations.
 
-A proper ReAct agent that:
+A ReAct agent that:
 1. Reads code files from its workspace
 2. Searches the web for best practices
 3. Writes improved code back to files
 4. Iterates until the code is well-structured
 
-All file operations are sandboxed to runs/code_agent/<timestamp>/.
-Every LLM call is cost-tracked via SlowBurn's CostLimit.
+All LLM calls go through a SlowBurnLLM worker with dollar-budget backpressure.
 
 Usage:
-    python demos/demo_code_agent.py
+    cd demos && python demo_native_code_agent.py
 """
 
-import asyncio
 import os
 import sys
 import time
@@ -30,16 +28,10 @@ if not api_key:
     print("Set OPENROUTER_API_KEY in .env to run this demo.")
     sys.exit(1)
 
-import logging  # noqa: E402
-
-from concurry import CallLimit, LimitSet  # noqa: E402
 from lib.agent_loop import run_agent  # noqa: E402
 from lib.tools import TOOL_SCHEMAS, execute_tool_call  # noqa: E402
 
-from slowburn.limits import CostLimit  # noqa: E402
-from slowburn.reporter import CostReporter  # noqa: E402
-
-logging.basicConfig(level=logging.WARNING, format="%(message)s")  # noqa: E402
+from slowburn import create_llm  # noqa: E402
 
 MODEL = "openrouter/z-ai/glm-4.5"
 BUDGET_USD = 0.02
@@ -114,15 +106,14 @@ def main():
     print(f"  Workspace: {runs_dir}")
     print(f"{'=' * 70}")
 
-    limit_set = LimitSet(
-        limits=[
-            CostLimit(budget_usd=BUDGET_USD, window_seconds=30),
-            CallLimit(window_seconds=60, capacity=100),
-        ],
-        mode="thread",
-        shared=True,
+    llm = create_llm(
+        model=MODEL,
+        budget_usd=BUDGET_USD,
+        window=30,  # $0.02 per 30-second window
+        api_key=api_key,
+        max_tokens=MAX_TOKENS,
+        temperature=0.3,
     )
-    reporter = CostReporter()
 
     def tool_executor(name, args):
         return execute_tool_call(name, args, workspace=runs_dir)
@@ -154,26 +145,22 @@ def main():
         print(f"  {task[:80]}...")
 
         iter_log_dir = runs_dir / f"iteration_{i:02d}"
-        result = asyncio.run(run_agent(
-            model=MODEL,
+        result = run_agent(
+            llm=llm,
             task=task,
             tools=TOOL_SCHEMAS,
             tool_executor=tool_executor,
-            limit_set=limit_set,
-            reporter=reporter,
-            api_key=api_key,
             system_prompt=SYSTEM_PROMPT,
             max_steps=MAX_STEPS,
-            max_tokens=MAX_TOKENS,
-            temperature=0.3,
             verbose=True,
             log_dir=iter_log_dir,
-        ))
+        )
 
         print(f"  Steps: {result['steps']}, Tool calls: {result['tool_calls']}")
 
     total_elapsed = time.time() - start_time
 
+    reporter = llm.get_reporter().result(timeout=5.0)
     print(f"\n{'=' * 70}")
     print("  RESULTS")
     print(f"{'=' * 70}")
@@ -203,6 +190,8 @@ def main():
 
     reporter.to_json(path=runs_dir / "_cost_report.json")
     print(f"\n  Cost report: {runs_dir / '_cost_report.json'}")
+
+    llm.stop()
 
 
 if __name__ == "__main__":
