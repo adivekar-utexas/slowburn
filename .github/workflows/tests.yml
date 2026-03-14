@@ -44,5 +44,7 @@ jobs:
           python -m uv pip install -e ".[dev]"
 
       - name: Run tests
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           pytest tests --tb=short -rf --verbose --timeout=120
