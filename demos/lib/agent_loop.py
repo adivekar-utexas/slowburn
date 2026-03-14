@@ -2,7 +2,7 @@
 ReAct agent loop powered by a SlowBurnLLM worker.
 
 Implements the standard tool-calling cycle:
-1. Send messages + tool schemas to LLM (via SlowBurnLLM.call_llm)
+1. Send messages + tool schemas to LLM (via SlowBurnLLM.call_llm with history=)
 2. If LLM returns tool_calls -> execute each tool -> append results -> goto 1
 3. If LLM returns text content -> return it (agent is done)
 
@@ -17,15 +17,17 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from slowburn.llm_worker import SlowBurnLLM
 
-def _save_json(path: Path, data: Any) -> None:
+
+def _save_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, default=str, ensure_ascii=False))
 
 
 def run_agent(
     *,
-    llm: Any,
+    llm: SlowBurnLLM,
     task: str,
     tools: List[Dict[str, Any]],
     tool_executor: Callable[[str, Dict[str, Any]], str],
@@ -36,8 +38,9 @@ def run_agent(
 ) -> Dict[str, Any]:
     """Run a ReAct agent loop with a SlowBurnLLM worker.
 
-    The worker's built-in cost tracking, backpressure, and rate limiting
-    apply to every LLM call automatically.
+    Uses the multi-turn conversation API: ``call_llm(history=..., tools=...)``
+    returns a messages list with the assistant response appended. Tool results
+    are appended to the same list and re-submitted.
 
     Args:
         llm: A live SlowBurnLLM worker (from ``create_llm()``).
@@ -53,116 +56,89 @@ def run_agent(
         Dict with keys: "result" (final text), "steps" (int), "tool_calls" (int),
         "messages" (full conversation).
     """
-    messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": task},
-    ]
-
+    messages: Optional[List[Dict[str, Any]]] = None
     total_tool_calls = 0
 
     for step in range(1, max_steps + 1):
-        step_dir = None
+        step_dir: Optional[Path] = None
         if log_dir is not None:
             step_dir = log_dir / f"step_{step:02d}"
             step_dir.mkdir(parents=True, exist_ok=True)
 
         step_start = time.time()
 
-        if step_dir:
+        prompt = task if step == 1 else ""
+
+        if step_dir is not None:
+            input_messages = llm.build_messages(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                history=messages,
+            ).result(timeout=10.0)
             _save_json(step_dir / "input.json", {
                 "step": step,
-                "num_messages": len(messages),
-                "messages": messages,
+                "num_messages": len(input_messages),
+                "messages": input_messages,
             })
 
-        total_text = " ".join(
-            m.get("content", "") or ""
-            for m in messages
-            if isinstance(m.get("content"), str)
-        )
-
-        response_text = llm.call_llm(
-            prompt=total_text,
-            litellm_params={
-                "messages": messages,
-                "tools": tools,
-                "tool_choice": "auto",
-            },
+        messages = llm.call_llm(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            history=messages,
+            tools=tools,
+            tool_choice="auto",
         ).result(timeout=120.0)
 
         step_elapsed = time.time() - step_start
 
-        try:
-            parsed = json.loads(response_text)
-            if isinstance(parsed, dict) and "tool_calls" in parsed:
-                tool_calls_data = parsed["tool_calls"]
-            else:
-                tool_calls_data = None
-        except (json.JSONDecodeError, TypeError):
-            tool_calls_data = None
+        assistant_message = messages[-1]
+        tool_calls_data = assistant_message.get("tool_calls")
 
         if tool_calls_data is not None:
-            assistant_msg = {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [
-                    {
-                        "id": tc["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tc["function"]["name"],
-                            "arguments": tc["function"]["arguments"],
-                        },
-                    }
-                    for tc in tool_calls_data
-                ],
-            }
-            messages.append(assistant_msg)
-
-            tool_call_log = []
-            for tc_idx, tc in enumerate(tool_calls_data, 1):
-                fn_name = tc["function"]["name"]
+            tool_call_log: List[Dict[str, Any]] = []
+            for tool_call_index, tool_call in enumerate(tool_calls_data, 1):
+                function_name = tool_call["function"]["name"]
                 try:
-                    fn_args = json.loads(tc["function"]["arguments"])
+                    function_arguments = json.loads(tool_call["function"]["arguments"])
                 except (json.JSONDecodeError, TypeError):
-                    fn_args = {}
+                    function_arguments = {}
 
                 if verbose:
-                    args_preview = json.dumps(fn_args, ensure_ascii=False)
-                    if len(args_preview) > 100:
-                        args_preview = args_preview[:97] + "..."
-                    print(f"    [{step:2d}] tool: {fn_name}({args_preview})")
+                    arguments_preview = json.dumps(function_arguments, ensure_ascii=False)
+                    if len(arguments_preview) > 100:
+                        arguments_preview = arguments_preview[:97] + "..."
+                    print(f"    [{step:2d}] tool: {function_name}({arguments_preview})")
 
-                if step_dir:
-                    _save_json(step_dir / f"tool_{tc_idx:02d}_call.json", {
-                        "tool_call_id": tc["id"],
-                        "function": fn_name,
-                        "arguments": fn_args,
+                if step_dir is not None:
+                    _save_json(step_dir / f"tool_{tool_call_index:02d}_call.json", {
+                        "tool_call_id": tool_call["id"],
+                        "function": function_name,
+                        "arguments": function_arguments,
                     })
 
-                tool_result = tool_executor(fn_name, fn_args)
+                tool_result = tool_executor(function_name, function_arguments)
                 total_tool_calls += 1
 
-                if step_dir:
+                if step_dir is not None:
                     try:
                         result_data = json.loads(tool_result)
                     except (json.JSONDecodeError, TypeError):
                         result_data = {"raw": tool_result}
-                    _save_json(step_dir / f"tool_{tc_idx:02d}_result.json", result_data)
+                    _save_json(step_dir / f"tool_{tool_call_index:02d}_result.json", result_data)
 
                 tool_call_log.append({
-                    "function": fn_name,
-                    "arguments": fn_args,
+                    "function": function_name,
+                    "arguments": function_arguments,
                     "result_length": len(tool_result),
                 })
 
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": tc["id"],
+                    "tool_call_id": tool_call["id"],
                     "content": tool_result,
                 })
 
-            if step_dir:
+            if step_dir is not None:
                 _save_json(step_dir / "output.json", {
                     "step": step,
                     "type": "tool_calls",
@@ -178,9 +154,9 @@ def run_agent(
                     f"{total_tool_calls} tool calls"
                 )
         else:
-            final_text = response_text
+            final_text = assistant_message.get("content", "")
 
-            if step_dir:
+            if step_dir is not None:
                 _save_json(step_dir / "output.json", {
                     "step": step,
                     "type": "final_answer",
@@ -194,7 +170,7 @@ def run_agent(
                     f"    [{step:2d}] DONE (${reporter.total_cost():.6f}, "
                     f"{step} LLM calls, {total_tool_calls} tool calls)"
                 )
-                preview = final_text[:100].replace("\n", " ")
+                preview = (final_text or "")[:100].replace("\n", " ")
                 print(f"         {preview}...")
 
             return {
@@ -204,16 +180,18 @@ def run_agent(
                 "messages": messages,
             }
 
-    if log_dir:
+    if log_dir is not None:
         _save_json(log_dir / "max_steps_reached.json", {
             "max_steps": max_steps,
             "total_tool_calls": total_tool_calls,
         })
 
-    final_text = messages[-1].get("content", "") if len(messages) > 0 else ""
+    final_text = ""
+    if messages is not None and len(messages) > 0:
+        final_text = messages[-1].get("content", "") or ""
     return {
         "result": f"[Agent reached max_steps={max_steps}] {final_text}",
         "steps": max_steps,
         "tool_calls": total_tool_calls,
-        "messages": messages,
+        "messages": messages or [],
     }

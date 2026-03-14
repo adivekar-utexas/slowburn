@@ -20,10 +20,11 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 import litellm
 from concurry import async_gather, worker
-from morphic import Typed
+from morphic import Typed, validate
 from pydantic import Field
 
-from .config import _NO_ARG, is_no_arg, slowburn_config
+from .config import _NO_ARG, _NO_ARG_TYPE, is_no_arg, slowburn_config
+from .constants import ImageDetailLevel, ToolChoiceOption
 from .cost_accounting import estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import PricingCache
@@ -148,27 +149,35 @@ class SlowBurnLLM(Typed):
     name: str = Field(..., description="Worker name (for logging)")
     model_name: str = Field(..., description="litellm model identifier")
     api_key: str = Field(default="", description="API key (or set via env var)")
-    temperature: Any = Field(default=_NO_ARG, description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.")
-    max_tokens: Any = Field(default=_NO_ARG, description="Max output tokens. Defaults to slowburn_config.defaults.max_tokens.")
-    timeout: Any = Field(default=_NO_ARG, description="Per-call timeout in seconds. Defaults to slowburn_config.defaults.timeout.")
+    temperature: Union[Optional[float], _NO_ARG_TYPE] = Field(default=_NO_ARG, description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.")
+    max_tokens: Union[int, _NO_ARG_TYPE] = Field(default=_NO_ARG, description="Max output tokens. Defaults to slowburn_config.defaults.max_tokens.")
+    timeout: Union[float, _NO_ARG_TYPE] = Field(default=_NO_ARG, description="Per-call timeout in seconds. Defaults to slowburn_config.defaults.timeout.")
+    tools: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description="Default tool schemas (OpenAI format) for all calls. Overridable per-call.",
+    )
+    tool_choice: Optional[ToolChoiceOption] = Field(
+        default=None,
+        description='Default tool_choice for all calls ("auto", "required", "none"). Overridable per-call.',
+    )
     litellm_params: Dict[str, Any] = Field(
         default_factory=dict,
         description=(
             "Additional parameters passed through to litellm.acompletion(). "
-            "Use for tools, response_format, seed, top_p, stop, logprobs, "
+            "Use for response_format, seed, top_p, stop, logprobs, "
             "or any other litellm-supported parameter. Per-call litellm_params "
             "in call_llm() merge on top of these defaults."
         ),
     )
 
     def post_initialize(self) -> None:
-        cfg = slowburn_config.defaults
+        defaults = slowburn_config.defaults
         if is_no_arg(self.temperature):
-            object.__setattr__(self, "temperature", cfg.temperature)
+            object.__setattr__(self, "temperature", defaults.temperature)
         if is_no_arg(self.max_tokens):
-            object.__setattr__(self, "max_tokens", cfg.max_tokens)
+            object.__setattr__(self, "max_tokens", defaults.max_tokens)
         if is_no_arg(self.timeout):
-            object.__setattr__(self, "timeout", cfg.timeout)
+            object.__setattr__(self, "timeout", defaults.timeout)
         self._reporter = CostReporter()
 
     @property
@@ -176,45 +185,65 @@ class SlowBurnLLM(Typed):
         """Access the CostReporter to inspect costs or export reports."""
         return self._reporter
 
-    async def call_llm(
+    @validate
+    def build_messages(
         self,
         *,
-        prompt: str,
-        images: Optional[List[ImageInput]] = None,
+        prompt: Union[str, List[Dict[str, Any]]],
         system_prompt: Optional[str] = None,
-        validator: Optional[Callable[[str], T]] = None,
-        image_detail: str = "auto",
-        verbosity: Any = _NO_ARG,
-        litellm_params: Optional[Dict[str, Any]] = None,
-    ) -> Any:
-        """Execute a single LLM call with cost-aware backpressure.
+        images: Optional[List[ImageInput]] = None,
+        history: Optional[List[Dict[str, Any]]] = None,
+        image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
+    ) -> List[Dict[str, Any]]:
+        """Build the messages list without calling the LLM.
+
+        If *prompt* is a list of dicts, treat it as pre-built messages.
+        If *history* is provided, appends the new user message to it.
+        If *history* is None, builds a fresh [system?, user] list.
+
+        When *history* is provided and *prompt* is empty, no new user
+        message is appended (useful for re-submitting after tool results).
 
         Args:
-            prompt: The user message content.
-            images: Optional list of images to include in the message. Each
-                element can be a ``pathlib.Path`` to a local file, a URL string
-                (``http://`` / ``https://``), or an already-encoded data-URL
-                string (``data:image/...;base64,...``). Local files are
-                automatically base64-encoded. Pass ``None`` (default) for a
-                text-only call.
-            system_prompt: Optional system message prepended to the conversation.
-            validator: Optional callable that parses/validates the response text.
-                If it raises ``ValueError``, the error propagates (and Concurry's
-                retry mechanism can catch it if configured with ``retry_on``).
-            image_detail: Detail level for vision queries sent to the API.
-                One of ``"low"``, ``"high"``, or ``"auto"`` (default).
-            verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
-                Defaults to slowburn_config.defaults.verbosity.
-            litellm_params: Per-call parameters passed through to
-                ``litellm.acompletion()``. Merged on top of the worker-level
-                ``self.litellm_params``. Use for call-specific tools,
-                response_format, seed, etc.
+            prompt: The user message string, or a pre-built messages list.
+            system_prompt: Optional system message. Prepended only if
+                *history* has no existing system message at index 0.
+            images: Optional images to include in the user message.
+            history: Previous messages list. If provided, the new user
+                message is appended to a copy of this list.
+            image_detail: Detail level for vision queries ("low"/"high"/"auto").
+                Defaults to slowburn_config.defaults.image_detail.
 
         Returns:
-            The raw response text, or the parsed result from *validator* if provided.
+            The complete messages list ready for litellm.acompletion().
         """
-        if is_no_arg(verbosity):
-            verbosity = slowburn_config.defaults.verbosity
+        if is_no_arg(image_detail):
+            image_detail = slowburn_config.defaults.image_detail
+        if isinstance(prompt, list):
+            return list(prompt)
+
+        if history is not None:
+            messages = list(history)
+            if system_prompt is not None and (
+                len(messages) == 0 or messages[0].get("role") != "system"
+            ):
+                messages.insert(0, {"role": "system", "content": system_prompt})
+
+            if len(prompt) > 0:
+                if images is not None and len(images) > 0:
+                    image_urls = _resolve_image_inputs(images)
+                    content_parts: List[Dict[str, Any]] = [
+                        {"type": "text", "text": prompt},
+                    ]
+                    for url in image_urls:
+                        content_parts.append({
+                            "type": "image_url",
+                            "image_url": {"url": url, "detail": image_detail},
+                        })
+                    messages.append({"role": "user", "content": content_parts})
+                else:
+                    messages.append({"role": "user", "content": prompt})
+            return messages
 
         messages: List[Dict[str, Any]] = []
         if system_prompt is not None:
@@ -222,7 +251,7 @@ class SlowBurnLLM(Typed):
 
         if images is not None and len(images) > 0:
             image_urls = _resolve_image_inputs(images)
-            content_parts: List[Dict[str, Any]] = [
+            content_parts = [
                 {"type": "text", "text": prompt},
             ]
             for url in image_urls:
@@ -234,15 +263,97 @@ class SlowBurnLLM(Typed):
         else:
             messages.append({"role": "user", "content": prompt})
 
+        return messages
+
+    @validate
+    async def call_llm(
+        self,
+        *,
+        prompt: Union[str, List[Dict[str, Any]]],
+        images: Optional[List[ImageInput]] = None,
+        system_prompt: Optional[str] = None,
+        history: Optional[List[Dict[str, Any]]] = None,
+        tools: Union[Optional[List[Dict[str, Any]]], _NO_ARG_TYPE] = _NO_ARG,
+        tool_choice: Union[Optional[ToolChoiceOption], _NO_ARG_TYPE] = _NO_ARG,
+        return_messages: Optional[bool] = None,
+        validator: Optional[Callable[[str], T]] = None,
+        image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
+        verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+        litellm_params: Optional[Dict[str, Any]] = None,
+    ) -> Union[str, List[Dict[str, Any]]]:
+        """Execute a single LLM call with cost-aware backpressure.
+
+        Args:
+            prompt: The user message content (string), or a pre-built
+                messages list (list of dicts). When a list is passed,
+                *system_prompt* and *images* are ignored.
+            images: Optional list of images to include in the message.
+            system_prompt: Optional system message prepended to the conversation.
+            history: Previous messages list for multi-turn conversations.
+                When provided, the new user message (from *prompt*) is
+                appended to a copy of this list. Pass ``None`` (default)
+                for single-turn calls.
+            tools: Tool schemas (OpenAI format) for this call. Overrides
+                the worker-level ``self.tools``. Pass ``None`` to disable
+                tools for this call even if the worker has defaults.
+            tool_choice: Tool choice for this call ("auto", "required",
+                "none", or a specific tool dict). Overrides
+                ``self.tool_choice``.
+            return_messages: Controls the return type. ``None`` (default)
+                auto-detects: returns a messages list if *history* is
+                provided or *prompt* is a list, otherwise returns a string.
+                ``True`` forces messages-list output. ``False`` forces
+                string output.
+            validator: Optional callable that parses/validates the response text.
+                Ignored when *return_messages* resolves to True.
+            image_detail: Detail level for vision queries ("low"/"high"/"auto").
+                Defaults to slowburn_config.defaults.image_detail.
+            verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
+            litellm_params: Per-call parameters passed through to
+                ``litellm.acompletion()``. Merged on top of the worker-level
+                ``self.litellm_params``.
+
+        Returns:
+            When *return_messages* resolves to False: the raw response text,
+            or the parsed result from *validator* if provided.
+            When *return_messages* resolves to True: the complete messages
+            list with the assistant response appended.
+        """
+        if is_no_arg(verbosity):
+            verbosity = slowburn_config.defaults.verbosity
+        if is_no_arg(image_detail):
+            image_detail = slowburn_config.defaults.image_detail
+
+        should_return_messages: bool
+        if return_messages is not None:
+            should_return_messages = return_messages
+        elif history is not None or isinstance(prompt, list):
+            should_return_messages = True
+        else:
+            should_return_messages = False
+
+        messages = self.build_messages(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            images=images,
+            history=history,
+            image_detail=image_detail,
+        )
+
         merged_params: Dict[str, Any] = {**self.litellm_params}
         if litellm_params is not None:
             merged_params.update(litellm_params)
 
-        if "messages" in merged_params:
-            messages = merged_params.pop("messages")
+        resolved_tools = tools if not is_no_arg(tools) else self.tools
+        resolved_tool_choice = tool_choice if not is_no_arg(tool_choice) else self.tool_choice
+
+        if resolved_tools is not None:
+            merged_params["tools"] = resolved_tools
+        if resolved_tool_choice is not None:
+            merged_params["tool_choice"] = resolved_tool_choice
 
         # 1. ESTIMATE tokens
-        prompt_text = prompt
+        prompt_text = prompt if isinstance(prompt, str) else ""
         if system_prompt is not None:
             prompt_text += " " + system_prompt
         estimated_input_tokens, estimated_output_tokens = estimate_input_tokens(
@@ -250,8 +361,8 @@ class SlowBurnLLM(Typed):
         )
 
         if images is not None and len(images) > 0:
-            cfg = slowburn_config.defaults
-            tokens_per_image = cfg.image_tokens_low_detail if image_detail == "low" else cfg.image_tokens_high_detail
+            defaults = slowburn_config.defaults
+            tokens_per_image = defaults.image_tokens_low_detail if image_detail == "low" else defaults.image_tokens_high_detail
             estimated_input_tokens += tokens_per_image * len(images)
 
         # 2. ESTIMATE cost in microdollars
@@ -267,14 +378,14 @@ class SlowBurnLLM(Typed):
             DEFAULT_COST_LIMIT_KEY: estimated_cost,
         }
 
-        with self.limits.acquire(requested=requested) as acq:
+        with self.limits.acquire(requested=requested) as acquisition:
             try:
                 litellm.drop_params = True
                 response = await asyncio.wait_for(
                     litellm.acompletion(
                         model=self.model_name,
                         messages=messages,
-                        api_key=self.api_key if self.api_key else None,
+                        api_key=self.api_key if len(self.api_key) > 0 else None,
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
                         **merged_params,
@@ -316,13 +427,33 @@ class SlowBurnLLM(Typed):
                     response, model=self.model_name,
                 )
 
-                # 5. Apply validator if provided
-                result: Any = response_text
-                if validator is not None:
+                # 5. Apply validator if provided (skipped when returning messages)
+                result: Union[str, List[Dict[str, Any]]]
+                if should_return_messages:
+                    assistant_message: Dict[str, Any] = {"role": "assistant"}
+                    if response_message.content is not None:
+                        assistant_message["content"] = response_message.content
+                    if tool_calls is not None:
+                        assistant_message["tool_calls"] = [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments,
+                                },
+                            }
+                            for tc in tool_calls
+                        ]
+                    if "content" not in assistant_message:
+                        assistant_message["content"] = None
+                    messages.append(assistant_message)
+                    result = messages
+                elif validator is not None:
                     try:
                         result = validator(response_text)
                     except ValueError:
-                        acq.update(usage={
+                        acquisition.update(usage={
                             "input_tokens": actual_input,
                             "output_tokens": actual_output,
                             "call_count": 1,
@@ -330,16 +461,18 @@ class SlowBurnLLM(Typed):
                         })
                         raise
                     except Exception as e:
-                        acq.update(usage={
+                        acquisition.update(usage={
                             "input_tokens": actual_input,
                             "output_tokens": actual_output,
                             "call_count": 1,
                             DEFAULT_COST_LIMIT_KEY: actual_cost,
                         })
                         raise ValueError(f"Validator error: {e}") from e
+                else:
+                    result = response_text
 
                 # 6. UPDATE limits with actuals (refunds unused budget)
-                acq.update(usage={
+                acquisition.update(usage={
                     "input_tokens": actual_input,
                     "output_tokens": actual_output,
                     "call_count": 1,
@@ -366,7 +499,7 @@ class SlowBurnLLM(Typed):
             except (ValueError, asyncio.TimeoutError):
                 raise
             except BaseException:
-                acq.update(usage={
+                acquisition.update(usage={
                     "input_tokens": estimated_input_tokens,
                     "output_tokens": 0,
                     "call_count": 1,
@@ -374,34 +507,41 @@ class SlowBurnLLM(Typed):
                 })
                 raise
 
+    @validate
     async def call_llm_batch(
         self,
         *,
-        prompts: List[str],
+        prompts: List[Union[str, List[Dict[str, Any]]]],
         images_per_prompt: Optional[List[Optional[List[ImageInput]]]] = None,
         system_prompt: Optional[str] = None,
+        history_per_prompt: Optional[List[Optional[List[Dict[str, Any]]]]] = None,
+        tools: Union[Optional[List[Dict[str, Any]]], _NO_ARG_TYPE] = _NO_ARG,
+        tool_choice: Union[Optional[ToolChoiceOption], _NO_ARG_TYPE] = _NO_ARG,
+        return_messages: Optional[bool] = None,
         validator: Optional[Callable[[str], T]] = None,
-        image_detail: str = "auto",
-        verbosity: Any = _NO_ARG,
+        image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
+        verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
-    ) -> List[Any]:
+    ) -> List[Union[str, List[Dict[str, Any]]]]:
         """Execute multiple LLM calls concurrently with shared backpressure.
 
         Args:
-            prompts: List of user message strings.
+            prompts: List of user message strings or pre-built message lists.
             images_per_prompt: Optional list, same length as *prompts*, where
-                each element is either ``None`` (text-only call) or a list of
-                ``ImageInput`` for that prompt. Pass ``None`` (default) if no
-                prompts use images.
+                each element is either ``None`` (text-only) or a list of images.
             system_prompt: Optional system message applied to all calls.
+            history_per_prompt: Optional list, same length as *prompts*, where
+                each element is either ``None`` (no history) or a messages list.
+            tools: Tool schemas shared across all items (overrides worker default).
+            tool_choice: Tool choice shared across all items.
+            return_messages: Return type override shared across all items.
             validator: Optional callable applied to each response.
-            image_detail: Detail level for vision queries ("low", "high", "auto").
-            verbosity: Logging verbosity. Defaults to slowburn_config.defaults.verbosity.
-            litellm_params: Per-call parameters passed through to each
-                ``litellm.acompletion()`` call in the batch.
+            image_detail: Detail level for vision queries ("low"/"high"/"auto").
+            verbosity: Logging verbosity.
+            litellm_params: Per-call parameters passed through to each call.
 
         Returns:
-            List of results (raw text or parsed validator output).
+            List of results (strings, parsed validator output, or message lists).
         """
         if is_no_arg(verbosity):
             verbosity = slowburn_config.defaults.verbosity
@@ -413,24 +553,37 @@ class SlowBurnLLM(Typed):
                 f"images_per_prompt length ({len(images_per_prompt)}) "
                 f"must match prompts length ({len(prompts)})"
             )
+        if history_per_prompt is not None and len(history_per_prompt) != len(prompts):
+            raise ValueError(
+                f"history_per_prompt length ({len(history_per_prompt)}) "
+                f"must match prompts length ({len(prompts)})"
+            )
 
         if images_per_prompt is None:
             images_per_prompt = [None] * len(prompts)
+        if history_per_prompt is None:
+            history_per_prompt = [None] * len(prompts)
 
         tasks = [
             self.call_llm(
-                prompt=p,
-                images=imgs,
+                prompt=prompt_item,
+                images=images_item,
                 system_prompt=system_prompt,
+                history=history_item,
+                tools=tools,
+                tool_choice=tool_choice,
+                return_messages=return_messages,
                 validator=validator,
                 image_detail=image_detail,
                 verbosity=verbosity,
                 litellm_params=litellm_params,
             )
-            for p, imgs in zip(prompts, images_per_prompt)
+            for prompt_item, images_item, history_item in zip(
+                prompts, images_per_prompt, history_per_prompt,
+            )
         ]
 
-        results: List[Any] = await async_gather(
+        results: List[Union[str, List[Dict[str, Any]]]] = await async_gather(
             tasks,
             progress=dict(
                 disable=verbosity < 2,

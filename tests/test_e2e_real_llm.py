@@ -181,3 +181,126 @@ class TestCostReporterFormats:
             assert "Total" in tex
         finally:
             llm.stop()
+
+
+@skip_no_api_key
+class TestMultiTurnRealCalls:
+    """Multi-turn conversation API with real LLM calls."""
+
+    def test_history_preserves_context(self, llm_model_and_key) -> None:
+        """Two-turn conversation where the second turn references the first.
+
+        Steps:
+        1. First turn: tell the LLM a fact ("My name is Zephyr").
+        2. Second turn: ask the LLM to recall it ("What is my name?").
+        3. Verify the response contains "Zephyr" (proves history was sent).
+        """
+        model, key = llm_model_and_key
+        llm = create_llm(
+            model=model,
+            budget_usd=0.50,
+            window="hourly",
+            api_key=key,
+            max_tokens=100,
+            temperature=0.0,
+        )
+        try:
+            messages = llm.call_llm(
+                prompt="My name is Zephyr. Remember it.",
+                system_prompt="You are a helpful assistant with perfect memory.",
+                history=[],
+            ).result(timeout=30.0)
+
+            assert isinstance(messages, list)
+            assert len(messages) >= 2
+            assert messages[-1]["role"] == "assistant"
+            print(f"Turn 1 response: {messages[-1]['content']!r}")
+
+            messages = llm.call_llm(
+                prompt="What is my name?",
+                history=messages,
+            ).result(timeout=30.0)
+
+            assert isinstance(messages, list)
+            final_response = messages[-1]["content"]
+            print(f"Turn 2 response: {final_response!r}")
+            assert "Zephyr" in final_response
+
+            reporter = llm.get_reporter().result(timeout=5.0)
+            assert reporter.num_calls == 2
+            print(f"Cost: ${reporter.total_cost():.6f}")
+        finally:
+            llm.stop()
+
+    def test_tool_call_round_trip(self, llm_model_and_key) -> None:
+        """LLM returns a tool_call, we append the result, LLM produces final text.
+
+        Steps:
+        1. Send a prompt with a tool schema asking for the weather.
+        2. Verify the assistant message contains tool_calls.
+        3. Append a fake tool result.
+        4. Re-submit; verify the assistant produces a text response using the tool result.
+        """
+        model, key = llm_model_and_key
+        tool_schemas = [{
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get the current weather for a city.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"city": {"type": "string", "description": "City name"}},
+                    "required": ["city"],
+                },
+            },
+        }]
+        llm = create_llm(
+            model=model,
+            budget_usd=0.50,
+            window="hourly",
+            api_key=key,
+            max_tokens=150,
+            temperature=0.0,
+            tools=tool_schemas,
+            tool_choice="required",
+        )
+        try:
+            messages = llm.call_llm(
+                prompt="What is the weather in Paris right now?",
+                system_prompt="Use the get_weather tool to answer weather questions.",
+                history=[],
+            ).result(timeout=30.0)
+
+            assert isinstance(messages, list)
+            assistant_message = messages[-1]
+            assert assistant_message["role"] == "assistant"
+            assert assistant_message.get("tool_calls") is not None
+            assert len(assistant_message["tool_calls"]) >= 1
+            print(f"Tool calls: {assistant_message['tool_calls']}")
+
+            tool_call = assistant_message["tool_calls"][0]
+            assert tool_call["function"]["name"] == "get_weather"
+
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call["id"],
+                "content": '{"temperature": "18°C", "condition": "partly cloudy"}',
+            })
+
+            messages = llm.call_llm(
+                prompt="",
+                history=messages,
+                tool_choice=None,
+            ).result(timeout=30.0)
+
+            assert isinstance(messages, list)
+            final_response = messages[-1]["content"]
+            print(f"Final response: {final_response!r}")
+            assert final_response is not None
+            assert len(final_response) > 0
+
+            reporter = llm.get_reporter().result(timeout=5.0)
+            assert reporter.num_calls == 2
+            print(f"Cost: ${reporter.total_cost():.6f}")
+        finally:
+            llm.stop()

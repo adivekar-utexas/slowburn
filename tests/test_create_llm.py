@@ -62,8 +62,9 @@ class TestCreateLLM:
             llm.stop()
 
     def test_invalid_window_alias_raises(self) -> None:
-        """An unrecognized string window should raise ValueError."""
-        with pytest.raises(ValueError, match="Unknown window alias"):
+        """An unrecognized string window should be rejected by @validate."""
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError, match="daily.*hourly.*minutely"):
             create_llm(model="gpt-4o-mini", window="biweekly")
 
     def test_custom_name(self) -> None:

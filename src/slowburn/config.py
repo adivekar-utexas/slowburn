@@ -18,6 +18,8 @@ from typing import Any, Generator, Optional, Type
 from morphic import MutableTyped
 from pydantic import ConfigDict, Field, confloat, conint
 
+from .constants import ImageDetailLevel, WindowAlias
+
 
 class _NoArgType:
     """Sentinel type for 'argument not provided.'
@@ -76,9 +78,11 @@ class SlowBurnDefaults(MutableTyped):
     # Vision token estimates
     image_tokens_low_detail: conint(ge=1) = 85
     image_tokens_high_detail: conint(ge=1) = 1000
+    image_detail: ImageDetailLevel = "auto"
 
     # Budget defaults
     budget_usd: confloat(gt=0.0) = 5.0
+    default_window: WindowAlias = "daily"
     default_window_seconds: confloat(gt=0.0) = 86400.0
     max_rpm: conint(ge=1) = 500
     max_input_tpm: conint(ge=1) = 1_000_000

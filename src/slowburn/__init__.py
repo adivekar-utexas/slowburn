@@ -18,19 +18,21 @@ Quick start::
 """
 
 import asyncio
-from typing import Any, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 from concurry import CallLimit, LimitSet, RateLimit
+from morphic import validate
 
 from .backpressure import set_backpressure_warnings, timed_acquire
-from .config import _NO_ARG, SlowBurnConfig, SlowBurnDefaults, is_no_arg, slowburn_config, temp_config
+from .config import _NO_ARG, _NO_ARG_TYPE, SlowBurnConfig, SlowBurnDefaults, is_no_arg, slowburn_config, temp_config
+from .constants import WINDOW_ALIAS_SECONDS, ExecutionBackend, ToolChoiceOption, WindowAlias
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
 from .llm_worker import ImageInput, SlowBurnLLM
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
-__all__: list[str] = [
+__all__: List[str] = [
     "create_llm",
     "set_backpressure_warnings",
     "timed_acquire",
@@ -52,30 +54,26 @@ __all__: list[str] = [
     "SlowBurnDefaults",
 ]
 
-_WINDOW_ALIASES = {
-    "daily": 86400,
-    "hourly": 3600,
-    "minutely": 60,
-}
 
-
+@validate
 def create_llm(
     model: str,
-    budget_usd: Any = _NO_ARG,
-    window: Union[str, int, float] = "daily",
-    max_rpm: Any = _NO_ARG,
-    max_input_tpm: Any = _NO_ARG,
-    max_output_tpm: Any = _NO_ARG,
+    budget_usd: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+    window: Union[WindowAlias, int, float, _NO_ARG_TYPE] = _NO_ARG,
+    max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     api_key: str = "",
-    backend: str = "asyncio",
+    backend: ExecutionBackend = "asyncio",
     name: Optional[str] = None,
-    temperature: Any = _NO_ARG,
-    max_tokens: Any = _NO_ARG,
-    timeout: Any = _NO_ARG,
-    num_retries: Any = _NO_ARG,
-    extra_limits: Optional[List[Any]] = None,
-    litellm_params: Optional[dict] = None,
-    **kwargs,
+    temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
+    max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+    num_retries: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    tools: Optional[List[Dict[str, object]]] = None,
+    tool_choice: Optional[ToolChoiceOption] = None,
+    extra_limits: Optional[List[object]] = None,
+    litellm_params: Optional[Dict[str, object]] = None,
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
 
@@ -89,8 +87,10 @@ def create_llm(
 
     Args:
         model: litellm model identifier (e.g. "gpt-4o-mini", "claude-3-5-haiku-20241022").
-        budget_usd: Maximum dollar spend per window. Defaults to slowburn_config.defaults.budget_usd.
+        budget_usd: Maximum dollar spend per window.
+            Defaults to slowburn_config.defaults.budget_usd.
         window: Budget window — "daily", "hourly", "minutely", or seconds (int/float).
+            Defaults to slowburn_config.defaults.default_window.
         max_rpm: Maximum requests per minute (CallLimit capacity).
             Defaults to slowburn_config.defaults.max_rpm.
         max_input_tpm: Maximum input tokens per minute.
@@ -108,9 +108,14 @@ def create_llm(
             Defaults to slowburn_config.defaults.timeout.
         num_retries: Number of retries on transient errors.
             Defaults to slowburn_config.defaults.num_retries.
+        tools: Default tool schemas (OpenAI format) for all calls.
+            Pass a list of tool dicts. Overridable per-call via
+            ``call_llm(tools=...)``.
+        tool_choice: Default tool_choice for all calls ("auto", "required",
+            "none"). Overridable per-call via ``call_llm(tool_choice=...)``.
         extra_limits: Additional Limit objects to include in the LimitSet.
         litellm_params: Additional parameters passed to every litellm.acompletion()
-            call (e.g. tools, response_format, seed, top_p, stop).
+            call (e.g. response_format, seed, top_p, stop).
 
     Returns:
         A live SlowBurnLLM worker, ready to accept ``call_llm()`` calls.
@@ -125,31 +130,28 @@ def create_llm(
         print(f"Cost so far: ${reporter.total_cost():.4f}")
         llm.stop()
     """
-    cfg = slowburn_config.defaults
+    defaults = slowburn_config.defaults
     if is_no_arg(budget_usd):
-        budget_usd = cfg.budget_usd
+        budget_usd = defaults.budget_usd
+    if is_no_arg(window):
+        window = defaults.default_window
     if is_no_arg(max_rpm):
-        max_rpm = cfg.max_rpm
+        max_rpm = defaults.max_rpm
     if is_no_arg(max_input_tpm):
-        max_input_tpm = cfg.max_input_tpm
+        max_input_tpm = defaults.max_input_tpm
     if is_no_arg(max_output_tpm):
-        max_output_tpm = cfg.max_output_tpm
+        max_output_tpm = defaults.max_output_tpm
     if is_no_arg(temperature):
-        temperature = cfg.temperature
+        temperature = defaults.temperature
     if is_no_arg(max_tokens):
-        max_tokens = cfg.max_tokens
+        max_tokens = defaults.max_tokens
     if is_no_arg(timeout):
-        timeout = cfg.timeout
+        timeout = defaults.timeout
     if is_no_arg(num_retries):
-        num_retries = cfg.num_retries
+        num_retries = defaults.num_retries
 
     if isinstance(window, str):
-        window_seconds = _WINDOW_ALIASES.get(window.lower())
-        if window_seconds is None:
-            raise ValueError(
-                f"Unknown window alias '{window}'. "
-                f"Use one of {list(_WINDOW_ALIASES.keys())} or a number of seconds."
-            )
+        window_seconds = WINDOW_ALIAS_SECONDS[window.lower()]
     else:
         window_seconds = float(window)
 
@@ -183,6 +185,8 @@ def create_llm(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
+        tools=tools,
+        tool_choice=tool_choice,
         litellm_params=litellm_params if litellm_params is not None else {},
     )
     return llm
