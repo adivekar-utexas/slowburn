@@ -10,6 +10,8 @@ When the budget is exhausted, acquire() blocks (backpressure) until the time
 window rolls over. The agent slows down rather than crashing.
 """
 
+import math
+import sys
 from typing import Optional
 
 from concurry import RateLimit
@@ -20,12 +22,17 @@ MICRODOLLARS_PER_DOLLAR: int = 1_000_000
 
 DEFAULT_COST_LIMIT_KEY: str = "cost_microdollars"
 
+_MAX_MICRODOLLARS: int = sys.maxsize
+
 
 def dollars_to_microdollars(usd: float) -> int:
     """Convert a dollar amount to microdollars (integer).
 
     Minimum return value is 1 microdollar to avoid zero-capacity limits.
+    ``float('inf')`` maps to ``sys.maxsize`` (effectively unlimited).
     """
+    if math.isinf(usd) and usd > 0:
+        return _MAX_MICRODOLLARS
     return max(int(usd * MICRODOLLARS_PER_DOLLAR), 1)
 
 

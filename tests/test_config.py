@@ -63,7 +63,7 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.image_tokens_high_detail == 1000
 
     def test_default_budget_usd(self) -> None:
-        assert slowburn_config.defaults.budget_usd == 5.0
+        assert slowburn_config.defaults.budget_usd == float('inf')
 
     def test_default_window_seconds(self) -> None:
         assert slowburn_config.defaults.default_window_seconds == 86400.0

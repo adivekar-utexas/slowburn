@@ -34,6 +34,11 @@ class TestDollarsToMicrodollars:
     def test_large_budget(self) -> None:
         assert dollars_to_microdollars(50.0) == 50_000_000
 
+    def test_infinity_maps_to_max(self) -> None:
+        """float('inf') should produce a very large capacity, not crash."""
+        import sys
+        assert dollars_to_microdollars(float('inf')) == sys.maxsize
+
     def test_negative_returns_one(self) -> None:
         """Negative amounts are clamped to the minimum of 1."""
         assert dollars_to_microdollars(-1.0) == 1
@@ -89,6 +94,13 @@ class TestCostLimitCreation:
     def test_is_rate_limit_subclass(self) -> None:
         cl = CostLimit(budget_usd=5.0)
         assert isinstance(cl, RateLimit)
+
+    def test_infinite_budget(self) -> None:
+        """float('inf') budget should create a CostLimit with very large capacity."""
+        import sys
+        cl = CostLimit(budget_usd=float('inf'))
+        assert cl.budget_usd == float('inf')
+        assert cl.capacity == sys.maxsize
 
 
 class TestCostLimitWithLimitSet:
