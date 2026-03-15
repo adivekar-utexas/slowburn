@@ -34,7 +34,7 @@ SlowBurn takes a different approach: **when the budget is exhausted, the agent p
 **What SlowBurn provides:**
 
 - **CostLimit**: a dollar-denominated rate limit that composes with token and request rate limits, and blocks rather than terminates when exhausted
-- **SlowBurnLLM**: an asyncio LLM worker with automatic per-call cost tracking, supporting 100+ models via [litellm](https://github.com/BerriAI/litellm) (text and vision)
+- **SlowBurnLLM**: an asyncio LLM worker with automatic per-call cost tracking, multi-turn conversations, tool calling, and 100+ models via [litellm](https://github.com/BerriAI/litellm) (text and vision)
 - **Framework integrations**: drop-in hooks for [CrewAI](https://github.com/crewAIInc/crewAI), [AutoGen (AG2)](https://github.com/ag2ai/ag2), [LangGraph](https://github.com/langchain-ai/langgraph), and [LangChain](https://github.com/langchain-ai/langchain) that share a unified budget
 - **CostReporter**: per-call, per-model cost attribution with JSON, Markdown, and LaTeX export
 - **Global config**: all defaults centralized in `slowburn_config`, overridable at runtime via `temp_config()`
@@ -83,6 +83,116 @@ results = llm.call_llm_batch(
     prompts=["Capital of France?", "Capital of Japan?", "Capital of Brazil?"],
 ).result()
 # All 3 execute concurrently on the event loop
+```
+
+### Multi-turn conversations
+
+Pass `history=` to maintain conversation state across turns. When `history` is provided, `call_llm` returns the full messages list (with the assistant response appended) instead of a plain string. The messages list is the conversation state; you control it, and pass it back on the next call.
+
+**In a loop (the common pattern):**
+
+```python
+llm = create_llm(model="gpt-4o-mini", budget_usd=1.0)
+
+tasks = [
+    "My name is Zephyr. I'm researching fusion energy.",
+    "What are the main approaches to achieving net energy gain?",
+    "Which approach is closest to commercialization?",
+]
+
+messages = []  # empty list enables multi-turn mode from the first call
+for prompt in prompts:
+    messages = llm.call_llm(
+        prompt,
+        system_prompt="You are a helpful research assistant.",
+        history=messages,
+    ).result()
+    print(f"User:      {task}")
+    print(f"Assistant: {messages[-1]['content']}\n")
+
+llm.stop()
+```
+
+`system_prompt` is only prepended on the first call (when history has no system message yet). On subsequent calls it's a no-op, so passing it every time is safe.
+
+**With `build_messages` (for processing inputs before the LLM call):**
+
+`build_messages` constructs the messages list without calling the LLM. Pass its output directly to `call_llm` via `prompt=` (when `prompt` is a list of dicts, `call_llm` sends it as-is and returns a messages list):
+
+```python
+messages = []
+for task in tasks:
+    # Build the messages list (sync, no LLM call)
+    input_messages = llm.build_messages(
+        prompt=task,
+        system_prompt="You are a helpful assistant.",
+        history=messages,
+    ).result()
+
+    # Log/inspect before sending
+    print(f"Sending {len(input_messages)} messages, last 3:")
+    for message in input_messages[-3:]:
+        role = message["role"]
+        content = str(message.get("content", ""))[:80]
+        print(f"  {role}: {content}")
+    save_to_disk(input_messages)
+
+    # Send the pre-built messages to the LLM (no re-building)
+    messages = llm.call_llm(prompt=input_messages).result()
+```
+
+**Return type auto-detection:** `history=` provided or `prompt` is a list of message dicts returns a messages list; a plain string prompt with no history returns a string (backward compatible). Override explicitly with `return_messages=True` or `return_messages=False`. 
+
+### Tool calling (ReAct agents)
+
+`create_llm` accepts `tools` and `tool_choice` as first-class parameters. Combined with `history=`, this enables the standard tool-calling loop. The inner `while` loop handles tool execution; the outer loop drives multiple tasks:
+
+```python
+llm = create_llm(
+    model="gpt-4o-mini",
+    budget_usd=1.0,
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "search_web",
+            "description": "Search the web for information.",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        },
+    }],
+    tool_choice="auto",
+)
+
+tasks = ["Population of Tokyo?", "GDP of Germany?"]
+messages = []
+
+for task in tasks:
+    # Send the user's task
+    messages = llm.call_llm(
+        prompt=task,
+        system_prompt="Use tools to find real data.",
+        history=messages,
+    ).result()
+
+    # Tool-calling loop: execute tools until the LLM produces a text response
+    while messages[-1].get("tool_calls"):
+        for tc in messages[-1]["tool_calls"]:
+            result = my_tool_executor(tc["function"]["name"], tc["function"]["arguments"])
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc["id"],
+                "content": result,
+            })
+        # Re-submit with tool results (empty prompt = no new user message)
+        messages = llm.call_llm(prompt="", history=messages).result()
+
+    print(f"Q: {task}")
+    print(f"A: {messages[-1]['content']}\n")
+
+llm.stop()
 ```
 
 ### Structured output with validators
@@ -199,12 +309,12 @@ slowburn/
 ├── src/slowburn/
 │   ├── __init__.py                 # create_llm() entry point
 │   ├── config.py                   # SlowBurnConfig, temp_config(), _NO_ARG sentinel
-│   ├── llm_worker.py               # SlowBurnLLM asyncio worker (text + vision)
+│   ├── constants.py                # Literal type aliases (ImageDetailLevel, ToolChoiceOption, etc.)
+│   ├── llm_worker.py               # SlowBurnLLM asyncio worker (text, vision, multi-turn, tools)
 │   ├── cost_accounting.py          # estimate_input_tokens(), cost_controlled_call()
 │   ├── limits.py                   # CostLimit (dollar-denominated rate limit)
 │   ├── pricing.py                  # PricingCache (litellm + OpenRouter pricing)
 │   ├── reporter.py                 # CostReporter (JSON, Markdown, LaTeX export)
-│   ├── backpressure.py             # Backpressure warning logging
 │   └── integrations/
 │       ├── autogen.py              # AutoGen (AG2) ModelClient
 │       ├── crewai.py               # CrewAI event bus / hooks middleware
