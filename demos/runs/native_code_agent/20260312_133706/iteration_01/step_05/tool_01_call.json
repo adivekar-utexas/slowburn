@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_a527adad0ba2412aa6df8945",
-  "function": "search_web",
-  "arguments": {
-    "query": "\"RFC 5322\" email regex pattern Python"
-  }
-}

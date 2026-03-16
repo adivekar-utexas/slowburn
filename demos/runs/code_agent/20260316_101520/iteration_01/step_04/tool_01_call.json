@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_aa197f45394a4b9f956c18b7",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python proper email regex pattern validation best practices"
+  }
+}

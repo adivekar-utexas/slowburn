@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_c809a0742ebd4245b4c9b7d6",
-  "function": "search_web",
-  "arguments": {
-    "query": "LLM agent production costs GPT-4 Claude Gemini API pricing SWE-bench Tau-bench"
-  }
-}

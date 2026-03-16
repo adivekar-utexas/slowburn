@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_6897974f54e4471e92e5918c",
-  "function": "search_web",
-  "arguments": {
-    "query": "GPT-4 Claude Gemini API pricing per token dollars production costs 2024 2025"
-  }
-}

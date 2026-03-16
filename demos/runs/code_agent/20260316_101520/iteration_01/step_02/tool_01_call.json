@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_d1d9f39be0df4bc38cb354e4",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python email extraction regex best practices"
+  }
+}

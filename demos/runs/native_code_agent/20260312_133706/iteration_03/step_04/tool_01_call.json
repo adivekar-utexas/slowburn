@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "chatcmpl-tool-a8f27eab794be691",
-  "function": "search_web",
-  "arguments": {
-    "query": "email regex RFC 5322 RFC 6531 international domains unicode python examples"
-  }
-}

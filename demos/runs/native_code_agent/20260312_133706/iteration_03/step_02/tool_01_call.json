@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "chatcmpl-tool-959c84bf5ec1f13b",
-  "function": "search_web",
-  "arguments": {
-    "query": "email regex edge cases angle brackets trailing punctuation international domains"
-  }
-}

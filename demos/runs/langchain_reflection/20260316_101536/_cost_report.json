@@ -1,0 +1,31 @@
+{
+  "summary": {
+    "gpt-4o-mini": {
+      "calls": 2,
+      "input_tokens": 1509,
+      "output_tokens": 696,
+      "total_tokens": 2205,
+      "cost_usd": 0.000643
+    }
+  },
+  "total_cost_usd": 0.000643,
+  "num_calls": 2,
+  "calls": [
+    {
+      "model": "gpt-4o-mini",
+      "cost_usd": 0.000351,
+      "input_tokens": 492,
+      "output_tokens": 463,
+      "total_tokens": 955,
+      "timestamp": 1773636350.972258
+    },
+    {
+      "model": "gpt-4o-mini",
+      "cost_usd": 0.000292,
+      "input_tokens": 1017,
+      "output_tokens": 233,
+      "total_tokens": 1250,
+      "timestamp": 1773636357.378887
+    }
+  ]
+}

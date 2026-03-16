@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Python: Validate Email Address with Regular Expressions (RegEx)",
+      "url": "https://stackabuse.com/python-validate-email-address-with-regular-expressions-regex/",
+      "snippet": "Mar 28, 2023 ·In this guide, we'll take a look at how to validateemailaddresses inPythonwith Regular Expressions, with a general-purpose simple expression as well as an RFC5322-compliant robust regex."
+    },
+    {
+      "title": "Regex validation of email addresses according to RFC5321 ...",
+      "url": "https://stackoverflow.com/questions/13992403/regex-validation-of-email-addresses-according-to-rfc5321-rfc5322",
+      "snippet": "The grammar presented inRFC5321is too lenient when it comes to both host names and IP addresses. I took the liberty of \"correcting\" the rules in question, using this draft andRFC1034 (section 3.5) as guidelines. Here's the resulting regex."
+    },
+    {
+      "title": "regex101: email validation (RFC 5322)",
+      "url": "https://regex101.com/r/3uvtNl/1",
+      "snippet": "Regular expression tester with syntax highlighting, explanation, cheat sheet for PHP/PCRE,Python, GO, JavaScript, Java, C#/.NET, Rust."
+    },
+    {
+      "title": "practical email regex · GitHub",
+      "url": "https://gist.github.com/dungsaga/394327ede90d57c82e5d4a8b8b20a22a",
+      "snippet": "This is my attempt to improve on the regex that match 99.99% ofemailfrom https://www.regular-expressions.info/email.html This is a practical implementation ofRFC5322where I omitted IP addresses, domain-specific addresses, the syntax using double quotes and square brackets."
+    },
+    {
+      "title": "The Ultimate Email Validation Regex (2025 Edition)",
+      "url": "https://www.heybounce.io/email-validation-regex",
+      "snippet": "Copy-paste a production-readyemailvalidation regex. Includes test cases, language examples (JS,Python, PHP, Java), FAQs andbestpractices."
+    }
+  ]
+}

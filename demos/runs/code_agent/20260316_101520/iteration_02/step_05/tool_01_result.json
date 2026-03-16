@@ -1,0 +1,4 @@
+{
+  "path": "solution.py",
+  "content": "import re\n\ndef extract_emails(text):\n    \"\"\"Extract email addresses from text.\"\"\"\n    emails = []\n    for word in text.split():\n        if \"@\" in word and \".\" in word:\n            emails.append(word)\n    return emails\n\ndef count_words(text):\n    \"\"\"Count words in text, excluding common stop words.\"\"\"\n    stop_words = [\"the\", \"a\", \"an\", \"is\", \"are\", \"was\", \"were\", \"in\", \"on\", \"at\"]\n    words = text.lower().split()\n    count = 0\n    for w in words:\n        if w not in stop_words:\n            count = count + 1\n    return count\n\ndef find_duplicates(items):\n    \"\"\"Find duplicate items in a list.\"\"\"\n    seen = []\n    dupes = []\n    for item in items:\n        if item in seen:\n            if item not in dupes:\n                dupes.append(item)\n        else:\n            seen.append(item)\n    return dupes\n"
+}

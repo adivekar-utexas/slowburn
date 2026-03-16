@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_a14a7f171eb545a5a56da6f5",
-  "function": "search_web",
-  "arguments": {
-    "query": "\"GPT-4\" \"$5 per million tokens\" \"$15 per million tokens\" Claude pricing"
-  }
-}

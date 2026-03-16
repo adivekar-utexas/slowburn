@@ -1,0 +1,14 @@
+{
+  "step": 4,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Python proper email regex pattern validation best practices"
+      },
+      "result_length": 2014
+    }
+  ],
+  "elapsed_seconds": 9.922636985778809
+}

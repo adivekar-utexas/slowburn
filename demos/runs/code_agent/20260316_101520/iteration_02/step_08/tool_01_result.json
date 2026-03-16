@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "PythonTypeChecking (Guide) – RealPython",
+      "url": "https://realpython.com/python-type-checking/",
+      "snippet": "In thisguide, you'll look atPythontypechecking. Traditionally,typeshave been handled by thePythoninterpreter in a flexible but implicit way."
+    },
+    {
+      "title": "python-Typehintswith user defined classes - Stack Overflow",
+      "url": "https://stackoverflow.com/questions/44664040/type-hints-with-user-defined-classes",
+      "snippet": "I want to do atypehintfor a function and thetypebeing some custom class that I have defined, called it CustomClass().Stack Overflow for Teams is now called Stack Internal. Bring thebestof human thought and AI automation together at your work."
+    },
+    {
+      "title": "typing— Support fortypehints—Python3.14.3 documentation",
+      "url": "https://docs.python.org/3/library/typing.html",
+      "snippet": "Source code: Lib/typing.py This module provides runtime support fortypehints. Consider the function below: The function surface_area_of_cube takes an argument expected to be an instance of float"
+    },
+    {
+      "title": "TypeHintsinPython- GeeksforGeeks",
+      "url": "https://www.geeksforgeeks.org/python/type-hints-in-python/",
+      "snippet": "UsingTypeHintsinPython. 1. Variable and FunctionTypeHints.Typehintsdefine the expectedtypefor variables and function arguments. Example:Python."
+    },
+    {
+      "title": "TypeHintsinPython: BeginnersGuide| by Erdem Isbilen | Medium",
+      "url": "https://medium.com/geekculture/type-hints-in-python-6cafd4088f03",
+      "snippet": "Typehints, also known astypeannotations, are completely optional inPython. Yet, there are some benefits of using them in your code. In this article, I will try to explain what istypehintinginPythonand why you should use them."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Email Pattern Matching in Python Using Regex - GeeksforGeeks",
+      "url": "https://www.geeksforgeeks.org/python/email-pattern-matching-in-python-using-regex/",
+      "snippet": "Feb 6, 2026 ·Emailpatternmatching is a common text‑processing task used to validate, extract or filteremailaddresses from raw text data. InPython, this is efficiently handled usingRegexmodule, which allow precisepatterndefinition and matching based onemailsyntax rules."
+    },
+    {
+      "title": "Automating Email Validation with Python: A Step-by-Step ...",
+      "url": "https://dev.to/mailfloss/automating-email-validation-with-python-a-step-by-step-tutorial-31jd",
+      "snippet": "Dec 20, 2024 ·In this comprehensive tutorial, we'll explore three powerful approaches toemailvalidation inPython: Before diving into implementation, let's understand what makes anemailaddress valid and why validation is crucial for your applications."
+    },
+    {
+      "title": "The Ultimate Email Validation Regex (2025 Edition)",
+      "url": "https://www.heybounce.io/email-validation-regex",
+      "snippet": "Copy-paste a production-readyemailvalidationregex. Includes testcases, language examples (JS,Python, PHP, Java), FAQs and best practices."
+    },
+    {
+      "title": "re — Regular expression operations — Python 3.14.3 documentation",
+      "url": "https://docs.python.org/3/library/re.html",
+      "snippet": "1 day ago ·Compile aregularexpressionpatterninto aregularexpressionobject, which can be used for matching using its match(), search() and other methods, described below."
+    },
+    {
+      "title": "Validating email addresses with proper regex patterns",
+      "url": "https://app.studyraid.com/en/read/14391/490530/validating-email-addresses-with-proper-regex-patterns",
+      "snippet": "Mar 4, 2025 ·Anatomy of a ValidEmailAddress A validemailaddress follows the structure local-part@domain. Key components: Local-part: 1-64 characters allowing A-Z, a..."
+    }
+  ]
+}

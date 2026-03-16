@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_8bf198cf9f8844558708fb84",
-  "function": "search_web",
-  "arguments": {
-    "query": "gRPC backpressure flow control streaming mechanisms"
-  }
-}

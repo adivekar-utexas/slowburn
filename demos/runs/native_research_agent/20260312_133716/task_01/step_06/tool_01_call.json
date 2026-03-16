@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_2554b223e8f64a758eb73f5e",
-  "function": "search_web",
-  "arguments": {
-    "query": "GPT-4 API pricing per token input output dollars 2024 2025 Claude Gemini"
-  }
-}

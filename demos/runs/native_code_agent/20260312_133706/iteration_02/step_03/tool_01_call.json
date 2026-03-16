@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_bd5e986ab3c94e3abc22ed39",
-  "function": "search_web",
-  "arguments": {
-    "query": "Python input validation best practices docstring examples type hints"
-  }
-}

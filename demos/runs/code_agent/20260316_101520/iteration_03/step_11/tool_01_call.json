@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_88419da80e994ad99d2f424e",
+  "function": "search_web",
+  "arguments": {
+    "query": "python email regex pattern edge cases angle brackets trailing punctuation international domains"
+  }
+}

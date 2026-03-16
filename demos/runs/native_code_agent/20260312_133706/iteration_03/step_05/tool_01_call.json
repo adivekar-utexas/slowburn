@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_51b04358f9a2469c9f3f7e10",
-  "function": "search_web",
-  "arguments": {
-    "query": "email regex \"angle brackets\" \"trailing punctuation\" extraction python code examples"
-  }
-}

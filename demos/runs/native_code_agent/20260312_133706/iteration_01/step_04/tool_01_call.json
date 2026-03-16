@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_564dfcbf57664c51ad374bd4",
-  "function": "search_web",
-  "arguments": {
-    "query": "Python find duplicates using sets best practices"
-  }
-}

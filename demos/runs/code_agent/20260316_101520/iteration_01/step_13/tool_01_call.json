@@ -1,0 +1,11 @@
+{
+  "tool_call_id": "call_26c26937e4e74ec49b3ba8bb",
+  "function": "write_file",
+  "arguments": {
+    "path": "solution.py",
+    "content": "import re\nfrom collections import Counter\nfrom typing import List",
+    "extract_emails(text": "str) -> List[str]:\n    \"\"\"\n    Extract email addresses from text using proper regex pattern.\n    \n    Args:\n        text: Input text containing potential email addresses\n        \n    Returns:\n        List of unique email addresses found in the text\n        \n    Examples:\n        >>> extract_emails(\"Contact me at john@example.com or jane@test.org\")\n        ['john@example.com'",
+    "jane@test.org": "n    \"\"\"\n    if not text or not isinstance(text",
+    "str)": "n        return []\n    \n    # RFC 5322 compliant email regex pattern\n    email_pattern = r'\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2"
+  }
+}

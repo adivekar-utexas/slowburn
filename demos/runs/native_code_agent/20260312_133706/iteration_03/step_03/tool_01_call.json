@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "chatcmpl-tool-a37c6be32d5a1690",
-  "function": "search_web",
-  "arguments": {
-    "query": "\"email regex\" angle brackets <user@example.com> trailing punctuation python"
-  }
-}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Python: ValidateEmailAddress withRegularExpressions(RegEx)",
+      "url": "https://stackabuse.com/python-validate-email-address-with-regular-expressions-regex/",
+      "snippet": "In this guide,we'lltake a look at how to validateemailaddresses inPythonwithRegularExpressions, with a general-purpose simple expression aswellas anRFC5322-compliant robustregex."
+    },
+    {
+      "title": "The CompleteEmailRegexExplained |extract-emails.com",
+      "url": "https://extract-emails.com/guides/email-regex",
+      "snippet": "Learn howemailregexpatterns work. We break down the completeemailregularexpression, explain each part, and provide working code examples in JavaScript,Python, and PHP.The officialRFC5322standard defines the fullemailsyntax."
+    },
+    {
+      "title": "RegexPatterns for API Validation:Email, URL, Phone (Copy-Paste...)",
+      "url": "https://bytepane.com/blog/regex-validation-patterns-email-url/",
+      "snippet": "Production-readyregexpatterns for validatingemails, URLs, phone numbers, and dates. Includes simple andRFC-compliant variants, common pitfalls, and copy-paste code for JavaScript,Python, and Go."
+    },
+    {
+      "title": "Emailregex",
+      "url": "https://uibakery.io/regex-library/email",
+      "snippet": "The more complexemailregex. This Javascriptregularexpressionwill match 99% of validemailaddresses and will not pass validation foremailaddresses that have, for instance"
+    },
+    {
+      "title": "regex101: Matchingemailaddresses perRFC5322",
+      "url": "https://regex101.com/library/gJ7pU0",
+      "snippet": "Search, filter and view user submittedregularexpressionsin theregexlibrary. Over 20,000 entries, and counting!Load More. Matchingemailaddresses perRFC5322. 238.RegularExpression."
+    }
+  ]
+}

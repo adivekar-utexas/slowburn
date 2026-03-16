@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "GitHub Flavored Markdown Spec",
+      "url": "https://github.github.com/gfm/",
+      "snippet": "Markdown is a plain text format for writing structured documents, based on conventions for indicating formatting inemailand usenet posts."
+    },
+    {
+      "title": "O'Reilly Mastering Regular Expressions pdf",
+      "url": "https://1library.net/document/dzx115vy-o-reilly-mastering-regular-expressions-pdf.html",
+      "snippet": "A Well-GuidedRegexis a FastRegex. ... Using /g with aRegexThat Can Match Nothingness ...RegexCompilation, the /o Modifier, and Efficiency 268"
+    },
+    {
+      "title": "EditPad Pro Changelog - Softpedia",
+      "url": "https://www.softpedia.com/progChangelog/EditPad-Pro-Changelog-7569.html",
+      "snippet": "Regex: a((?R)|b)c(?1) and (a((?1)|b)c(?2)) triggered access violation errors when trying to match abcabcb due to the (inner) capturing group being ..."
+    },
+    {
+      "title": "CudaText - Free Pascal wiki",
+      "url": "https://wiki.freepascal.org/CudaText",
+      "snippet": "37.1Bracketsauto-pairing logic ...Trailingcommas on the final key:value pair before a closing brace ( } ) are allowed here."
+    },
+    {
+      "title": "Glossary",
+      "url": "https://glosario.carpentries.org/he/",
+      "snippet": "A statistical measure of a classification model which gives the proportion of correct predictions among a total number ofcases."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Best regex for email address pattern validation",
+      "url": "https://www.abstractapi.com/guides/email-validation/email-address-pattern-validation",
+      "snippet": "24 July 2025 -Domain – a string holding the name of the web service to which the email should be delivered.RFC 5322 asks the domain of valid email addresses to consist either of a dot-atom or a domain-literal within square brackets ([])."
+    },
+    {
+      "title": "How to Find or Validate an Email Address",
+      "url": "https://www.regular-expressions.info/email.html",
+      "snippet": "We get a more practical implementation of RFC 5322 if we omit IP addresses, domain-specific addresses, the syntax using double quotes and square brackets. It will still match 99.99% of all email addresses in actual use today. ... Neither of these regexes enforce length limits on the overall email address or the local part or the domain names."
+    },
+    {
+      "title": "4.1. Validate Email Addresses - Regular Expressions Cookbook, 2nd Edition [Book]",
+      "url": "https://www.oreilly.com/library/view/regular-expressions-cookbook/9781449327453/ch04s01.html",
+      "snippet": "27 August 2012 -ProblemSolutionSimpleSimple, with restrictions on charactersSimple, with all valid local part charactersNo leading, trailing, or consecutive dotsTop-level domain has two to six lettersDiscussionAbout email addressesRegular expression syntaxBuilding a regex step-by-stepVariationsSee Also"
+    },
+    {
+      "title": "Stop Validating Email Addresses With Your Complex Regex | Hacker News",
+      "url": "https://news.ycombinator.com/item?id=5763327",
+      "snippet": "27 January 2013 -That way you can help users that messed up their email but not prevent all the corner cases. The idea is that most email addresses fall in a very narrow subset of the RFC: user@domain.tld and most people would have entered their email wrong if it didn't match that pattern · From a previous ..."
+    },
+    {
+      "title": "A Regex Gist that explains, in-depth, how to validate an email ...",
+      "url": "https://gist.github.com/4c867464e6791b20e85b2d0c515526a7",
+      "snippet": "There is a group to the right of the starts-with anchor, followed by an '@' symbol, followed by another group, followed by a '\\.' (we use the backslash to escape the literal and indicate we literally mean the pattern must contain a period there) followed by a third group to the left of the ends-with anchor. This pattern matches the way we see most standard email addresses: 'group@group.group'. Each group has certain criteria defined in the bracket expressions, and our regex searches for strings that match the entire regex pattern."
+    }
+  ]
+}

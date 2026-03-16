@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_2c37c7999ef44f1ba449ad2e",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python type hints best practices 2024 comprehensive guide"
+  }
+}

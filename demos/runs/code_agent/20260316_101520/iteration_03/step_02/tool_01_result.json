@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "How can I validate an email address using a regular expression?Code sample",
+      "url": "https://stackoverflow.com/questions/201323/how-can-i-validate-an-email-address-using-a-regular-expression",
+      "snippet": "Using aregularexpressionthat recognizesemailaddressescould be useful in various situations: for example to scan foremailaddressesin a document, to validate user input, or as an integrity constraint on a data repository.See more on stackoverflow"
+    },
+    {
+      "title": "The Ultimate Email Validation Regex (2025 Edition)",
+      "url": "https://www.heybounce.io/email-validation-regex",
+      "snippet": "Copy-paste a production-readyemailvalidationregex. Includes testcases, language examples (JS, Python, PHP, Java), FAQs and best practices."
+    },
+    {
+      "title": "How to Validate an Email Address Using a Regular Expression ...",
+      "url": "https://www.tutorialpedia.org/blog/how-can-i-validate-an-email-address-using-a-regular-expression/",
+      "snippet": "Dec 1, 2025 ·One of the most common tools for validatingemailsyntax is theregularexpression (regex). However,emailvalidation is deceptively complex due to evolving standards (like RFC 5322) andedgecases(e.g.,internationalcharacters, special symbols)."
+    },
+    {
+      "title": "Email Regex (RFC 6531) · GitHub",
+      "url": "https://gist.github.com/baker-ling/3b4b014ee809aa9732f9873fe060c098",
+      "snippet": "Feb 10, 2026 ·Thisregexis the most complexregexthat I have ever written, and I have yet to use it in running code. I developed thisregexmostly as an exercise to practice reading RFCs and following them as closely as possible."
+    },
+    {
+      "title": "The Best Regular Expression for Email Address Verification",
+      "url": "https://medium.com/@python-javascript-php-html-css/the-best-regular-expression-for-email-address-verification-42bf83ba2885",
+      "snippet": "Sep 29, 2024 ·One aspect often overlooked is handlinginternationalizeddomainnames(IDNs) andemailaddresses with Unicode characters. Modern applications need to support users worldwide, and thus..."
+    }
+  ]
+}

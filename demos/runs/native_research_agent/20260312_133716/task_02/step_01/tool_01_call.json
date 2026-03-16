@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_2c848af2afe5449a857cf914",
-  "function": "search_web",
-  "arguments": {
-    "query": "backpressure mechanisms distributed systems Kafka gRPC TCP"
-  }
-}

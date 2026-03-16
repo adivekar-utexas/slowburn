@@ -1,0 +1,14 @@
+{
+  "step": 8,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "Python type hints best practices 2024 comprehensive guide"
+      },
+      "result_length": 1698
+    }
+  ],
+  "elapsed_seconds": 4.05757999420166
+}

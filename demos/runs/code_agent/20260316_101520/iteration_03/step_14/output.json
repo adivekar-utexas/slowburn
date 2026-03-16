@@ -1,0 +1,14 @@
+{
+  "step": 14,
+  "type": "tool_calls",
+  "tool_calls": [
+    {
+      "function": "search_web",
+      "arguments": {
+        "query": "python email regex pattern edge cases angle brackets trailing punctuation international domains"
+      },
+      "result_length": 1838
+    }
+  ],
+  "elapsed_seconds": 4.818881988525391
+}

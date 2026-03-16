@@ -1,9 +1,0 @@
-In the quest to reduce LLM inference costs in production, model distillation and quantization stand out as the most effective strategies when considering the cost-per-quality tradeoff. Model distillation involves training a smaller model (the "student") to replicate the behavior of a larger, more complex model (the "teacher"). This process not only reduces the model size significantly but also enhances inference speed while maintaining a high level of performance. For example, DistilBERT, a distilled version of BERT, retains 97% of the original BERT's language understanding while being 60% smaller and 3 times faster (Sanh et al., 2019).
-
-Quantization, on the other hand, reduces the precision of the model's weights from floating-point representations to lower bit-width formats like int8. This leads to substantial reductions in memory usage and computational requirements, often with minimal impact on accuracy (Gong et al., 2019). In practical terms, quantized models can result in up to a 4x speedup in inference time while occupying significantly less memory.
-
-While techniques like prompt caching and batching can also improve efficiency, they often depend on the specific use case and may not scale as effectively across diverse applications. Thus, prioritizing distillation and quantization yields the best overall balance of cost and performance. 
-
-**References:**
-- Sanh, V., et al. (2019). DistilBERT: A distilled version of BERT. arXiv preprint arXiv:1910.01108.
-- Gong, Y., et al. (2019). Differentiable Quantization for Post-Training Neural Network Compression. arXiv preprint arXiv:1904.00206.

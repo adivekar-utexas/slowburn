@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Typing Best Practices — typing documentation",
+      "url": "https://typing.python.org/en/latest/reference/best_practices.html",
+      "snippet": "Over time, some best practices have proven themselves as useful when working with type hints in Python."
+    },
+    {
+      "title": "A Comprehensive Guide to Python Type Hints",
+      "url": "https://codefinity.com/blog/A-Comprehensive-Guide-to-Python-Type-Hints",
+      "snippet": "... Python, known for its simplicity ... code. In this comprehensive guide, wedelve into the nuances of type hints in Python, illustrating how they can enhance your programming experience...."
+    },
+    {
+      "title": "typing — Support for type hints",
+      "url": "https://docs.python.org/3/library/typing.html",
+      "snippet": "Source code: Lib/typing.py This module provides runtime support for type hints. Consider the function below: The function surface_area_of_cube takes an argument expected to be an instance of float,..."
+    },
+    {
+      "title": "Type hints cheat sheet - mypy 1.19.1 documentation",
+      "url": "https://mypy.readthedocs.io/en/stable/cheat_sheet_py3.html",
+      "snippet": "#For most types, just use the name of the type in the annotation# Note that mypy can usually infer the type of a variable from its value, # so technically these annotations are redundant x: int = 1 x: float = 1.0 x: bool = True x: str = \"test\" x: bytes = b\"test\" # For collections on Python ..."
+    },
+    {
+      "title": "Python Type Hints: A Comprehensive Guide to Using Type Annotations in Python | Josh Di Mella | Software Engineer",
+      "url": "https://joshdimella.com/blog/python-typing-best-practices",
+      "snippet": "5 June 2023 -Python type hints offer a solution to this problem by providing static typing information to improve code quality and maintainability.In this blog post, we'll explore Python type hints, their usage, benefits, drawbacks, and best practices for using type annotations in your Python code."
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_e4db938f12e74e46a15ecc11",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python word counting Counter collections best practices"
+  }
+}

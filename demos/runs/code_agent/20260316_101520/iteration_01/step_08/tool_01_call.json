@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_35012eb7085c4ec48f5a75ef",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python email extraction regex best practices RFC 5322"
+  }
+}

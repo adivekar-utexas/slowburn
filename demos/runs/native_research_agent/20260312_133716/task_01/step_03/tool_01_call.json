@@ -1,7 +1,0 @@
-{
-  "tool_call_id": "call_78f6f8c202504c95a32ac291",
-  "function": "search_web",
-  "arguments": {
-    "query": "\"SWE-bench\" \"Tau-bench\" LLM agent cost analysis production dollars"
-  }
-}

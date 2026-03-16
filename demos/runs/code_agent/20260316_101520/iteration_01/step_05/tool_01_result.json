@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Performance comparison: counting words in Python, Go, C++, C,",
+      "url": "https://benhoyt.com/writings/count-words/",
+      "snippet": "Performancecomparison:countingwordsinPython, Go, C++, C, AWK, Forth, and Rust ...countingfrequencies of uniquewords), solve it in various ..."
+    },
+    {
+      "title": "Count Number of Word Occurrences in List Python",
+      "url": "https://stackabuse.com/count-number-of-word-occurrences-in-list-python/",
+      "snippet": "Countingthewordfrequency in a list ... Inpractice, you ll use Pandas/NumPy, thecount() function or aCounteras they re pretty convenient to use."
+    },
+    {
+      "title": "Counters In Python: Concepts And Use Cases",
+      "url": "https://pwskills.com/blog/counters-in-python/",
+      "snippet": "Even though theCounteris powerful, you might still use acounterinPythonfor loop if you need to perform complex logic whilecounting."
+    },
+    {
+      "title": "Finding the Frequency of Each Word in a String with Python: A",
+      "url": "https://www.bomberbot.com/python/finding-the-frequency-of-each-word-in-a-string-with-python-a-comprehensive-guide/",
+      "snippet": "Let s start with one of the most fundamental and efficient methods forcountingwordfrequencies – using aPythondictionary."
+    },
+    {
+      "title": "PythonDictionary.org - Master Python Dictionaries",
+      "url": "https://www.pythondictionary.org/",
+      "snippet": "Create a function thatcountsthe frequency of eachwordin a text string and returns the result as a dictionary where keys are the uniquewords..."
+    }
+  ]
+}

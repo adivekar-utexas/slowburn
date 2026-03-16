@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Python Counter: Count and Tally Elements with collections.Counter",
+      "url": "https://docs.kanaries.net/topics/Python/python-counter",
+      "snippet": "MasterPython'scollections.Counterto count elements, find most common items, and perform set operations. Complete guide with practical examples."
+    },
+    {
+      "title": "Python Collections Counter - GeeksforGeeks",
+      "url": "https://www.geeksforgeeks.org/python/counters-in-python-set-1/",
+      "snippet": "Counteris a subclass ofPython'sdict from thecollectionsmodule. It is mainly used to count the frequency of elements in an iterable (like lists, strings or tuples) or from a mapping (dictionary). It provides a clean and efficient way to tally items without writing extra loops and comes with helpful built-in methods."
+    },
+    {
+      "title": "Python's Counter: The Pythonic Way to Count Objects",
+      "url": "https://realpython.com/python-counter/",
+      "snippet": "Countingseveral repeated objects at once is a common problem in programming.Pythonoffers a bunch of tools and techniques you can use to approach this problem. However,Python'sCounterfromcollectionsprovides a clean, efficient, and Pythonic solution. This dictionary subclass provides efficientcountingcapabilities out of the box. UnderstandingCounterand how to use it efficiently is ..."
+    },
+    {
+      "title": "Python Word Count String Guide - PyTutorial",
+      "url": "https://pytutorial.com/python-word-count-string-guide/",
+      "snippet": "Learn how to countwordsin aPythonstring using multiple methods, including split(),collections.Counter, and regex, with clear examples for beginners."
+    },
+    {
+      "title": "Python `collections.Counter`: A Powerful Tool for Counting",
+      "url": "https://coderivers.org/blog/python-collectionscounter/",
+      "snippet": "Whether you are analyzing text,countingitems in a list, or working on data statistics, `collections.Counter` can be an invaluable tool. This blog post will delve into the fundamental concepts, usage methods, commonpractices, andbestpracticesrelated to `collections.Counter`."
+    }
+  ]
+}

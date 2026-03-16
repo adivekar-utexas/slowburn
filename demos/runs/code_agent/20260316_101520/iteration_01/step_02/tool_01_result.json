@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Web ScrapingEmailsusingPython",
+      "url": "https://scrapfly.io/blog/posts/how-to-scrape-emails-using-python",
+      "snippet": "Learn to scrapeemailaddresses from websites usingPythonwithregexpatterns, HTML parsing, and obfuscation handling techniques for contact dataextraction.What's thebestregexpattern foremailscraping? How do I validate and clean scrapedemailaddresses?"
+    },
+    {
+      "title": "Python: ValidateEmailAddress withRegularExpressions(RegEx)",
+      "url": "https://stackabuse.com/python-validate-email-address-with-regular-expressions-regex/",
+      "snippet": "ValidateEmailAddress withPython. The re module contains classes and methods to represent and work withRegularExpressionsinPython, sowe'llimport it into our script. The method that we will be using is re.fullmatch(pattern, string, flags)."
+    },
+    {
+      "title": "PythonRegexEmailExtraction- YouTube",
+      "url": "https://www.youtube.com/watch?v=hZhANx_Kit4",
+      "snippet": "In this Video, I have shown you guys how toextractemailfrom a text file usingPython. I'll give voiceover in the upcoming videos."
+    },
+    {
+      "title": "How toExtractEmailAddress from Text inPython",
+      "url": "https://appdividend.com/how-to-extract-email-address-from-text-in-python/",
+      "snippet": "emails= simple_regex_email_extraction(content). returnemailsexcept FileNotFoundError: print(f\"Error: File '{file_path}' not found.\")How toExtractString from Between Quotations inPython."
+    },
+    {
+      "title": "regex-ExtractingURL fromemailbody usingPython?",
+      "url": "https://stackoverflow.com/questions/33115111/extracting-url-from-email-body-using-python",
+      "snippet": "Before you useregex, or other more appropriate tools, toextractdata from theemail, you should first process theemailproperly with anemailparser. InPython, we haveemail.parser available out of the box"
+    }
+  ]
+}

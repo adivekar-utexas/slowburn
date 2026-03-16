@@ -1,0 +1,7 @@
+{
+  "tool_call_id": "call_a28250ab45b740c5a865d43d",
+  "function": "search_web",
+  "arguments": {
+    "query": "Python type hints best practices comprehensive guide"
+  }
+}

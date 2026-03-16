@@ -1,0 +1,5 @@
+{
+  "tool_call_id": "call_098ed6cb317645e1b62a4c5d",
+  "function": "list_dir",
+  "arguments": {}
+}

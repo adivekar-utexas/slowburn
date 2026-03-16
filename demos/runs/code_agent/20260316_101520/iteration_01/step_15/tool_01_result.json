@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "title": "Extracting email addresses using regular expressions in Python - GeeksforGeeks",
+      "url": "https://www.geeksforgeeks.org/python/extracting-email-addresses-using-regular-expressions-python/",
+      "snippet": "December 29, 2020 -Let suppose a situation in which you have to read some specific data like phone numbers, email addresses, dates, a collection of words etc. How can you do this in a very efficient manner?The Best way to do this by Regular Expression. Let take an example in which we have to find out only email from the given input by Regular Expression."
+    },
+    {
+      "title": "Email regex Python",
+      "url": "https://uibakery.io/regex-library/email-regex-python",
+      "snippet": "# Validate email address import re email_validate_pattern = r\"^\\S+@\\S+\\.\\S+$\" re.match(email_validate_pattern, \"hello@uibakery.io\") # Returns # Extract email addresses from a string extract_email_pattern = r\"\\S+@\\S+\\.\\S+\" re.findall(extract_email_pattern, 'You can reach me out at hello@uibakery.io and contact@uibakery.io') # returns ['hello@uibakery.io', 'contact@uibakery.io'] This Python regular expression will match 99% of valid email addresses and will not pass validation for email addresses that have, for instance:"
+    },
+    {
+      "title": "Extract Emails from Text in Python",
+      "url": "https://www.tutorialspoint.com/python_text_processing/python_extract_emails_from_text.htm",
+      "snippet": "February 21, 2009 -Discover effective methods to extract email addresses from any text using Python. Follow our examples for seamless implementation."
+    },
+    {
+      "title": "Extracting email addresses using regular expressions in Python",
+      "url": "https://www.tutorialspoint.com/Extracting-email-addresses-using-regular-expressions-in-Python",
+      "snippet": "June 20, 2020 -Email addresses are pretty complex and do not have a standard being followed all over the world which makes it difficult to identify an email in a regex. The RFC 5322 specifies the format of an email address. We'll use this format to"
+    },
+    {
+      "title": "Mastering Regular Expressions in Python — Part 1: A Gentle Introduction & Step-by-Step Guide to Email Extraction from Text | by Suresh Madhusanka Rodrigo | AI & QA Nexus | Medium",
+      "url": "https://medium.com/ai-qa-nexus/mastering-regular-expressions-in-python-part-1-a-gentle-introduction-step-by-step-guide-to-9513bc87de04",
+      "snippet": "August 16, 2025 -Learn Python regular expressions with a gentle intro and step-by-step guide to email extraction. Build robust regex patterns, understand real-world use cases, and master text parsing with practical, beginner-friendly examples."
+    }
+  ]
+}
