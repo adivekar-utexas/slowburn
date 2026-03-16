@@ -6,6 +6,7 @@ ImageDetailLevel = Literal["low", "high", "auto"]
 ToolChoiceOption = Literal["auto", "required", "none"]
 BackpressureNotify = Literal["ignore", "warn"]
 BudgetOverflowAction = Literal["warn", "error", "ignore"]
+PricingUnavailableAction = Literal["error", "warn", "ignore"]
 WindowAlias = Literal["daily", "hourly", "minutely"]
 ExecutionBackend = Literal["Asyncio", "Ray"]
 

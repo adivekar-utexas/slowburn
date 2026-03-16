@@ -18,6 +18,7 @@ Quick start::
 """
 
 import asyncio
+import math
 from typing import Any, Dict, List, Optional, Union
 
 from concurry import CallLimit, LimitSet, RateLimit
@@ -37,6 +38,7 @@ from .constants import (
     BackpressureNotify,
     BudgetOverflowAction,
     ExecutionBackend,
+    PricingUnavailableAction,
     ToolChoiceOption,
     WindowAlias,
 )
@@ -88,6 +90,7 @@ def create_llm(
     litellm_params: Optional[Dict[str, object]] = None,
     backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = _NO_ARG,
     on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = _NO_ARG,
+    on_pricing_unavailable: PricingUnavailableAction = "error",
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
 
@@ -180,12 +183,18 @@ def create_llm(
     if name is None:
         name = model
 
-    limits_list: List[Any] = [
-        CostLimit(budget_usd=budget_usd, window_seconds=window_seconds),
-        RateLimit(key="input_tokens", window_seconds=60, capacity=max_input_tpm),
-        RateLimit(key="output_tokens", window_seconds=60, capacity=max_output_tpm),
-        CallLimit(window_seconds=60, capacity=max_rpm),
-    ]
+    limits_list: List[Any] = []
+    if not math.isinf(budget_usd):
+        limits_list.append(
+            CostLimit(budget_usd=budget_usd, window_seconds=window_seconds),
+        )
+    limits_list.extend(
+        [
+            RateLimit(key="input_tokens", window_seconds=60, capacity=max_input_tpm),
+            RateLimit(key="output_tokens", window_seconds=60, capacity=max_output_tpm),
+            CallLimit(window_seconds=60, capacity=max_rpm),
+        ]
+    )
     if extra_limits is not None:
         limits_list.extend(extra_limits)
 
@@ -212,5 +221,6 @@ def create_llm(
         litellm_params=litellm_params if litellm_params is not None else {},
         backpressure_notify=backpressure_notify,
         on_budget_overflow=on_budget_overflow,
+        on_pricing_unavailable=on_pricing_unavailable,
     )
     return llm

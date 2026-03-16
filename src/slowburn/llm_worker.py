@@ -25,9 +25,15 @@ from morphic import Typed, validate
 from pydantic import Field
 
 from .config import _NO_ARG, _NO_ARG_TYPE, is_no_arg, slowburn_config
-from .constants import BackpressureNotify, BudgetOverflowAction, ImageDetailLevel, ToolChoiceOption
+from .constants import (
+    BackpressureNotify,
+    BudgetOverflowAction,
+    ImageDetailLevel,
+    PricingUnavailableAction,
+    ToolChoiceOption,
+)
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
-from .pricing import PricingCache
+from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
 litellm.suppress_debug_info = True
@@ -191,6 +197,16 @@ class SlowBurnLLM(Typed):
             '"warn" (default): proceed with the call but log a warning. '
             '"error": raise ValueError. "ignore": proceed silently. '
             "Defaults to slowburn_config.defaults.on_budget_overflow."
+        ),
+    )
+    on_pricing_unavailable: PricingUnavailableAction = Field(
+        default="error",
+        description=(
+            "Action when the model is not in litellm's pricing database. "
+            '"error" (default): raise ModelNotFoundError. '
+            '"warn": log a warning and skip cost tracking (set cost to 0). '
+            '"ignore": silently skip cost tracking. '
+            "This only matters when a CostLimit is active (finite budget)."
         ),
     )
 
@@ -404,20 +420,44 @@ class SlowBurnLLM(Typed):
             + defaults.output_token_estimate_overhead
         )
 
-        # 2. ESTIMATE cost in microdollars
-        estimated_cost = PricingCache.estimate_cost_microdollars(
-            self.model_name,
-            estimated_input_tokens,
-            estimated_output_tokens,
-        )
+        # 2. ESTIMATE cost in microdollars (only if a CostLimit is active)
+        has_cost_limit = False
+        try:
+            for limit_set in self.limits.limit_sets:
+                for lim in limit_set.limits:
+                    if getattr(lim, "key", None) == DEFAULT_COST_LIMIT_KEY:
+                        has_cost_limit = True
+                        break
+                if has_cost_limit:
+                    break
+        except (AttributeError, TypeError):
+            pass
+        estimated_cost: int = 0
+        if has_cost_limit:
+            try:
+                estimated_cost = PricingCache.estimate_cost_microdollars(
+                    self.model_name,
+                    estimated_input_tokens,
+                    estimated_output_tokens,
+                )
+            except ModelNotFoundError:
+                if self.on_pricing_unavailable == "error":
+                    raise
+                if self.on_pricing_unavailable == "warn":
+                    logger.warning(
+                        f"[{self.name}] Model '{self.model_name}' not in pricing database. "
+                        f"Cost estimation disabled; CostLimit will not enforce budget for this model."
+                    )
+                has_cost_limit = False
 
         # 3. ACQUIRE (blocks if budget/rate exhausted)
         requested: Dict[str, int] = {
             "input_tokens": estimated_input_tokens,
             "output_tokens": estimated_output_tokens,
             "call_count": 1,
-            DEFAULT_COST_LIMIT_KEY: estimated_cost,
         }
+        if has_cost_limit:
+            requested[DEFAULT_COST_LIMIT_KEY] = estimated_cost
 
         try:
             acquire_start = time.monotonic()
@@ -444,7 +484,8 @@ class SlowBurnLLM(Typed):
                 logger.warning(f"[{self.name}] Budget overflow: {overflow_message}")
 
             capped_requested = dict(requested)
-            capped_requested[DEFAULT_COST_LIMIT_KEY] = 1
+            if has_cost_limit:
+                capped_requested[DEFAULT_COST_LIMIT_KEY] = 1
             acquire_start = time.monotonic()
             context_manager = self.limits.acquire(requested=capped_requested)
             acquire_elapsed = time.monotonic() - acquire_start
@@ -477,24 +518,27 @@ class SlowBurnLLM(Typed):
                 actual_input = response.usage.prompt_tokens
                 actual_output = response.usage.completion_tokens
 
-                actual_cost = PricingCache.actual_cost_microdollars(
-                    response,
-                    model=self.model_name,
-                )
+                try:
+                    actual_cost = PricingCache.actual_cost_microdollars(
+                        response,
+                        model=self.model_name,
+                    )
+                except (ModelNotFoundError, Exception):
+                    actual_cost = 0
 
                 response_message = response.choices[0].message
                 response_text = response_message.content
                 tool_calls = response_message.tool_calls
 
                 if response_text is None and tool_calls is None:
-                    acquisition.update(
-                        usage={
-                            "input_tokens": actual_input,
-                            "output_tokens": actual_output,
-                            "call_count": 1,
-                            DEFAULT_COST_LIMIT_KEY: actual_cost,
-                        }
-                    )
+                    _usage = {
+                        "input_tokens": actual_input,
+                        "output_tokens": actual_output,
+                        "call_count": 1,
+                    }
+                    if has_cost_limit:
+                        _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
+                    acquisition.update(usage=_usage)
                     raise ValueError(
                         f"LLM returned null content with no tool calls "
                         f"(model={self.model_name}). "
@@ -545,37 +589,37 @@ class SlowBurnLLM(Typed):
                     try:
                         result = validator(response_text)
                     except ValueError:
-                        acquisition.update(
-                            usage={
-                                "input_tokens": actual_input,
-                                "output_tokens": actual_output,
-                                "call_count": 1,
-                                DEFAULT_COST_LIMIT_KEY: actual_cost,
-                            }
-                        )
+                        _usage = {
+                            "input_tokens": actual_input,
+                            "output_tokens": actual_output,
+                            "call_count": 1,
+                        }
+                        if has_cost_limit:
+                            _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
+                        acquisition.update(usage=_usage)
                         raise
                     except Exception as e:
-                        acquisition.update(
-                            usage={
-                                "input_tokens": actual_input,
-                                "output_tokens": actual_output,
-                                "call_count": 1,
-                                DEFAULT_COST_LIMIT_KEY: actual_cost,
-                            }
-                        )
+                        _usage = {
+                            "input_tokens": actual_input,
+                            "output_tokens": actual_output,
+                            "call_count": 1,
+                        }
+                        if has_cost_limit:
+                            _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
+                        acquisition.update(usage=_usage)
                         raise ValueError(f"Validator error: {e}") from e
                 else:
                     result = response_text
 
                 # 6. UPDATE limits with actuals (refunds unused budget)
-                acquisition.update(
-                    usage={
-                        "input_tokens": actual_input,
-                        "output_tokens": actual_output,
-                        "call_count": 1,
-                        DEFAULT_COST_LIMIT_KEY: actual_cost,
-                    }
-                )
+                _usage = {
+                    "input_tokens": actual_input,
+                    "output_tokens": actual_output,
+                    "call_count": 1,
+                }
+                if has_cost_limit:
+                    _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
+                acquisition.update(usage=_usage)
 
                 # 7. LOG to reporter
                 self._reporter.log_call(
@@ -597,14 +641,14 @@ class SlowBurnLLM(Typed):
             except ValueError:
                 raise
             except (asyncio.TimeoutError, BaseException):
-                acquisition.update(
-                    usage={
-                        "input_tokens": estimated_input_tokens,
-                        "output_tokens": 0,
-                        "call_count": 1,
-                        DEFAULT_COST_LIMIT_KEY: estimated_cost,
-                    }
-                )
+                _usage = {
+                    "input_tokens": estimated_input_tokens,
+                    "output_tokens": 0,
+                    "call_count": 1,
+                }
+                if has_cost_limit:
+                    _usage[DEFAULT_COST_LIMIT_KEY] = estimated_cost
+                acquisition.update(usage=_usage)
                 raise
 
     @validate
