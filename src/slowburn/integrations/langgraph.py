@@ -50,8 +50,7 @@ def _get_model_name(model: Any) -> str:
     if isinstance(name, str) and len(name) > 0:
         return name
     raise RuntimeError(
-        f"SlowBurnMiddleware: model_name on {type(model).__name__} is "
-        f"empty or not a string: {name!r}"
+        f"SlowBurnMiddleware: model_name on {type(model).__name__} is empty or not a string: {name!r}"
     )
 
 
@@ -104,7 +103,7 @@ class SlowBurnMiddleware:
                 )
             self.limit_set = LimitSet(
                 limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
-                mode="thread",
+                mode="Threads",
                 shared=True,
             )
         self.reporter = reporter if reporter is not None else CostReporter()
@@ -149,7 +148,11 @@ class SlowBurnMiddleware:
         est_input, est_output = estimate_input_tokens(total_text, max_tokens)
 
         with cost_controlled_call(
-            self.limit_set, self.reporter, model_name, est_input, est_output,
+            self.limit_set,
+            self.reporter,
+            model_name,
+            est_input,
+            est_output,
         ) as ctx:
             response = handler(request)
 
@@ -160,15 +163,9 @@ class SlowBurnMiddleware:
             usage_metadata = resp_message.usage_metadata
             if usage_metadata is not None:
                 if "input_tokens" not in usage_metadata:
-                    raise KeyError(
-                        f"usage_metadata missing 'input_tokens': "
-                        f"{list(usage_metadata.keys())}"
-                    )
+                    raise KeyError(f"usage_metadata missing 'input_tokens': {list(usage_metadata.keys())}")
                 if "output_tokens" not in usage_metadata:
-                    raise KeyError(
-                        f"usage_metadata missing 'output_tokens': "
-                        f"{list(usage_metadata.keys())}"
-                    )
+                    raise KeyError(f"usage_metadata missing 'output_tokens': {list(usage_metadata.keys())}")
                 actual_input = usage_metadata["input_tokens"]
                 actual_output = usage_metadata["output_tokens"]
             else:
@@ -176,7 +173,9 @@ class SlowBurnMiddleware:
                 actual_output = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
 
             actual_cost = PricingCache.estimate_cost_microdollars(
-                model_name, actual_input, actual_output,
+                model_name,
+                actual_input,
+                actual_output,
             )
             ctx.set_actual(
                 cost=max(actual_cost, 1),

@@ -104,7 +104,7 @@ def _resolve_image_inputs(images: List[ImageInput]) -> List[str]:
     return urls
 
 
-@worker(mode="asyncio")
+@worker(mode="Asyncio")
 class SlowBurnLLM(Typed):
     """AsyncIO worker for concurrent LLM calls with dollar-budget backpressure.
 
@@ -129,7 +129,7 @@ class SlowBurnLLM(Typed):
                     RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
                     CallLimit(window_seconds=60, capacity=500),
                 ],
-                mode="asyncio",
+                mode="Asyncio",
                 shared=True,
             ),
             num_retries={"call_llm": 3, "*": 0},
@@ -180,7 +180,7 @@ class SlowBurnLLM(Typed):
         default=_NO_ARG,
         description=(
             'When "warn", logs a warning if acquire() blocks longer than '
-            "backpressure_threshold_seconds. When \"ignore\", silent. "
+            'backpressure_threshold_seconds. When "ignore", silent. '
             "Defaults to slowburn_config.defaults.backpressure_notify."
         ),
     )
@@ -395,8 +395,14 @@ class SlowBurnLLM(Typed):
             tool_choice=resolved_tool_choice,
             use_default_image_token_count=True,
         )
-        estimated_input_tokens = int(base_input_tokens * defaults.input_token_estimate_multiplier) + defaults.input_token_estimate_overhead
-        estimated_output_tokens = int(self.max_tokens * defaults.output_token_estimate_multiplier) + defaults.output_token_estimate_overhead
+        estimated_input_tokens = (
+            int(base_input_tokens * defaults.input_token_estimate_multiplier)
+            + defaults.input_token_estimate_overhead
+        )
+        estimated_output_tokens = (
+            int(self.max_tokens * defaults.output_token_estimate_multiplier)
+            + defaults.output_token_estimate_overhead
+        )
 
         # 2. ESTIMATE cost in microdollars
         estimated_cost = PricingCache.estimate_cost_microdollars(

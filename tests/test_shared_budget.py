@@ -26,7 +26,7 @@ from .conftest import MOCK_MODEL_NAME
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_shared_limit_set(budget_usd: float = 1.0, mode: str = "thread") -> LimitSet:
+def _make_shared_limit_set(budget_usd: float = 1.0, mode: str = "Threads") -> LimitSet:
     """Create a shared LimitSet with CostLimit + token limits."""
     return LimitSet(
         limits=[
@@ -121,12 +121,12 @@ class TestSharedBudgetTwoWorkers:
         4. Verify both draw from the shared budget (try_acquire reflects total).
         """
         mock_acompletion.return_value = _make_acompletion_response(cost=0.001)
-        shared = _make_shared_limit_set(budget_usd=1.0, mode="asyncio")
+        shared = _make_shared_limit_set(budget_usd=1.0, mode="Asyncio")
 
-        w_a = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
+        w_a = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
             name="worker-a", model_name=MOCK_MODEL_NAME, api_key="test",
         )
-        w_b = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
+        w_b = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
             name="worker-b", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         try:
@@ -160,7 +160,7 @@ class TestSharedBudgetBackpressure:
         """
         shared = LimitSet(
             limits=[CostLimit(budget_usd=0.01, window_seconds=3600)],
-            mode="thread",
+            mode="Threads",
             shared=True,
         )
 
@@ -315,10 +315,10 @@ class TestCrossFrameworkSharedBudget:
         mock_acompletion.return_value = _make_acompletion_response(cost=0.001)
         mock_completion.return_value = _make_completion_response(cost=0.001)
 
-        shared = _make_shared_limit_set(budget_usd=1.0, mode="asyncio")
+        shared = _make_shared_limit_set(budget_usd=1.0, mode="Asyncio")
         reporter = CostReporter()
 
-        llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
+        llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
             name="native-llm", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         ag_client = SlowBurnModelClient(
@@ -345,10 +345,10 @@ class TestCrossFrameworkSharedBudget:
         """SlowBurnLLM and SlowBurnMiddleware sharing one LimitSet."""
         mock_acompletion.return_value = _make_acompletion_response(cost=0.001)
 
-        shared = _make_shared_limit_set(budget_usd=1.0, mode="asyncio")
+        shared = _make_shared_limit_set(budget_usd=1.0, mode="Asyncio")
         lg_reporter = CostReporter()
 
-        llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
+        llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
             name="native", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         mw = SlowBurnMiddleware(limit_set=shared, reporter=lg_reporter)
@@ -371,10 +371,10 @@ class TestCrossFrameworkSharedBudget:
         """SlowBurnLLM and SlowBurnCallbackHandler sharing one LimitSet."""
         mock_acompletion.return_value = _make_acompletion_response(cost=0.001)
 
-        shared = _make_shared_limit_set(budget_usd=1.0, mode="asyncio")
+        shared = _make_shared_limit_set(budget_usd=1.0, mode="Asyncio")
         lc_reporter = CostReporter()
 
-        llm = SlowBurnLLM.options(mode="asyncio", limits=shared).init(
+        llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
             name="native", model_name=MOCK_MODEL_NAME, api_key="test",
         )
         cb = SlowBurnCallbackHandler(limit_set=shared, reporter=lc_reporter)

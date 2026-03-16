@@ -90,7 +90,7 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
                 )
             self.limit_set = LimitSet(
                 limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
-                mode="thread",
+                mode="Threads",
                 shared=True,
             )
         self.reporter = reporter if reporter is not None else CostReporter()
@@ -150,12 +150,12 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
         total_text = " ".join(prompts)
         estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
         estimated_cost = PricingCache.estimate_cost_microdollars(
-            model_name, estimated_input, estimated_output,
+            model_name,
+            estimated_input,
+            estimated_output,
         )
 
-        acq = self.limit_set.acquire(
-            requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-        )
+        acq = self.limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
 
         run_key = str(run_id) if run_id is not None else "default"
         with self._lock:
@@ -198,7 +198,9 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
 
         if prompt_tokens is not None and completion_tokens is not None:
             actual_cost = PricingCache.estimate_cost_microdollars(
-                model_name, prompt_tokens, completion_tokens,
+                model_name,
+                prompt_tokens,
+                completion_tokens,
             )
         else:
             text = ""
@@ -207,7 +209,9 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
                     text += gen.text
             completion_tokens = max(int(len(text) / slowburn_config.defaults.chars_per_token), 1)
             actual_cost = PricingCache.estimate_cost_microdollars(
-                model_name, estimated_input, completion_tokens,
+                model_name,
+                estimated_input,
+                completion_tokens,
             )
 
         acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(actual_cost, 1)})

@@ -84,7 +84,7 @@ class SlowBurnDefaults(MutableTyped):
     image_detail: ImageDetailLevel = "auto"
 
     # Budget defaults
-    budget_usd: confloat(gt=0.0) = float('inf')
+    budget_usd: confloat(gt=0.0) = float("inf")
     default_window: WindowAlias = "daily"
     default_window_seconds: confloat(gt=0.0) = 86400.0
     max_rpm: conint(ge=1) = 500

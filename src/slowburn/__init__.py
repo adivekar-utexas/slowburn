@@ -76,7 +76,7 @@ def create_llm(
     max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     api_key: str = "",
-    backend: ExecutionBackend = "asyncio",
+    backend: ExecutionBackend = "Asyncio",
     name: Optional[str] = None,
     temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
     max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
@@ -112,7 +112,7 @@ def create_llm(
         max_output_tpm: Maximum output tokens per minute.
             Defaults to slowburn_config.defaults.max_output_tpm.
         api_key: API key string (or set via environment variable for the provider).
-        backend: Execution backend — "asyncio" (default) or "ray".
+        backend: Execution backend — "Asyncio" (default) or "Ray".
         name: Worker name for logging. Defaults to the model name.
         temperature: LLM sampling temperature.
             Defaults to slowburn_config.defaults.temperature.

@@ -27,7 +27,11 @@ def estimate_input_tokens(text: str, max_tokens: int) -> Tuple[int, int]:
     """Estimate input and output token counts from raw text.
 
     Applies the shared formula used across all SlowBurn integrations:
-    ``int(max(len(text) / chars_per_token, 1) * input_token_estimate_multiplier) + input_token_estimate_overhead``
+    ```
+    int(
+        max(len(text) / chars_per_token, 1
+    ) * input_token_estimate_multiplier) + input_token_estimate_overhead
+    ```
 
     All three constants are read from ``slowburn_config.defaults`` at call
     time, so they can be tuned globally via ``temp_config()``.
@@ -42,7 +46,9 @@ def estimate_input_tokens(text: str, max_tokens: int) -> Tuple[int, int]:
     """
     cfg = slowburn_config.defaults
     raw_estimate = max(int(len(text) / cfg.chars_per_token), 1)
-    estimated_input = int(raw_estimate * cfg.input_token_estimate_multiplier) + cfg.input_token_estimate_overhead
+    estimated_input = (
+        int(raw_estimate * cfg.input_token_estimate_multiplier) + cfg.input_token_estimate_overhead
+    )
     return estimated_input, max_tokens
 
 

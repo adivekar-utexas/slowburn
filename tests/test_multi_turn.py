@@ -55,7 +55,7 @@ def _build_worker(**init_kwargs: Any) -> SlowBurnLLM:
             RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
             CallLimit(window_seconds=60, capacity=500),
         ],
-        mode="asyncio",
+        mode="Asyncio",
         shared=True,
     )
     worker_defaults: Dict[str, Any] = dict(
@@ -68,7 +68,7 @@ def _build_worker(**init_kwargs: Any) -> SlowBurnLLM:
     )
     worker_defaults.update(init_kwargs)
     return SlowBurnLLM.options(
-        mode="asyncio",
+        mode="Asyncio",
         limits=limit_set,
         num_retries={"call_llm": 0, "*": 0},
     ).init(**worker_defaults)

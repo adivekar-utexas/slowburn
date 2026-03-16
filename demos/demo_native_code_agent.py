@@ -96,14 +96,17 @@ def main():
     runs_dir = Path(__file__).parent / "runs" / "code_agent" / timestamp
     runs_dir.mkdir(parents=True, exist_ok=True)
 
-    (runs_dir / "solution.py").write_text(SEED_CODE)
+    workspace_dir = runs_dir / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    (workspace_dir / "solution.py").write_text(SEED_CODE)
 
     print(f"{'=' * 70}")
     print("  Autonomous Code Agent (Real Tools)")
     print(f"  Model: {MODEL}")
     print(f"  Budget: ${BUDGET_USD:.2f}")
     print(f"  Max steps: {MAX_STEPS}")
-    print(f"  Workspace: {runs_dir}")
+    print(f"  Workspace: {workspace_dir}")
     print(f"{'=' * 70}")
 
     llm = create_llm(
@@ -116,7 +119,7 @@ def main():
     )
 
     def tool_executor(name, args):
-        return execute_tool_call(name, args, workspace=runs_dir)
+        return execute_tool_call(name, args, workspace=workspace_dir)
 
     tasks = [
         (
@@ -154,7 +157,7 @@ def main():
             max_steps=MAX_STEPS,
             verbose=True,
             log_dir=iter_log_dir,
-            workspace=runs_dir,
+            workspace=workspace_dir,
         )
 
         print(f"  Steps: {result['steps']}, Tool calls: {result['tool_calls']}")
@@ -171,19 +174,19 @@ def main():
     print()
     print(reporter.to_markdown())
 
-    print(f"\n  Files in workspace ({runs_dir}):")
-    for f in sorted(runs_dir.rglob("*")):
+    print(f"\n  Files in workspace ({workspace_dir}):")
+    for f in sorted(workspace_dir.rglob("*")):
         if f.is_file():
-            print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")
+            print(f"    {f.relative_to(workspace_dir)}: {f.stat().st_size} bytes")
 
-    solution = (runs_dir / "solution.py").read_text()
+    solution = (workspace_dir / "solution.py").read_text()
     print(f"\n  Final solution.py ({len(solution)} chars):")
     for line in solution.strip().split("\n")[:20]:
         print(f"    {line}")
     if solution.count("\n") > 20:
         print(f"    ... ({solution.count(chr(10)) - 20} more lines)")
 
-    changelog = runs_dir / "CHANGELOG.md"
+    changelog = workspace_dir / "CHANGELOG.md"
     if changelog.exists():
         print("\n  CHANGELOG.md:")
         for line in changelog.read_text().strip().split("\n")[:10]:

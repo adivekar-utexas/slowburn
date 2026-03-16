@@ -117,7 +117,7 @@ class TestCostLimitWithLimitSet:
         5. Verify the acquisition succeeds (no exception).
         """
         cl = CostLimit(budget_usd=5.0, window_seconds=3600)
-        ls = LimitSet(limits=[cl], mode="thread", shared=True)
+        ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 100_000}) as acq:
             acq.update(usage={DEFAULT_COST_LIMIT_KEY: 50_000})
@@ -131,7 +131,7 @@ class TestCostLimitWithLimitSet:
         3. Each should succeed without blocking.
         """
         cl = CostLimit(budget_usd=1.0, window_seconds=3600)
-        ls = LimitSet(limits=[cl], mode="thread", shared=True)
+        ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         for _ in range(10):
             with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 50_000}) as acq:
@@ -146,7 +146,7 @@ class TestCostLimitWithLimitSet:
         3. A subsequent try_acquire for more should fail (not successful).
         """
         cl = CostLimit(budget_usd=0.01, window_seconds=3600)
-        ls = LimitSet(limits=[cl], mode="thread", shared=True)
+        ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 10_000}) as acq:
             acq.update(usage={DEFAULT_COST_LIMIT_KEY: 10_000})
@@ -157,7 +157,7 @@ class TestCostLimitWithLimitSet:
     def test_works_with_asyncio_mode(self) -> None:
         """CostLimit should also work with asyncio-mode LimitSet."""
         cl = CostLimit(budget_usd=5.0, window_seconds=3600)
-        ls = LimitSet(limits=[cl], mode="asyncio", shared=True)
+        ls = LimitSet(limits=[cl], mode="Asyncio", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 1_000}) as acq:
             acq.update(usage={DEFAULT_COST_LIMIT_KEY: 500})
@@ -172,7 +172,7 @@ class TestCostLimitWithLimitSet:
         """
         cl = CostLimit(budget_usd=5.0, window_seconds=3600)
         tl = RateLimit(key="tokens", window_seconds=60, capacity=10_000)
-        ls = LimitSet(limits=[cl, tl], mode="thread", shared=True)
+        ls = LimitSet(limits=[cl, tl], mode="Threads", shared=True)
 
         with ls.acquire(
             requested={DEFAULT_COST_LIMIT_KEY: 1_000, "tokens": 500}

@@ -125,7 +125,7 @@ class TestAutoGenModelClient:
 
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=0.50, window_seconds=3600)],
-            mode="thread",
+            mode="Threads",
             shared=True,
         )
         ag_reporter = CostReporter()

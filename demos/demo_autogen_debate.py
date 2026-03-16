@@ -147,7 +147,7 @@ def main():
 
     limit_set = LimitSet(
         limits=[CostLimit(budget_usd=BUDGET_USD, window_seconds=WINDOW_SECONDS)],
-        mode="thread",
+        mode="Threads",
         shared=True,
     )
     reporter = CostReporter()

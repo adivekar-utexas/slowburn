@@ -64,7 +64,7 @@ class CostLimit(RateLimit):
 
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=5.0, window_seconds=86400)],
-            mode="asyncio",
+            mode="Asyncio",
             shared=True,
         )
 

@@ -41,7 +41,7 @@ def _make_client(
 ) -> tuple:
     limit_set = LimitSet(
         limits=[CostLimit(budget_usd=budget_usd, window_seconds=3600)],
-        mode="thread",
+        mode="Threads",
         shared=True,
     )
     reporter = CostReporter()
@@ -64,7 +64,7 @@ class TestSlowBurnModelClientInit:
         """Config without 'model' key should raise ValueError."""
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=1.0)],
-            mode="thread", shared=True,
+            mode="Threads", shared=True,
         )
         with pytest.raises(ValueError, match="requires 'model' in config"):
             SlowBurnModelClient(config={}, limit_set=limit_set)
@@ -72,7 +72,7 @@ class TestSlowBurnModelClientInit:
     def test_creates_own_reporter_if_none(self) -> None:
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=1.0)],
-            mode="thread", shared=True,
+            mode="Threads", shared=True,
         )
         client = SlowBurnModelClient(config={"model": MOCK_MODEL_NAME}, limit_set=limit_set, reporter=None)
         assert client.reporter is not None

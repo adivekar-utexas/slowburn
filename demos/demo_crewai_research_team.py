@@ -63,6 +63,7 @@ def main():
     sb = SlowBurnCrewAI(
         budget_usd=BUDGET_USD,
         window_seconds=WINDOW_SECONDS,
+        max_tokens=500,
         reporter=reporter,
     )
     sb.install()
@@ -149,7 +150,7 @@ def main():
             "each backed by a specific source URL."
         ),
         agent=analyst,
-        output_file=str(runs_dir / "facts.md"),
+        output_file="facts.md",
     )
 
     review_task = Task(
@@ -168,7 +169,7 @@ def main():
         ),
         agent=reviewer,
         context=[research_task],
-        output_file=str(runs_dir / "critique.md"),
+        output_file="critique.md",
     )
 
     brief_task = Task(
@@ -185,7 +186,7 @@ def main():
         ),
         agent=synthesizer,
         context=[research_task, review_task],
-        output_file=str(runs_dir / "executive_brief.md"),
+        output_file="executive_brief.md",
     )
 
     # --- Run the crew ---
@@ -198,7 +199,12 @@ def main():
     start_time = time.time()
     print("\n  Starting crew execution...\n")
 
-    result = crew.kickoff()
+    original_cwd = os.getcwd()
+    os.chdir(runs_dir)
+    try:
+        result = crew.kickoff()
+    finally:
+        os.chdir(original_cwd)
 
     total_elapsed = time.time() - start_time
 

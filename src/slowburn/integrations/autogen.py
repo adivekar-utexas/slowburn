@@ -15,7 +15,7 @@ Usage::
 
     limit_set = LimitSet(
         limits=[CostLimit(budget_usd=5.0, window_seconds=86400)],
-        mode="thread", shared=True,
+        mode="Threads", shared=True,
     )
     reporter = CostReporter()
 
@@ -71,8 +71,7 @@ class SlowBurnModelClient:
     ):
         if "model" not in config:
             raise ValueError(
-                "SlowBurnModelClient requires 'model' in config dict. "
-                "Got keys: " + str(list(config.keys()))
+                "SlowBurnModelClient requires 'model' in config dict. Got keys: " + str(list(config.keys()))
             )
         self.model = config["model"]
         self.litellm_model = self.model.removeprefix("slowburn/")
@@ -94,9 +93,7 @@ class SlowBurnModelClient:
         """
         messages = params.get("messages")
         if messages is None:
-            raise ValueError(
-                "SlowBurnModelClient.create(): 'messages' is required in params."
-            )
+            raise ValueError("SlowBurnModelClient.create(): 'messages' is required in params.")
         model = params.get("model", self.litellm_model)
         if model.startswith("slowburn/"):
             model = model.removeprefix("slowburn/")
@@ -109,22 +106,21 @@ class SlowBurnModelClient:
 
         # 1. ESTIMATE tokens and cost
         total_text = " ".join(
-            msg.get("content", "")
-            for msg in messages
-            if isinstance(msg.get("content"), str)
+            msg.get("content", "") for msg in messages if isinstance(msg.get("content"), str)
         )
         est_input, est_output = estimate_input_tokens(total_text, max_tokens)
 
         # 2. ACQUIRE → EXECUTE → UPDATE → LOG (via shared context manager)
         with cost_controlled_call(
-            self.limit_set, self.reporter, model, est_input, est_output,
+            self.limit_set,
+            self.reporter,
+            model,
+            est_input,
+            est_output,
         ) as ctx:
             # Pass through all params from AG2 to litellm, only overriding
             # model/messages/max_tokens which we already extracted above.
-            litellm_params = {
-                k: v for k, v in params.items()
-                if k not in ("messages", "model")
-            }
+            litellm_params = {k: v for k, v in params.items() if k not in ("messages", "model")}
             response = litellm.completion(
                 model=model,
                 messages=messages,

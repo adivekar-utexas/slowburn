@@ -71,7 +71,7 @@ class SlowBurnCrewAI:
                 )
             self.limit_set = LimitSet(
                 limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
-                mode="thread",
+                mode="Threads",
                 shared=True,
             )
         if max_tokens is None:
@@ -127,12 +127,12 @@ class SlowBurnCrewAI:
             estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
             estimated_cost = PricingCache.estimate_cost_microdollars(
-                model_name, estimated_input, estimated_output,
+                model_name,
+                estimated_input,
+                estimated_output,
             )
 
-            with limit_set.acquire(
-                requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-            ) as acq:
+            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
                 acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
 
         @crewai_event_bus.on(LLMCallCompletedEvent)
@@ -144,7 +144,9 @@ class SlowBurnCrewAI:
 
             est_output_tokens = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
             estimated_cost = PricingCache.estimate_cost_microdollars(
-                model_name, 0, est_output_tokens,
+                model_name,
+                0,
+                est_output_tokens,
             )
             reporter.log_call(
                 model=model_name,
@@ -176,9 +178,7 @@ class SlowBurnCrewAI:
                 return None
 
             total_text = " ".join(
-                msg.get("content", "")
-                for msg in context.messages
-                if isinstance(msg.get("content"), str)
+                msg.get("content", "") for msg in context.messages if isinstance(msg.get("content"), str)
             )
             max_tokens = context.llm.max_tokens
             if max_tokens is None:
@@ -189,12 +189,12 @@ class SlowBurnCrewAI:
             estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
             estimated_cost = PricingCache.estimate_cost_microdollars(
-                model_name, estimated_input, estimated_output,
+                model_name,
+                estimated_input,
+                estimated_output,
             )
 
-            with limit_set.acquire(
-                requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}
-            ) as acq:
+            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
                 acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
 
             return None
@@ -207,7 +207,9 @@ class SlowBurnCrewAI:
             response_text = context.response or ""
             est_output_tokens = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
             estimated_cost = PricingCache.estimate_cost_microdollars(
-                model_name, 0, est_output_tokens,
+                model_name,
+                0,
+                est_output_tokens,
             )
             reporter.log_call(
                 model=model_name,
@@ -228,6 +230,7 @@ class SlowBurnCrewAI:
         if self._backend == "hooks":
             try:
                 from crewai.hooks import clear_all_llm_call_hooks
+
                 clear_all_llm_call_hooks()
             except ImportError:
                 pass

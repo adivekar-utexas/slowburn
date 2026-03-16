@@ -47,11 +47,11 @@ def _build_worker(budget_usd: float = 10.0) -> SlowBurnLLM:
             RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
             CallLimit(window_seconds=60, capacity=500),
         ],
-        mode="asyncio",
+        mode="Asyncio",
         shared=True,
     )
     return SlowBurnLLM.options(
-        mode="asyncio",
+        mode="Asyncio",
         limits=limit_set,
         num_retries={"call_llm": 0, "*": 0},
     ).init(
@@ -299,11 +299,11 @@ class TestSlowBurnLLMLitellmParams:
                 RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
                 CallLimit(window_seconds=60, capacity=500),
             ],
-            mode="asyncio",
+            mode="Asyncio",
             shared=True,
         )
         w = SlowBurnLLM.options(
-            mode="asyncio",
+            mode="Asyncio",
             limits=limit_set,
         ).init(
             name="test",
@@ -354,11 +354,11 @@ class TestSlowBurnLLMLitellmParams:
                 RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
                 CallLimit(window_seconds=60, capacity=500),
             ],
-            mode="asyncio",
+            mode="Asyncio",
             shared=True,
         )
         w = SlowBurnLLM.options(
-            mode="asyncio",
+            mode="Asyncio",
             limits=limit_set,
         ).init(
             name="test",

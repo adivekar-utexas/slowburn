@@ -7,7 +7,7 @@ ToolChoiceOption = Literal["auto", "required", "none"]
 BackpressureNotify = Literal["ignore", "warn"]
 BudgetOverflowAction = Literal["warn", "error", "ignore"]
 WindowAlias = Literal["daily", "hourly", "minutely"]
-ExecutionBackend = Literal["asyncio", "ray"]
+ExecutionBackend = Literal["Asyncio", "Ray"]
 
 WINDOW_ALIAS_SECONDS = {
     "daily": 86400,
