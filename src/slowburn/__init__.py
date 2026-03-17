@@ -188,6 +188,8 @@ def create_llm(
         limits_list.append(
             CostLimit(budget_usd=budget_usd, window_seconds=window_seconds),
         )
+    # Rate limits use 60s windows (per-minute) regardless of the cost budget
+    # window. "rpm" = requests per minute, "tpm" = tokens per minute.
     limits_list.extend(
         [
             RateLimit(key="input_tokens", window_seconds=60, capacity=max_input_tpm),

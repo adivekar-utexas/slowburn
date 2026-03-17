@@ -69,7 +69,7 @@ class CostLimit(RateLimit):
         )
 
         # Inside an async worker method:
-        with self.limits.acquire(requested={"cost_usd": estimated_microdollars}) as acq:
+        async with await self.limits.async_acquire(requested={"cost_usd": estimated_microdollars}) as acq:
             response = await litellm.acompletion(...)
             acq.update(usage={"cost_usd": actual_microdollars})
     """

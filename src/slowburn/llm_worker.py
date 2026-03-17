@@ -450,7 +450,7 @@ class SlowBurnLLM(Typed):
                     )
                 has_cost_limit = False
 
-        # 3. ACQUIRE (blocks if budget/rate exhausted)
+        # 3. ACQUIRE (yields to event loop if budget/rate exhausted)
         requested: Dict[str, int] = {
             "input_tokens": estimated_input_tokens,
             "output_tokens": estimated_output_tokens,
@@ -461,7 +461,7 @@ class SlowBurnLLM(Typed):
 
         try:
             acquire_start = time.monotonic()
-            context_manager = self.limits.acquire(requested=requested)
+            context_manager = await self.limits.async_acquire(requested=requested)
             acquire_elapsed = time.monotonic() - acquire_start
         except ValueError as acquire_error:
             if "exceeds capacity" not in str(acquire_error):
@@ -487,7 +487,7 @@ class SlowBurnLLM(Typed):
             if has_cost_limit:
                 capped_requested[DEFAULT_COST_LIMIT_KEY] = 1
             acquire_start = time.monotonic()
-            context_manager = self.limits.acquire(requested=capped_requested)
+            context_manager = await self.limits.async_acquire(requested=capped_requested)
             acquire_elapsed = time.monotonic() - acquire_start
 
         if self.backpressure_notify == "warn":
@@ -500,7 +500,7 @@ class SlowBurnLLM(Typed):
                     f"~{estimated_input_tokens} input + {estimated_output_tokens} output tokens)"
                 )
 
-        with context_manager as acquisition:
+        async with context_manager as acquisition:
             try:
                 litellm.drop_params = True
                 response = await asyncio.wait_for(

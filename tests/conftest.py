@@ -1,7 +1,13 @@
 """Shared pytest fixtures and configuration for slowburn tests."""
 
 import os
+import sys
 from pathlib import Path
+
+# Use local concurry source if available (development convenience)
+_local_concurry = Path(__file__).parent.parent.parent / "concurry" / "src"
+if _local_concurry.is_dir():
+    sys.path.insert(0, str(_local_concurry))
 
 import pytest
 from dotenv import load_dotenv
