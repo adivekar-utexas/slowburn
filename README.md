@@ -101,9 +101,9 @@ tasks = [
 ]
 
 messages = []  # empty list enables multi-turn mode from the first call
-for prompt in prompts:
+for task in tasks:
     messages = llm.call_llm(
-        prompt,
+        task,
         system_prompt="You are a helpful research assistant.",
         history=messages,
     ).result()
@@ -224,7 +224,7 @@ from slowburn import slowburn_config, temp_config
 
 # Inspect defaults
 print(slowburn_config.defaults.temperature)    # 0.7
-print(slowburn_config.defaults.budget_usd)     # 5.0
+print(slowburn_config.defaults.budget_usd)     # inf
 
 # Override for a specific run (restores on exit)
 with temp_config(temperature=0.0, budget_usd=0.10):
