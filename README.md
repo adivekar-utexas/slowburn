@@ -357,11 +357,27 @@ pip install "slowburn[all]"
 git clone https://github.com/adivekar-utexas/slowburn.git
 cd slowburn
 pip install -e ".[dev]"
-
-# Set API key
-cp .env.example .env
-# Edit .env with your OPENROUTER_API_KEY or OPENAI_API_KEY
 ```
+
+### Setting up your API key
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` in a text editor and fill in your API key:
+
+```
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+
+SlowBurn works with any [LiteLLM](https://github.com/BerriAI/litellm)-compatible provider. [OpenRouter](https://openrouter.ai/) is recommended because it provides unified access to 100+ models with automatic provider failover.
+
+> **To run the demo:** An OpenRouter API key with $0.01 pre-loaded credit is available in the [supplementary materials Google Drive folder](https://drive.google.com/drive/folders/1_CWYaP9WP-p0X0_RVAJv1rrX-KNF2C1w?usp=drive_link). Look for the file named `SlowBurn-Demo-OpenRouter-key.txt`. 
+> 
+> **Please note, this key has no credit**: it can only be used to run one of the free models: [they are marked as "(free)" on openrouter.ai](https://openrouter.ai/models?max_price=0&order=most-popular). These have a daily limit of 1,000 requests. We recommend using `z-ai/glm-4.5-air:free` for the demo.
+> 
+> If you cannot access it, please contact the repository owner.
 
 ### Running tests
 
