@@ -80,6 +80,15 @@ class TestSlowBurnDefaults:
     def test_default_num_retries(self) -> None:
         assert slowburn_config.defaults.num_retries == 3
 
+    def test_default_retry_wait(self) -> None:
+        assert slowburn_config.defaults.retry_wait == 1.0
+
+    def test_default_retry_algorithm(self) -> None:
+        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+
+    def test_default_retry_jitter(self) -> None:
+        assert slowburn_config.defaults.retry_jitter == 0.3
+
     def test_default_backpressure_threshold(self) -> None:
         assert slowburn_config.defaults.backpressure_threshold_seconds == 0.5
 
@@ -118,6 +127,39 @@ class TestConfigMutability:
     def test_pydantic_validation_rejects_unknown_field(self) -> None:
         with pytest.raises(Exception):
             slowburn_config.defaults.nonexistent_field = 42
+
+    def test_retry_wait_rejects_zero(self) -> None:
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_wait = 0.0
+
+    def test_retry_wait_rejects_negative(self) -> None:
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_wait = -1.0
+
+    def test_retry_wait_accepts_small_positive(self) -> None:
+        slowburn_config.defaults.retry_wait = 0.001
+        assert slowburn_config.defaults.retry_wait == pytest.approx(0.001)
+
+    def test_retry_algorithm_accepts_valid_values(self) -> None:
+        for algo in ("Exponential", "Linear", "Constant"):
+            slowburn_config.defaults.retry_algorithm = algo
+            assert slowburn_config.defaults.retry_algorithm == algo
+
+    def test_retry_algorithm_rejects_invalid(self) -> None:
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_algorithm = "Quadratic"
+
+    def test_retry_jitter_bounds(self) -> None:
+        slowburn_config.defaults.retry_jitter = 0.0
+        assert slowburn_config.defaults.retry_jitter == 0.0
+        slowburn_config.defaults.retry_jitter = 1.0
+        assert slowburn_config.defaults.retry_jitter == 1.0
+
+    def test_retry_jitter_rejects_out_of_bounds(self) -> None:
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_jitter = -0.1
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_jitter = 1.1
 
 
 # ===========================================================================
@@ -170,6 +212,21 @@ class TestTempConfig:
             assert slowburn_config.defaults.chars_per_token == 4.0
         assert slowburn_config.defaults.chars_per_token == 3.0
 
+    def test_override_retry_wait(self) -> None:
+        with temp_config(retry_wait=5.0):
+            assert slowburn_config.defaults.retry_wait == 5.0
+        assert slowburn_config.defaults.retry_wait == 1.0
+
+    def test_override_retry_algorithm(self) -> None:
+        with temp_config(retry_algorithm="Linear"):
+            assert slowburn_config.defaults.retry_algorithm == "Linear"
+        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+
+    def test_override_retry_jitter(self) -> None:
+        with temp_config(retry_jitter=0.0):
+            assert slowburn_config.defaults.retry_jitter == 0.0
+        assert slowburn_config.defaults.retry_jitter == 0.3
+
 
 # ===========================================================================
 # TestNoArgSentinel: verify _NO_ARG semantics
@@ -217,6 +274,15 @@ class TestResetToDefaults:
         assert slowburn_config.defaults.temperature == 0.7
         assert slowburn_config.defaults.max_tokens == 1000
         assert slowburn_config.defaults.chars_per_token == 3.0
+
+    def test_reset_restores_retry_fields(self) -> None:
+        slowburn_config.defaults.retry_wait = 5.0
+        slowburn_config.defaults.retry_algorithm = "Linear"
+        slowburn_config.defaults.retry_jitter = 0.0
+        slowburn_config.reset_to_defaults()
+        assert slowburn_config.defaults.retry_wait == 1.0
+        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+        assert slowburn_config.defaults.retry_jitter == 0.3
 
 
 # ===========================================================================

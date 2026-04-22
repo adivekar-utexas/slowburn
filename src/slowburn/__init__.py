@@ -19,8 +19,9 @@ Quick start::
 
 import asyncio
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
+import litellm
 from concurry import CallLimit, LimitSet, RateLimit
 from morphic import validate
 
@@ -50,6 +51,7 @@ from .reporter import CostReporter
 
 __all__: List[str] = [
     "create_llm",
+    "_DEFAULT_RETRY_ON",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
@@ -69,6 +71,19 @@ __all__: List[str] = [
 ]
 
 
+_DEFAULT_RETRY_ON: List[Type[BaseException]] = [
+    ValueError,
+    asyncio.TimeoutError,
+    litellm.Timeout,
+    litellm.APIError,
+    litellm.APIConnectionError,
+    litellm.BadRequestError,
+    litellm.InternalServerError,
+    litellm.RateLimitError,
+    litellm.ServiceUnavailableError,
+]
+
+
 @validate
 def create_llm(
     model: str,
@@ -84,6 +99,10 @@ def create_llm(
     max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     num_retries: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    retry_on: Union[List[Type[BaseException]], _NO_ARG_TYPE] = _NO_ARG,
+    retry_wait: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+    retry_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+    retry_jitter: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     tools: Optional[List[Dict[str, object]]] = None,
     tool_choice: Optional[ToolChoiceOption] = None,
     extra_limits: Optional[List[object]] = None,
@@ -125,6 +144,19 @@ def create_llm(
             Defaults to slowburn_config.defaults.timeout.
         num_retries: Number of retries on transient errors.
             Defaults to slowburn_config.defaults.num_retries.
+        retry_on: Exception types that trigger a retry on ``call_llm``.
+            Defaults to a comprehensive list of litellm transient errors:
+            ``litellm.APIError``, ``litellm.APIConnectionError``,
+            ``litellm.Timeout``, ``litellm.RateLimitError``,
+            ``litellm.InternalServerError``, ``litellm.ServiceUnavailableError``,
+            ``litellm.BadRequestError``, ``asyncio.TimeoutError``, ``ValueError``.
+            Pass an explicit list to restrict or extend this set.
+        retry_wait: Base wait time in seconds between retries.
+            Defaults to slowburn_config.defaults.retry_wait (1.0s).
+        retry_algorithm: Backoff strategy — "Exponential", "Linear", or "Constant".
+            Defaults to slowburn_config.defaults.retry_algorithm ("Exponential").
+        retry_jitter: Jitter factor in [0, 1] added to each retry wait.
+            Defaults to slowburn_config.defaults.retry_jitter (0.3).
         tools: Default tool schemas (OpenAI format) for all calls.
             Pass a list of tool dicts. Overridable per-call via
             ``call_llm(tools=...)``.
@@ -174,6 +206,14 @@ def create_llm(
         timeout = defaults.timeout
     if is_no_arg(num_retries):
         num_retries = defaults.num_retries
+    if is_no_arg(retry_on):
+        retry_on = _DEFAULT_RETRY_ON
+    if is_no_arg(retry_wait):
+        retry_wait = defaults.retry_wait
+    if is_no_arg(retry_algorithm):
+        retry_algorithm = defaults.retry_algorithm
+    if is_no_arg(retry_jitter):
+        retry_jitter = defaults.retry_jitter
 
     if isinstance(window, str):
         window_seconds = WINDOW_ALIAS_SECONDS[window.lower()]
@@ -210,7 +250,10 @@ def create_llm(
         mode=backend,
         limits=limit_set,
         num_retries={"call_llm": num_retries, "*": 0},
-        retry_on={"call_llm": [ValueError, asyncio.TimeoutError], "*": []},
+        retry_on={"call_llm": retry_on, "*": []},
+        retry_wait={"call_llm": retry_wait, "*": 1},
+        retry_algorithm={"call_llm": retry_algorithm, "*": "Exponential"},
+        retry_jitter={"call_llm": retry_jitter, "*": 0},
     ).init(
         name=name,
         model_name=model,

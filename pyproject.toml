@@ -36,8 +36,8 @@ keywords = [
 ]
 dependencies = [
     "concurry>=0.13.0",
-    "litellm>=1.0.0",
-    "morphic>=0.1.0",
+    "litellm>=1.82.0",
+    "morphic>=0.2.1",
     "pydantic>=2.0.0",
     "python-dotenv>=1.2.2",
 ]
