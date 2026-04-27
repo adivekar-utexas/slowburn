@@ -70,16 +70,16 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.window_seconds == 86400.0
 
     def test_default_max_rpm(self) -> None:
-        assert slowburn_config.defaults.max_rpm == 500
+        assert slowburn_config.defaults.max_rpm == 1_000
 
     def test_default_max_input_tpm(self) -> None:
-        assert slowburn_config.defaults.max_input_tpm == 1_000_000
+        assert slowburn_config.defaults.max_input_tpm == 10_000_000
 
     def test_default_max_output_tpm(self) -> None:
-        assert slowburn_config.defaults.max_output_tpm == 200_000
+        assert slowburn_config.defaults.max_output_tpm == 1_000_000
 
     def test_default_num_retries(self) -> None:
-        assert slowburn_config.defaults.num_retries == 3
+        assert slowburn_config.defaults.num_retries == 5
 
     def test_default_retry_wait(self) -> None:
         assert slowburn_config.defaults.retry_wait == 1.0
