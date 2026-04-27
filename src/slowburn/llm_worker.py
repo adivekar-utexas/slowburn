@@ -13,6 +13,7 @@ crashing with an error.
 
 import asyncio
 import base64
+import hashlib
 import logging
 import mimetypes
 import time
@@ -22,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 import litellm
 from concurry import async_gather, worker
 from morphic import Typed, validate
+from morphic.string import format_exception_msg
 from pydantic import Field
 
 from .config import _NO_ARG, _NO_ARG_TYPE, is_no_arg, slowburn_config
@@ -38,12 +40,21 @@ from .reporter import CostReporter
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
+litellm.success_callback = []   # SlowBurn tracks cost internally; litellm callbacks unused
+litellm.failure_callback = []   # Clearing these also prevents the LoggingWorker race condition
+                                # under high concurrency (litellm bug: coroutine reuse in queue)
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("litellm").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+def _hash_prompt(prompt: Any) -> str:
+    """Short hash of the prompt for log correlation."""
+    text = str(prompt)
+    return hashlib.sha256(text.encode()).hexdigest()[:8]
 
 
 def _estimate_tokens(text: str) -> int:
@@ -459,6 +470,14 @@ class SlowBurnLLM(Typed):
         if has_cost_limit:
             requested[DEFAULT_COST_LIMIT_KEY] = estimated_cost
 
+        call_t0 = time.monotonic()
+        if verbosity >= 3:
+            prompt_hash: str = _hash_prompt(prompt)
+            print(
+                f"[{self.name}] [Prompt={prompt_hash}] ACQUIRE_WAIT | "
+                f"est_in={estimated_input_tokens} est_out={estimated_output_tokens}"
+            )
+
         try:
             acquire_start = time.monotonic()
             context_manager = await self.limits.async_acquire(requested=requested)
@@ -501,6 +520,13 @@ class SlowBurnLLM(Typed):
                 )
 
         async with context_manager as acquisition:
+            if verbosity >= 3:
+                print(
+                    f"[{self.name}] [Prompt={prompt_hash}] ACQUIRED     | "
+                    f"wait={time.monotonic() - call_t0:.2f}s | sending request..."
+                )
+                api_t0 = time.monotonic()
+
             try:
                 litellm.drop_params = True
                 response = await asyncio.wait_for(
@@ -517,6 +543,13 @@ class SlowBurnLLM(Typed):
 
                 actual_input = response.usage.prompt_tokens
                 actual_output = response.usage.completion_tokens
+
+                if verbosity >= 3:
+                    print(
+                        f"[{self.name}] [Prompt={prompt_hash}] RESPONSE     | "
+                        f"api={time.monotonic() - api_t0:.2f}s total={time.monotonic() - call_t0:.2f}s | "
+                        f"in={actual_input} out={actual_output}"
+                    )
 
                 try:
                     actual_cost = PricingCache.actual_cost_microdollars(
@@ -638,9 +671,21 @@ class SlowBurnLLM(Typed):
 
                 return result
 
-            except ValueError:
+            except ValueError as ve:
+                if verbosity >= 3:
+                    print(
+                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                        f"ValueError at {time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
+                        f"  {format_exception_msg(ve)}"
+                    )
                 raise
-            except (asyncio.TimeoutError, BaseException):
+            except (asyncio.TimeoutError, BaseException) as exc:
+                if verbosity >= 3:
+                    print(
+                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                        f"{type(exc).__name__} at {time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
+                        f"  {format_exception_msg(exc)}"
+                    )
                 _usage = {
                     "input_tokens": estimated_input_tokens,
                     "output_tokens": 0,
