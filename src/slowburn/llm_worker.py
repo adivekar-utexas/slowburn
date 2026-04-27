@@ -683,7 +683,8 @@ class SlowBurnLLM(Typed):
                 if verbosity >= 3:
                     print(
                         f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
-                        f"{type(exc).__name__} at {time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
+                        f"{type(exc).__name__} at "
+                        f"{time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
                         f"  {format_exception_msg(exc)}"
                     )
                 _usage = {
