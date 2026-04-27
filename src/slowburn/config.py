@@ -13,8 +13,9 @@ for LLM parameters (e.g., ``temperature=None`` means "let the model decide").
 """
 
 from contextlib import contextmanager
-from typing import Any, Generator, Literal, Optional
+from typing import Any, Generator, Optional
 
+from concurry import RateLimitAlgorithm, RetryAlgorithm
 from morphic import MutableTyped
 from pydantic import ConfigDict, Field, confloat, conint
 
@@ -85,15 +86,28 @@ class SlowBurnDefaults(MutableTyped):
 
     # Budget defaults
     budget_usd: confloat(gt=0.0) = float("inf")
-    default_window: WindowAlias = "daily"
-    default_window_seconds: confloat(gt=0.0) = 86400.0
-    max_rpm: conint(ge=1) = 500
-    max_input_tpm: conint(ge=1) = 1_000_000
-    max_output_tpm: conint(ge=1) = 200_000
-    num_retries: conint(ge=0) = 3
+    window: WindowAlias = "daily"
+    window_seconds: confloat(gt=0.0) = 86400.0
+    max_rpm: conint(ge=1) = 1_000
+    max_input_tpm: conint(ge=1) = 10_000_000
+    max_output_tpm: conint(ge=1) = 1_000_000
+    num_retries: conint(ge=0) = 5
+
+    # Generic transient-error retry backoff. This is intentionally short because
+    # request-rate pacing is enforced separately by rate_limit_algorithm. Rate
+    # limit errors need provider-aware cooldown (for example Retry-After), not a
+    # globally larger base wait for every transient failure.
     retry_wait: confloat(gt=0.0) = 1.0
-    retry_algorithm: Literal["Exponential", "Linear", "Constant"] = "Exponential"
+    retry_algorithm: RetryAlgorithm = RetryAlgorithm.Exponential
     retry_jitter: confloat(ge=0.0, le=1.0) = 0.3
+
+    # Rate-limit algorithm for the per-minute CallLimit and token RateLimits
+    # GCRA enforces a steady emission interval (Theoretical Arrival Time)
+    # so request *starts* are spaced ~60/max_rpm apart. This is robust to
+    # heterogeneous call durations because GCRA tracks start times only and
+    # avoids the bursty edge cases of SlidingWindow when providers count
+    # failed (429) requests against the same window.
+    rate_limit_algorithm: RateLimitAlgorithm = RateLimitAlgorithm.GCRA
 
     # Backpressure
     backpressure_threshold_seconds: confloat(ge=0.0) = 0.5

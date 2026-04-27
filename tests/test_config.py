@@ -13,16 +13,16 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-from .conftest import MOCK_MODEL_NAME
+from concurry import RetryAlgorithm
 
 from slowburn.config import (
-    SlowBurnDefaults,
     _NO_ARG,
     is_no_arg,
     slowburn_config,
     temp_config,
 )
+
+from .conftest import MOCK_MODEL_NAME
 
 
 @pytest.fixture(autouse=True)
@@ -36,6 +36,7 @@ def _reset_config():
 # ===========================================================================
 # TestSlowBurnDefaults: verify all defaults match expected values
 # ===========================================================================
+
 
 class TestSlowBurnDefaults:
     def test_default_chars_per_token(self) -> None:
@@ -63,10 +64,10 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.image_tokens_high_detail == 1000
 
     def test_default_budget_usd(self) -> None:
-        assert slowburn_config.defaults.budget_usd == float('inf')
+        assert slowburn_config.defaults.budget_usd == float("inf")
 
     def test_default_window_seconds(self) -> None:
-        assert slowburn_config.defaults.default_window_seconds == 86400.0
+        assert slowburn_config.defaults.window_seconds == 86400.0
 
     def test_default_max_rpm(self) -> None:
         assert slowburn_config.defaults.max_rpm == 500
@@ -84,7 +85,7 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.retry_wait == 1.0
 
     def test_default_retry_algorithm(self) -> None:
-        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+        assert slowburn_config.defaults.retry_algorithm == RetryAlgorithm.Exponential
 
     def test_default_retry_jitter(self) -> None:
         assert slowburn_config.defaults.retry_jitter == 0.3
@@ -102,6 +103,7 @@ class TestSlowBurnDefaults:
 # ===========================================================================
 # TestConfigMutability: runtime mutation with validation
 # ===========================================================================
+
 
 class TestConfigMutability:
     def test_config_is_mutable(self) -> None:
@@ -141,13 +143,17 @@ class TestConfigMutability:
         assert slowburn_config.defaults.retry_wait == pytest.approx(0.001)
 
     def test_retry_algorithm_accepts_valid_values(self) -> None:
-        for algo in ("Exponential", "Linear", "Constant"):
+        for algo in (RetryAlgorithm.Exponential, RetryAlgorithm.Linear, RetryAlgorithm.Fibonacci):
             slowburn_config.defaults.retry_algorithm = algo
             assert slowburn_config.defaults.retry_algorithm == algo
 
-    def test_retry_algorithm_rejects_invalid(self) -> None:
+    def test_retry_algorithm_rejects_invalid_string(self) -> None:
         with pytest.raises(Exception):
             slowburn_config.defaults.retry_algorithm = "Quadratic"
+
+    def test_retry_algorithm_rejects_nonexistent(self) -> None:
+        with pytest.raises(Exception):
+            slowburn_config.defaults.retry_algorithm = "Constant"
 
     def test_retry_jitter_bounds(self) -> None:
         slowburn_config.defaults.retry_jitter = 0.0
@@ -165,6 +171,7 @@ class TestConfigMutability:
 # ===========================================================================
 # TestTempConfig: scoped overrides
 # ===========================================================================
+
 
 class TestTempConfig:
     def test_basic_override(self) -> None:
@@ -218,9 +225,9 @@ class TestTempConfig:
         assert slowburn_config.defaults.retry_wait == 1.0
 
     def test_override_retry_algorithm(self) -> None:
-        with temp_config(retry_algorithm="Linear"):
-            assert slowburn_config.defaults.retry_algorithm == "Linear"
-        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+        with temp_config(retry_algorithm=RetryAlgorithm.Linear):
+            assert slowburn_config.defaults.retry_algorithm == RetryAlgorithm.Linear
+        assert slowburn_config.defaults.retry_algorithm == RetryAlgorithm.Exponential
 
     def test_override_retry_jitter(self) -> None:
         with temp_config(retry_jitter=0.0):
@@ -231,6 +238,7 @@ class TestTempConfig:
 # ===========================================================================
 # TestNoArgSentinel: verify _NO_ARG semantics
 # ===========================================================================
+
 
 class TestNoArgSentinel:
     def test_no_arg_is_not_none(self) -> None:
@@ -256,6 +264,7 @@ class TestNoArgSentinel:
 
     def test_no_arg_is_singleton(self) -> None:
         from slowburn.config import _NoArgType
+
         instance_a = _NoArgType()
         instance_b = _NoArgType()
         assert instance_a is instance_b
@@ -264,6 +273,7 @@ class TestNoArgSentinel:
 # ===========================================================================
 # TestResetToDefaults
 # ===========================================================================
+
 
 class TestResetToDefaults:
     def test_reset_restores_all(self) -> None:
@@ -277,17 +287,18 @@ class TestResetToDefaults:
 
     def test_reset_restores_retry_fields(self) -> None:
         slowburn_config.defaults.retry_wait = 5.0
-        slowburn_config.defaults.retry_algorithm = "Linear"
+        slowburn_config.defaults.retry_algorithm = RetryAlgorithm.Linear
         slowburn_config.defaults.retry_jitter = 0.0
         slowburn_config.reset_to_defaults()
         assert slowburn_config.defaults.retry_wait == 1.0
-        assert slowburn_config.defaults.retry_algorithm == "Exponential"
+        assert slowburn_config.defaults.retry_algorithm == RetryAlgorithm.Exponential
         assert slowburn_config.defaults.retry_jitter == 0.3
 
 
 # ===========================================================================
 # TestConfigAffectsComponents: verify config flows into consuming code
 # ===========================================================================
+
 
 class TestConfigAffectsComponents:
     def test_config_affects_estimate_input_tokens(self) -> None:
@@ -315,7 +326,7 @@ class TestConfigAffectsComponents:
         default_limit = CostLimit(budget_usd=1.0)
         assert default_limit.window_seconds == 86400.0
 
-        with temp_config(default_window_seconds=3600.0):
+        with temp_config(window_seconds=3600.0):
             hourly_limit = CostLimit(budget_usd=1.0)
             assert hourly_limit.window_seconds == 3600.0
 
@@ -323,7 +334,7 @@ class TestConfigAffectsComponents:
         """Explicit window_seconds overrides the config default."""
         from slowburn.limits import CostLimit
 
-        with temp_config(default_window_seconds=3600.0):
+        with temp_config(window_seconds=3600.0):
             explicit_limit = CostLimit(budget_usd=1.0, window_seconds=7200.0)
             assert explicit_limit.window_seconds == 7200.0
 
@@ -336,7 +347,9 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
+            usage=usage,
+            choices=[choice],
+            model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 
@@ -360,7 +373,9 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
+            usage=usage,
+            choices=[choice],
+            model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 
@@ -382,7 +397,9 @@ class TestConfigAffectsComponents:
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)
         mock_acompletion.return_value = SimpleNamespace(
-            usage=usage, choices=[choice], model=MOCK_MODEL_NAME,
+            usage=usage,
+            choices=[choice],
+            model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
 

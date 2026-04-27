@@ -82,7 +82,7 @@ class CostLimit(RateLimit):
         **kwargs,
     ):
         if window_seconds is None:
-            window_seconds = slowburn_config.defaults.default_window_seconds
+            window_seconds = slowburn_config.defaults.window_seconds
         capacity_microdollars = dollars_to_microdollars(budget_usd)
         super().__init__(
             key=key,

@@ -22,7 +22,7 @@ import math
 from typing import Any, Dict, List, Optional, Type, Union
 
 import litellm
-from concurry import CallLimit, LimitSet, RateLimit
+from concurry import CallLimit, LimitSet, RateLimit, RateLimitAlgorithm, RetryAlgorithm
 from morphic import validate
 
 from .config import (
@@ -92,6 +92,7 @@ def create_llm(
     max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    rate_limit_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
     api_key: str = "",
     backend: ExecutionBackend = "Asyncio",
     name: Optional[str] = None,
@@ -101,7 +102,7 @@ def create_llm(
     num_retries: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     retry_on: Union[List[Type[BaseException]], _NO_ARG_TYPE] = _NO_ARG,
     retry_wait: Union[float, _NO_ARG_TYPE] = _NO_ARG,
-    retry_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+    retry_algorithm: Union[str, RetryAlgorithm, _NO_ARG_TYPE] = _NO_ARG,
     retry_jitter: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     tools: Optional[List[Dict[str, object]]] = None,
     tool_choice: Optional[ToolChoiceOption] = None,
@@ -126,13 +127,15 @@ def create_llm(
         budget_usd: Maximum dollar spend per window.
             Defaults to slowburn_config.defaults.budget_usd.
         window: Budget window — "daily", "hourly", "minutely", or seconds (int/float).
-            Defaults to slowburn_config.defaults.default_window.
+            Defaults to slowburn_config.defaults.window.
         max_rpm: Maximum requests per minute (CallLimit capacity).
             Defaults to slowburn_config.defaults.max_rpm.
         max_input_tpm: Maximum input tokens per minute.
             Defaults to slowburn_config.defaults.max_input_tpm.
         max_output_tpm: Maximum output tokens per minute.
             Defaults to slowburn_config.defaults.max_output_tpm.
+        rate_limit_algorithm: Concurry rate-limit algorithm for per-minute call and token limits.
+            Defaults to slowburn_config.defaults.rate_limit_algorithm ("GCRA").
         api_key: API key string (or set via environment variable for the provider).
         backend: Execution backend — "Asyncio" (default) or "Ray".
         name: Worker name for logging. Defaults to the model name.
@@ -151,10 +154,11 @@ def create_llm(
             ``litellm.InternalServerError``, ``litellm.ServiceUnavailableError``,
             ``litellm.BadRequestError``, ``asyncio.TimeoutError``, ``ValueError``.
             Pass an explicit list to restrict or extend this set.
-        retry_wait: Base wait time in seconds between retries.
-            Defaults to slowburn_config.defaults.retry_wait (1.0s).
-        retry_algorithm: Backoff strategy — "Exponential", "Linear", or "Constant".
-            Defaults to slowburn_config.defaults.retry_algorithm ("Exponential").
+        retry_wait: Base wait time in seconds for generic transient-error retries.
+            Defaults to slowburn_config.defaults.retry_wait (1.0s). Request-rate
+            pacing is handled separately by ``rate_limit_algorithm``.
+        retry_algorithm: Backoff strategy — "Exponential", "Linear", or "Fibonacci".
+            Defaults to slowburn_config.defaults.retry_algorithm (Exponential).
         retry_jitter: Jitter factor in [0, 1] added to each retry wait.
             Defaults to slowburn_config.defaults.retry_jitter (0.3).
         tools: Default tool schemas (OpenAI format) for all calls.
@@ -191,13 +195,16 @@ def create_llm(
     if is_no_arg(budget_usd):
         budget_usd = defaults.budget_usd
     if is_no_arg(window):
-        window = defaults.default_window
+        window = defaults.window
     if is_no_arg(max_rpm):
         max_rpm = defaults.max_rpm
     if is_no_arg(max_input_tpm):
         max_input_tpm = defaults.max_input_tpm
     if is_no_arg(max_output_tpm):
         max_output_tpm = defaults.max_output_tpm
+    if is_no_arg(rate_limit_algorithm):
+        rate_limit_algorithm = defaults.rate_limit_algorithm
+    rate_limit_algorithm: RateLimitAlgorithm = RateLimitAlgorithm(rate_limit_algorithm)
     if is_no_arg(temperature):
         temperature = defaults.temperature
     if is_no_arg(max_tokens):
@@ -212,6 +219,7 @@ def create_llm(
         retry_wait = defaults.retry_wait
     if is_no_arg(retry_algorithm):
         retry_algorithm = defaults.retry_algorithm
+    retry_algorithm: RetryAlgorithm = RetryAlgorithm(retry_algorithm)
     if is_no_arg(retry_jitter):
         retry_jitter = defaults.retry_jitter
 
@@ -232,9 +240,23 @@ def create_llm(
     # window. "rpm" = requests per minute, "tpm" = tokens per minute.
     limits_list.extend(
         [
-            RateLimit(key="input_tokens", window_seconds=60, capacity=max_input_tpm),
-            RateLimit(key="output_tokens", window_seconds=60, capacity=max_output_tpm),
-            CallLimit(window_seconds=60, capacity=max_rpm),
+            RateLimit(
+                key="input_tokens",
+                window_seconds=60,
+                capacity=max_input_tpm,
+                algorithm=rate_limit_algorithm,
+            ),
+            RateLimit(
+                key="output_tokens",
+                window_seconds=60,
+                capacity=max_output_tpm,
+                algorithm=rate_limit_algorithm,
+            ),
+            CallLimit(
+                window_seconds=60,
+                capacity=max_rpm,
+                algorithm=rate_limit_algorithm,
+            ),
         ]
     )
     if extra_limits is not None:
@@ -252,7 +274,7 @@ def create_llm(
         num_retries={"call_llm": num_retries, "*": 0},
         retry_on={"call_llm": retry_on, "*": []},
         retry_wait={"call_llm": retry_wait, "*": 1},
-        retry_algorithm={"call_llm": retry_algorithm, "*": "Exponential"},
+        retry_algorithm={"call_llm": retry_algorithm, "*": RetryAlgorithm.Exponential},
         retry_jitter={"call_llm": retry_jitter, "*": 0},
     ).init(
         name=name,

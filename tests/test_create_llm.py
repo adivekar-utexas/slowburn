@@ -155,7 +155,9 @@ class TestCreateLLM:
 
     def test_retry_defaults_flow_from_config(self) -> None:
         """create_llm() reads retry_wait/algorithm/jitter from slowburn_config."""
-        with temp_config(retry_wait=5.0, retry_algorithm="Linear", retry_jitter=0.0):
+        from concurry import RetryAlgorithm
+
+        with temp_config(retry_wait=5.0, retry_algorithm=RetryAlgorithm.Linear, retry_jitter=0.0):
             llm = create_llm(model=MOCK_MODEL_NAME)
             try:
                 reporter = llm.get_reporter().result(timeout=5.0)

@@ -61,7 +61,7 @@ class SlowBurnCrewAI:
         reporter: Optional[CostReporter] = None,
     ):
         if window_seconds is None:
-            window_seconds = slowburn_config.defaults.default_window_seconds
+            window_seconds = slowburn_config.defaults.window_seconds
         if limit_set is not None:
             self.limit_set = limit_set
         else:
