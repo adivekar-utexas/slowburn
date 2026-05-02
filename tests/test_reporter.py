@@ -55,8 +55,10 @@ class TestCostReporterBasics:
     def test_metadata_stored(self) -> None:
         r = CostReporter()
         r.log_call(
-            model=MOCK_MODEL_NAME, cost_usd=0.001,
-            input_tokens=100, output_tokens=50,
+            model=MOCK_MODEL_NAME,
+            cost_usd=0.001,
+            input_tokens=100,
+            output_tokens=50,
             metadata={"agent": "researcher", "task_id": 42},
         )
         assert r.calls[0]["metadata"]["agent"] == "researcher"

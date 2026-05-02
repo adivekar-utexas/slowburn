@@ -13,6 +13,7 @@ from slowburn.pricing import ModelNotFoundError, PricingCache
 # Helper: build fake litellm response objects
 # ---------------------------------------------------------------------------
 
+
 def _make_response(
     *,
     hidden_cost: float = None,
@@ -42,6 +43,7 @@ def _make_response(
 # Tests: get_token_costs
 # ===========================================================================
 
+
 class TestGetTokenCosts:
     """Test PricingCache.get_token_costs model lookups."""
 
@@ -59,9 +61,7 @@ class TestGetTokenCosts:
 
     def test_openrouter_prefix_fallback(self) -> None:
         """If 'model' is not found, tries 'openrouter/model' as fallback."""
-        input_rate, output_rate = PricingCache.get_token_costs(
-            "anthropic/claude-3-haiku"
-        )
+        input_rate, output_rate = PricingCache.get_token_costs("anthropic/claude-3-haiku")
         assert input_rate > 0
         assert output_rate > 0
 
@@ -81,6 +81,7 @@ class TestGetTokenCosts:
 # ===========================================================================
 # Tests: estimate_cost_microdollars
 # ===========================================================================
+
 
 class TestEstimateCostMicrodollars:
     """Test pre-call cost estimation."""
@@ -110,6 +111,7 @@ class TestEstimateCostMicrodollars:
 # ===========================================================================
 # Tests: actual_cost_microdollars (tiered fallback)
 # ===========================================================================
+
 
 class TestActualCostMicrodollars:
     """Test the tiered fallback chain for post-call cost extraction."""

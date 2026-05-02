@@ -225,12 +225,9 @@ class TestSyncAcquireDeadlockProof:
 
         deadlocked = thread.is_alive()
         assert deadlocked, (
-            "Expected sync acquire to deadlock the event loop, but it completed. "
-            f"completed={completed}"
+            f"Expected sync acquire to deadlock the event loop, but it completed. completed={completed}"
         )
-        assert len(completed) <= 3, (
-            f"Expected at most 3 completions (capacity), got {len(completed)}"
-        )
+        assert len(completed) <= 3, f"Expected at most 3 completions (capacity), got {len(completed)}"
 
     def test_async_acquire_no_deadlock_over_capacity(self) -> None:
         """async_acquire() on an asyncio event loop does NOT deadlock.

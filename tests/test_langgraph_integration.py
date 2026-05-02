@@ -16,6 +16,7 @@ from slowburn.integrations.langgraph import (
 # Helpers: build fake LangGraph-style objects
 # ---------------------------------------------------------------------------
 
+
 def _make_model(model_name: str = MOCK_MODEL_NAME, max_tokens: int = 500):
     """Fake BaseChatModel with model_name and max_tokens attributes."""
     return SimpleNamespace(model_name=model_name, max_tokens=max_tokens)
@@ -54,8 +55,8 @@ def _make_response(content: str = "Response text", usage_metadata: dict = None):
 # Tests: _get_model_name helper
 # ===========================================================================
 
-class TestGetModelName:
 
+class TestGetModelName:
     def test_extracts_model_name_attr(self) -> None:
         model = SimpleNamespace(model_name=MOCK_MODEL_NAME)
         assert _get_model_name(model) == MOCK_MODEL_NAME
@@ -76,8 +77,8 @@ class TestGetModelName:
 # Tests: _extract_text_from_messages helper
 # ===========================================================================
 
-class TestExtractTextFromMessages:
 
+class TestExtractTextFromMessages:
     def test_string_content(self) -> None:
         msgs = [_make_message("Hello"), _make_message("World")]
         assert _extract_text_from_messages(msgs) == "Hello World"
@@ -104,8 +105,8 @@ class TestExtractTextFromMessages:
 # Tests: SlowBurnMiddleware.__init__
 # ===========================================================================
 
-class TestSlowBurnMiddlewareInit:
 
+class TestSlowBurnMiddlewareInit:
     def test_creates_limit_set_and_reporter(self) -> None:
         mw = SlowBurnMiddleware(budget_usd=5.0, window_seconds=3600)
         assert mw.limit_set is not None
@@ -114,6 +115,7 @@ class TestSlowBurnMiddlewareInit:
 
     def test_accepts_external_reporter(self) -> None:
         from slowburn.reporter import CostReporter
+
         r = CostReporter()
         mw = SlowBurnMiddleware(budget_usd=5.0, reporter=r)
         assert mw.reporter is r
@@ -123,8 +125,8 @@ class TestSlowBurnMiddlewareInit:
 # Tests: SlowBurnMiddleware.wrap_model_call
 # ===========================================================================
 
-class TestSlowBurnMiddlewareWrapModelCall:
 
+class TestSlowBurnMiddlewareWrapModelCall:
     def test_basic_call_logs_cost(self) -> None:
         """A successful model call should be logged in the reporter.
 

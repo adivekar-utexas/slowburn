@@ -98,6 +98,7 @@ class TestValidatorRealCall:
             num_retries=2,
         )
         try:
+
             def extract_number(text: str) -> int:
                 match = re.search(r"\d+", text)
                 if match is None:
@@ -137,13 +138,15 @@ class TestAutoGenModelClient:
             reporter=ag_reporter,
         )
 
-        response = client.create({
-            "messages": [{"role": "user", "content": "Say 'hello' and nothing else."}],
-            "model": model,
-            "max_tokens": 50,
-            "temperature": 0.0,
-            "timeout": 120.0,
-        })
+        response = client.create(
+            {
+                "messages": [{"role": "user", "content": "Say 'hello' and nothing else."}],
+                "model": model,
+                "max_tokens": 50,
+                "temperature": 0.0,
+                "timeout": 120.0,
+            }
+        )
 
         content = response.choices[0].message.content
         print(f"Response: {content!r}")
@@ -166,8 +169,12 @@ class TestCostReporterFormats:
         """Make a call, then verify markdown/latex output is non-empty."""
         model, key = llm_model_and_key
         llm = create_llm(
-            model=model, budget_usd=0.50, window="hourly",
-            api_key=key, max_tokens=50, temperature=0.3,
+            model=model,
+            budget_usd=0.50,
+            window="hourly",
+            api_key=key,
+            max_tokens=50,
+            temperature=0.3,
         )
         try:
             llm.call_llm(prompt="Say hi").result(timeout=30.0)
@@ -220,9 +227,7 @@ class TestRetryConfigRealCalls:
             retry_jitter=0.1,
         )
         try:
-            result = llm.call_llm(
-                prompt="What is 3 + 3? Reply with just the number."
-            ).result(timeout=30.0)
+            result = llm.call_llm(prompt="What is 3 + 3? Reply with just the number.").result(timeout=30.0)
             print(f"Response: {result!r}")
 
             assert len(result) > 0
@@ -252,9 +257,7 @@ class TestRetryConfigRealCalls:
             retry_wait=1.0,
         )
         try:
-            result = llm.call_llm(
-                prompt="Name one continent. Reply with just its name."
-            ).result(timeout=30.0)
+            result = llm.call_llm(prompt="Name one continent. Reply with just its name.").result(timeout=30.0)
             print(f"Response: {result!r}")
             assert len(result) > 0
         finally:
@@ -409,18 +412,20 @@ class TestMultiTurnRealCalls:
         4. Re-submit; verify the assistant produces a text response using the tool result.
         """
         model, key = llm_model_and_key
-        tool_schemas = [{
-            "type": "function",
-            "function": {
-                "name": "get_weather",
-                "description": "Get the current weather for a city.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"city": {"type": "string", "description": "City name"}},
-                    "required": ["city"],
+        tool_schemas = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get the current weather for a city.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"city": {"type": "string", "description": "City name"}},
+                        "required": ["city"],
+                    },
                 },
-            },
-        }]
+            }
+        ]
         llm = create_llm(
             model=model,
             budget_usd=0.50,
@@ -448,11 +453,13 @@ class TestMultiTurnRealCalls:
             tool_call = assistant_message["tool_calls"][0]
             assert tool_call["function"]["name"] == "get_weather"
 
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call["id"],
-                "content": '{"temperature": "18°C", "condition": "partly cloudy"}',
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call["id"],
+                    "content": '{"temperature": "18°C", "condition": "partly cloudy"}',
+                }
+            )
 
             messages = llm.call_llm(
                 prompt="",

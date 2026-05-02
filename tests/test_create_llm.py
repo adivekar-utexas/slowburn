@@ -70,6 +70,7 @@ class TestCreateLLM:
     def test_invalid_window_alias_raises(self) -> None:
         """An unrecognized string window should be rejected by @validate."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError, match="daily.*hourly.*minutely"):
             create_llm(model=MOCK_MODEL_NAME, window="biweekly")
 
@@ -104,9 +105,7 @@ class TestCreateLLM:
             litellm.ServiceUnavailableError,
         ]
         for exc_type in expected:
-            assert exc_type in _DEFAULT_RETRY_ON, (
-                f"{exc_type.__name__} missing from _DEFAULT_RETRY_ON"
-            )
+            assert exc_type in _DEFAULT_RETRY_ON, f"{exc_type.__name__} missing from _DEFAULT_RETRY_ON"
 
     def test_custom_retry_on_accepted(self) -> None:
         """Passing an explicit retry_on list is accepted and worker starts."""
@@ -248,6 +247,7 @@ class TestCreateLLM:
         4. Verify reporter recorded it.
         """
         from types import SimpleNamespace
+
         usage = SimpleNamespace(prompt_tokens=30, completion_tokens=15, total_tokens=45)
         message = SimpleNamespace(content="test output", tool_calls=None)
         choice = SimpleNamespace(message=message)

@@ -51,7 +51,6 @@ def _make_client(
 
 
 class TestSlowBurnModelClientInit:
-
     def test_strips_slowburn_prefix(self) -> None:
         client, _, _ = _make_client(model=f"slowburn/{MOCK_MODEL_NAME}")
         assert client.litellm_model == MOCK_MODEL_NAME
@@ -64,7 +63,8 @@ class TestSlowBurnModelClientInit:
         """Config without 'model' key should raise ValueError."""
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=1.0)],
-            mode="Threads", shared=True,
+            mode="Threads",
+            shared=True,
         )
         with pytest.raises(ValueError, match="requires 'model' in config"):
             SlowBurnModelClient(config={}, limit_set=limit_set)
@@ -72,25 +72,27 @@ class TestSlowBurnModelClientInit:
     def test_creates_own_reporter_if_none(self) -> None:
         limit_set = LimitSet(
             limits=[CostLimit(budget_usd=1.0)],
-            mode="Threads", shared=True,
+            mode="Threads",
+            shared=True,
         )
         client = SlowBurnModelClient(config={"model": MOCK_MODEL_NAME}, limit_set=limit_set, reporter=None)
         assert client.reporter is not None
 
 
 class TestSlowBurnModelClientCreate:
-
     @patch("slowburn.integrations.autogen.litellm.completion")
     def test_basic_create(self, mock_completion) -> None:
         """create() should return the response and log to reporter."""
         mock_completion.return_value = _make_completion_response(cost=0.002)
         client, _, reporter = _make_client()
 
-        response = client.create({
-            "messages": [{"role": "user", "content": "Hello"}],
-            "model": MOCK_MODEL_NAME,
-            "max_tokens": 100,
-        })
+        response = client.create(
+            {
+                "messages": [{"role": "user", "content": "Hello"}],
+                "model": MOCK_MODEL_NAME,
+                "max_tokens": 100,
+            }
+        )
 
         assert response.choices[0].message.content == "AG2 response"
         assert reporter.num_calls == 1
@@ -101,11 +103,13 @@ class TestSlowBurnModelClientCreate:
         mock_completion.return_value = _make_completion_response()
         client, _, _ = _make_client()
 
-        client.create({
-            "messages": [{"role": "user", "content": "test"}],
-            "model": f"slowburn/{MOCK_MODEL_NAME}",
-            "max_tokens": 100,
-        })
+        client.create(
+            {
+                "messages": [{"role": "user", "content": "test"}],
+                "model": f"slowburn/{MOCK_MODEL_NAME}",
+                "max_tokens": 100,
+            }
+        )
 
         call_kwargs = mock_completion.call_args.kwargs
         assert call_kwargs["model"] == MOCK_MODEL_NAME
@@ -123,7 +127,6 @@ class TestSlowBurnModelClientCreate:
 
 
 class TestSlowBurnModelClientCost:
-
     def test_cost_from_hidden_params(self) -> None:
         client, _, _ = _make_client()
         response = _make_completion_response(cost=0.005)
@@ -144,11 +147,12 @@ class TestSlowBurnModelClientCost:
 
 
 class TestSlowBurnModelClientGetUsage:
-
     def test_usage_dict(self) -> None:
         client, _, _ = _make_client()
         response = _make_completion_response(
-            prompt_tokens=100, completion_tokens=50, cost=0.004,
+            prompt_tokens=100,
+            completion_tokens=50,
+            cost=0.004,
         )
         usage = client.get_usage(response)
         assert usage["prompt_tokens"] == 100
@@ -164,7 +168,6 @@ class TestSlowBurnModelClientGetUsage:
 
 
 class TestSlowBurnModelClientMessageRetrieval:
-
     def test_retrieves_messages(self) -> None:
         client, _, _ = _make_client()
         response = _make_completion_response(content="Hello from AG2")

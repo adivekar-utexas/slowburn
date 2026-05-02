@@ -146,8 +146,7 @@ def main():
             "Format as markdown with headers and bullet points."
         ),
         expected_output=(
-            "A structured markdown fact sheet with 5+ key findings, "
-            "each backed by a specific source URL."
+            "A structured markdown fact sheet with 5+ key findings, each backed by a specific source URL."
         ),
         agent=analyst,
         output_file="facts.md",
@@ -164,8 +163,7 @@ def main():
             "Format as markdown."
         ),
         expected_output=(
-            "A structured critique with specific gaps, unsupported claims, "
-            "and areas of strong evidence."
+            "A structured critique with specific gaps, unsupported claims, and areas of strong evidence."
         ),
         agent=reviewer,
         context=[research_task],
@@ -180,10 +178,7 @@ def main():
             "assigns confidence ratings (High/Medium/Low) to each major claim. "
             "Format as markdown."
         ),
-        expected_output=(
-            "A balanced 200-word executive brief with confidence ratings "
-            "for each major claim."
-        ),
+        expected_output=("A balanced 200-word executive brief with confidence ratings for each major claim."),
         agent=synthesizer,
         context=[research_task, review_task],
         output_file="executive_brief.md",

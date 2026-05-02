@@ -44,13 +44,13 @@ RESEARCH_TASKS = [
         "Research the cost of running LLM agents in production. "
         "Search the web for real data on API costs for GPT-4, Claude, and Gemini. "
         "Find specific dollar amounts from benchmarks like SWE-bench and Tau-bench. "
-        "Write your findings to 'cost_analysis.md' with sources."
+        "Write your findings to 'cost_analysis.md' with sources.",
     ),
     (
         "backpressure.md",
         "Research backpressure mechanisms in distributed systems and how they "
         "apply to LLM rate limiting. Search the web for how systems like Kafka, "
-        "gRPC, and TCP handle backpressure. Write a comparison to 'backpressure.md'."
+        "gRPC, and TCP handle backpressure. Write a comparison to 'backpressure.md'.",
     ),
 ]
 

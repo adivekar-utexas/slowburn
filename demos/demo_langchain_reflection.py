@@ -54,9 +54,12 @@ def parse_scores(critique_text: str) -> dict:
     Returns dict mapping criterion -> score (int).
     """
     import re
+
     scores = {}
     for line in critique_text.split("\n"):
-        match = re.search(r"(factual accuracy|completeness|clarity|source quality)\s*:\s*(\d)\s*/\s*5", line, re.IGNORECASE)
+        match = re.search(
+            r"(factual accuracy|completeness|clarity|source quality)\s*:\s*(\d)\s*/\s*5", line, re.IGNORECASE
+        )
         if match:
             scores[match.group(1).lower()] = int(match.group(2))
     return scores
@@ -168,9 +171,7 @@ def main():
         if round_num < MAX_ROUNDS:
             # Additional search to address gaps
             print(f"    [Search] Searching for additional info to address gaps...")
-            gap_query = f"{TOPIC} " + " ".join(
-                k for k, v in scores.items() if v < 4
-            )
+            gap_query = f"{TOPIC} " + " ".join(k for k, v in scores.items() if v < 4)
             extra_results = search_web(gap_query, max_results=3)
             extra_data = json.loads(extra_results)
             if "results" in extra_data:

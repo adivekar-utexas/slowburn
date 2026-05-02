@@ -37,7 +37,8 @@ class TestDollarsToMicrodollars:
     def test_infinity_maps_to_max(self) -> None:
         """float('inf') should produce a very large capacity, not crash."""
         import sys
-        assert dollars_to_microdollars(float('inf')) == sys.maxsize
+
+        assert dollars_to_microdollars(float("inf")) == sys.maxsize
 
     def test_negative_returns_one(self) -> None:
         """Negative amounts are clamped to the minimum of 1."""
@@ -98,8 +99,9 @@ class TestCostLimitCreation:
     def test_infinite_budget(self) -> None:
         """float('inf') budget should create a CostLimit with very large capacity."""
         import sys
-        cl = CostLimit(budget_usd=float('inf'))
-        assert cl.budget_usd == float('inf')
+
+        cl = CostLimit(budget_usd=float("inf"))
+        assert cl.budget_usd == float("inf")
         assert cl.capacity == sys.maxsize
 
 
@@ -174,7 +176,5 @@ class TestCostLimitWithLimitSet:
         tl = RateLimit(key="tokens", window_seconds=60, capacity=10_000)
         ls = LimitSet(limits=[cl, tl], mode="Threads", shared=True)
 
-        with ls.acquire(
-            requested={DEFAULT_COST_LIMIT_KEY: 1_000, "tokens": 500}
-        ) as acq:
+        with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 1_000, "tokens": 500}) as acq:
             acq.update(usage={DEFAULT_COST_LIMIT_KEY: 800, "tokens": 400})

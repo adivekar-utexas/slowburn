@@ -14,6 +14,7 @@ from slowburn.integrations.langchain import SlowBurnCallbackHandler
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_serialized(
     model_name: str = MOCK_MODEL_NAME,
     max_tokens: int = 500,
@@ -60,8 +61,8 @@ def _make_llm_result_no_usage(text: str = "Generated text") -> SimpleNamespace:
 # Tests: __init__
 # ===========================================================================
 
-class TestSlowBurnCallbackHandlerInit:
 
+class TestSlowBurnCallbackHandlerInit:
     def test_creates_limit_set_and_reporter(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0, window_seconds=3600)
         assert cb.limit_set is not None
@@ -70,6 +71,7 @@ class TestSlowBurnCallbackHandlerInit:
 
     def test_accepts_external_reporter(self) -> None:
         from slowburn.reporter import CostReporter
+
         r = CostReporter()
         cb = SlowBurnCallbackHandler(budget_usd=5.0, reporter=r)
         assert cb.reporter is r
@@ -83,8 +85,8 @@ class TestSlowBurnCallbackHandlerInit:
 # Tests: _extract_model_name
 # ===========================================================================
 
-class TestExtractModelName:
 
+class TestExtractModelName:
     def test_from_kwargs_model_name(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0)
         serialized = {"kwargs": {"model_name": MOCK_MODEL_NAME}}
@@ -117,8 +119,8 @@ class TestExtractModelName:
 # Tests: _extract_max_tokens
 # ===========================================================================
 
-class TestExtractMaxTokens:
 
+class TestExtractMaxTokens:
     def test_from_kwargs_max_tokens(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=5.0)
         serialized = {"kwargs": {"max_tokens": 512}}
@@ -140,8 +142,8 @@ class TestExtractMaxTokens:
 # Tests: on_llm_start + on_llm_end (full cycle)
 # ===========================================================================
 
-class TestCallbackFullCycle:
 
+class TestCallbackFullCycle:
     def test_start_end_logs_cost(self) -> None:
         """Full on_llm_start -> on_llm_end cycle should log one call.
 
@@ -219,8 +221,8 @@ class TestCallbackFullCycle:
 # Tests: on_llm_error
 # ===========================================================================
 
-class TestCallbackOnError:
 
+class TestCallbackOnError:
     def test_error_charges_full_estimated_cost(self) -> None:
         """on_llm_error should release the acquisition with full estimated cost.
 
@@ -262,8 +264,8 @@ class TestCallbackOnError:
 # Tests: Thread safety
 # ===========================================================================
 
-class TestCallbackThreadSafety:
 
+class TestCallbackThreadSafety:
     def test_concurrent_start_end_from_multiple_threads(self) -> None:
         """Concurrent on_llm_start/on_llm_end from 10 threads should all be tracked.
 
@@ -299,8 +301,8 @@ class TestCallbackThreadSafety:
 # Tests: on_llm_start validation
 # ===========================================================================
 
-class TestCallbackStartValidation:
 
+class TestCallbackStartValidation:
     def test_raises_if_no_model_name(self) -> None:
         cb = SlowBurnCallbackHandler(budget_usd=10.0)
         serialized = {"kwargs": {"max_tokens": 500}}

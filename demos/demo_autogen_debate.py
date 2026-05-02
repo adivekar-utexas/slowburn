@@ -106,12 +106,14 @@ def run_debate_round(
             },
         ]
 
-        response = debater_config["client"].create({
-            "model": f"slowburn/{MODEL}",
-            "messages": prompt_messages,
-            "max_tokens": MAX_TOKENS,
-            "temperature": 0.7,
-        })
+        response = debater_config["client"].create(
+            {
+                "model": f"slowburn/{MODEL}",
+                "messages": prompt_messages,
+                "max_tokens": MAX_TOKENS,
+                "temperature": 0.7,
+            }
+        )
 
         argument = response.choices[0].message.content
         round_arguments[debater_name] = argument
@@ -171,33 +173,42 @@ def main():
         )
 
     debaters = [
-        ("Alice", {
-            "focus": "model distillation quantization smaller models",
-            "stance": (
-                "You focus on model-level optimizations: distillation, quantization, "
-                "and using smaller specialized models. You argue these provide the "
-                "best cost-per-quality tradeoff."
-            ),
-            "client": make_client("Alice"),
-        }),
-        ("Bob", {
-            "focus": "prompt caching batching infrastructure optimization",
-            "stance": (
-                "You focus on infrastructure optimizations: prompt caching, request "
-                "batching, KV-cache reuse, and smart routing. You argue these provide "
-                "cost savings without model quality degradation."
-            ),
-            "client": make_client("Bob"),
-        }),
-        ("Carol", {
-            "focus": "prompt engineering cost-aware routing cascading models",
-            "stance": (
-                "You focus on prompt-level and routing strategies: shorter prompts, "
-                "cascading from cheap to expensive models, and adaptive model "
-                "selection. You argue these are the easiest to implement."
-            ),
-            "client": make_client("Carol"),
-        }),
+        (
+            "Alice",
+            {
+                "focus": "model distillation quantization smaller models",
+                "stance": (
+                    "You focus on model-level optimizations: distillation, quantization, "
+                    "and using smaller specialized models. You argue these provide the "
+                    "best cost-per-quality tradeoff."
+                ),
+                "client": make_client("Alice"),
+            },
+        ),
+        (
+            "Bob",
+            {
+                "focus": "prompt caching batching infrastructure optimization",
+                "stance": (
+                    "You focus on infrastructure optimizations: prompt caching, request "
+                    "batching, KV-cache reuse, and smart routing. You argue these provide "
+                    "cost savings without model quality degradation."
+                ),
+                "client": make_client("Bob"),
+            },
+        ),
+        (
+            "Carol",
+            {
+                "focus": "prompt engineering cost-aware routing cascading models",
+                "stance": (
+                    "You focus on prompt-level and routing strategies: shorter prompts, "
+                    "cascading from cheap to expensive models, and adaptive model "
+                    "selection. You argue these are the easiest to implement."
+                ),
+                "client": make_client("Carol"),
+            },
+        ),
     ]
 
     start_time = time.time()
@@ -207,7 +218,12 @@ def main():
     for round_num in range(1, NUM_DEBATE_ROUNDS + 1):
         print(f"\n  === Debate Round {round_num}/{NUM_DEBATE_ROUNDS} ===")
         previous_arguments = run_debate_round(
-            debaters, round_num, QUESTION, previous_arguments, runs_dir, reporter,
+            debaters,
+            round_num,
+            QUESTION,
+            previous_arguments,
+            runs_dir,
+            reporter,
         )
 
     # Aggregator: synthesize the debate
@@ -215,37 +231,38 @@ def main():
     print(f"    [Aggregator] Synthesizing debate results...")
 
     all_arguments = "\n\n".join(
-        f"--- {name} (Final Round) ---\n{arg}"
-        for name, arg in previous_arguments.items()
+        f"--- {name} (Final Round) ---\n{arg}" for name, arg in previous_arguments.items()
     )
 
     aggregator_client = make_client("Aggregator")
-    agg_response = aggregator_client.create({
-        "model": f"slowburn/{MODEL}",
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a neutral debate moderator and aggregator. "
-                    "Synthesize the debaters' arguments into a consensus verdict. "
-                    "Report: (1) areas of agreement, (2) areas of disagreement, "
-                    "(3) the strongest evidence-backed strategies, and "
-                    "(4) a final recommendation with confidence level."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Question: {QUESTION}\n\n"
-                    f"Final arguments from all debaters:\n{all_arguments}\n\n"
-                    f"Write a structured verdict (200-300 words) with consensus "
-                    f"findings and a ranked recommendation."
-                ),
-            },
-        ],
-        "max_tokens": MAX_TOKENS,
-        "temperature": 0.3,
-    })
+    agg_response = aggregator_client.create(
+        {
+            "model": f"slowburn/{MODEL}",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a neutral debate moderator and aggregator. "
+                        "Synthesize the debaters' arguments into a consensus verdict. "
+                        "Report: (1) areas of agreement, (2) areas of disagreement, "
+                        "(3) the strongest evidence-backed strategies, and "
+                        "(4) a final recommendation with confidence level."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Question: {QUESTION}\n\n"
+                        f"Final arguments from all debaters:\n{all_arguments}\n\n"
+                        f"Write a structured verdict (200-300 words) with consensus "
+                        f"findings and a ranked recommendation."
+                    ),
+                },
+            ],
+            "max_tokens": MAX_TOKENS,
+            "temperature": 0.3,
+        }
+    )
 
     verdict = agg_response.choices[0].message.content
     write_file("verdict.md", verdict, workspace=runs_dir)

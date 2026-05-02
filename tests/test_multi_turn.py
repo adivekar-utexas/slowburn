@@ -41,11 +41,7 @@ class _MockLiteLLMMessage(SimpleNamespace):
             "tool_calls": tool_calls,
         }
         if exclude_none:
-            message_dict = {
-                key: value
-                for key, value in message_dict.items()
-                if value is not None
-            }
+            message_dict = {key: value for key, value in message_dict.items() if value is not None}
         return message_dict
 
 
@@ -114,6 +110,7 @@ def _build_worker(**init_kwargs: Any) -> SlowBurnLLM:
 # Tests: build_messages
 # ===========================================================================
 
+
 class TestBuildMessages:
     """Test the build_messages method (sync, no LLM call)."""
 
@@ -132,7 +129,8 @@ class TestBuildMessages:
         worker = _build_worker()
         try:
             messages = worker.build_messages(
-                prompt="Hello", system_prompt="Be helpful",
+                prompt="Hello",
+                system_prompt="Be helpful",
             ).result(timeout=5.0)
             assert len(messages) == 2
             assert messages[0]["role"] == "system"
@@ -164,7 +162,8 @@ class TestBuildMessages:
                 {"role": "assistant", "content": "resp 1"},
             ]
             messages = worker.build_messages(
-                prompt="turn 2", history=history,
+                prompt="turn 2",
+                history=history,
             ).result(timeout=5.0)
             assert len(messages) == 4
             assert messages[-1] == {"role": "user", "content": "turn 2"}
@@ -182,7 +181,8 @@ class TestBuildMessages:
                 {"role": "tool", "tool_call_id": "tc1", "content": "result"},
             ]
             messages = worker.build_messages(
-                prompt="", history=history,
+                prompt="",
+                history=history,
             ).result(timeout=5.0)
             assert len(messages) == 3
             assert messages[-1]["role"] == "tool"
@@ -230,6 +230,7 @@ class TestBuildMessages:
 # ===========================================================================
 # Tests: return_messages auto-detection
 # ===========================================================================
+
 
 class TestReturnMessagesAutoDetect:
     """Test that return_messages auto-detects based on input type."""
@@ -289,7 +290,8 @@ class TestReturnMessagesAutoDetect:
         worker = _build_worker()
         try:
             result = worker.call_llm(
-                prompt="hello", return_messages=True,
+                prompt="hello",
+                return_messages=True,
             ).result(timeout=10.0)
             assert isinstance(result, list)
             assert result[-1]["content"] == "forced"
@@ -316,6 +318,7 @@ class TestReturnMessagesAutoDetect:
 # ===========================================================================
 # Tests: tool_calls in messages return
 # ===========================================================================
+
 
 class TestToolCallsInMessages:
     """Test that tool_calls are properly included in returned messages."""
@@ -360,11 +363,13 @@ class TestToolCallsInMessages:
 
             assert messages[-1].get("tool_calls") is not None
 
-            messages.append({
-                "role": "tool",
-                "tool_call_id": "tc_1",
-                "content": "42",
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": "tc_1",
+                    "content": "42",
+                }
+            )
 
             messages = worker.call_llm(
                 prompt="",
@@ -381,6 +386,7 @@ class TestToolCallsInMessages:
 # ===========================================================================
 # Tests: tools parameter resolution
 # ===========================================================================
+
 
 class TestToolsResolution:
     """Test worker-level and per-call tools/tool_choice resolution."""
@@ -439,7 +445,9 @@ class TestToolsResolution:
         worker = _build_worker(tools=worker_tools, tool_choice="auto")
         try:
             worker.call_llm(
-                prompt="hello", tools=None, tool_choice=None,
+                prompt="hello",
+                tools=None,
+                tool_choice=None,
             ).result(timeout=10.0)
             call_kwargs = mock_acompletion.call_args.kwargs
             assert "tools" not in call_kwargs
@@ -464,6 +472,7 @@ class TestToolsResolution:
 # ===========================================================================
 # Tests: batch with history_per_prompt
 # ===========================================================================
+
 
 class TestBatchMultiTurn:
     """Test call_llm_batch with the new multi-turn params."""
@@ -525,6 +534,7 @@ class TestBatchMultiTurn:
 # Tests: backward compatibility
 # ===========================================================================
 
+
 class TestBackwardCompatibility:
     """Verify existing call patterns still work unchanged."""
 
@@ -547,7 +557,8 @@ class TestBackwardCompatibility:
         worker = _build_worker()
         try:
             result = worker.call_llm(
-                prompt="hello", system_prompt="be nice",
+                prompt="hello",
+                system_prompt="be nice",
             ).result(timeout=10.0)
             assert isinstance(result, str)
             sent_messages = mock_acompletion.call_args.kwargs["messages"]

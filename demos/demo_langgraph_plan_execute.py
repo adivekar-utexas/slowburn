@@ -64,9 +64,9 @@ def parse_plan(text: str) -> List[str]:
             continue
         for prefix_len in range(1, 4):
             for sep in [".", ")", ":", "-"]:
-                prefix = line[:prefix_len + 1]
+                prefix = line[: prefix_len + 1]
                 if prefix.rstrip(sep).isdigit() and sep in prefix:
-                    step_text = line[prefix_len + 1:].strip()
+                    step_text = line[prefix_len + 1 :].strip()
                     if len(step_text) > 5:
                         steps.append(step_text)
                     break
@@ -129,8 +129,11 @@ def main():
         for i, step in enumerate(steps, 1):
             print(f"            {i}. {step[:70]}")
 
-        write_file("plan.md", "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps)),
-                    workspace=Path(state["workspace"]))
+        write_file(
+            "plan.md",
+            "\n".join(f"{i + 1}. {s}" for i, s in enumerate(steps)),
+            workspace=Path(state["workspace"]),
+        )
 
         return {"plan": steps, "current_step": 0, "completed": []}
 
@@ -169,8 +172,7 @@ def main():
         completed = list(state["completed"])
         completed.append({"step": step, "result": result_text, "sources": context_text})
 
-        write_file(f"step_{idx + 1}_result.md", result_text,
-                    workspace=Path(state["workspace"]))
+        write_file(f"step_{idx + 1}_result.md", result_text, workspace=Path(state["workspace"]))
 
         cost_so_far = reporter.total_cost()
         print(f"              Cost so far: ${cost_so_far:.6f} / ${BUDGET_USD:.2f}")
@@ -191,22 +193,20 @@ def main():
         cost_per_step = cost_so_far / max(idx, 1)
 
         if budget_remaining < cost_per_step * 1.5:
-            print(f"\n    [Replanner] Budget tight (${budget_remaining:.4f} remaining, "
-                  f"~${cost_per_step:.4f}/step). Skipping to synthesis.")
+            print(
+                f"\n    [Replanner] Budget tight (${budget_remaining:.4f} remaining, "
+                f"~${cost_per_step:.4f}/step). Skipping to synthesis."
+            )
             return "synthesize"
 
-        print(f"\n    [Replanner] Continuing to step {idx + 1} "
-              f"(${budget_remaining:.4f} remaining)")
+        print(f"\n    [Replanner] Continuing to step {idx + 1} (${budget_remaining:.4f} remaining)")
         return "execute"
 
     def synthesizer(state: PlanState) -> Dict[str, Any]:
         """Write the final report from all completed steps."""
         print(f"\n    [Synthesizer] Writing final report from {len(state['completed'])} steps...")
 
-        findings = "\n\n".join(
-            f"### {c['step']}\n{c['result']}"
-            for c in state["completed"]
-        )
+        findings = "\n\n".join(f"### {c['step']}\n{c['result']}" for c in state["completed"])
 
         response = llm.invoke(
             f"You are a research synthesizer. Write a comprehensive comparison "

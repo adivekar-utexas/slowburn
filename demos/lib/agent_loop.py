@@ -74,7 +74,7 @@ def _extract_last_turn_responses(messages: List[Dict[str, Any]]) -> List[Dict[st
     """
     for index in range(len(messages) - 1, -1, -1):
         if messages[index].get("role") == "user":
-            return messages[index + 1:]
+            return messages[index + 1 :]
     return []
 
 
@@ -162,8 +162,7 @@ def run_agent(
             },
         }
         effective_tools = [
-            tool for tool in tools
-            if tool.get("function", {}).get("name") not in ("write_file", "read_file")
+            tool for tool in tools if tool.get("function", {}).get("name") not in ("write_file", "read_file")
         ] + [append_findings_schema]
 
         original_executor = tool_executor
@@ -174,11 +173,13 @@ def run_agent(
                 existing = output_path.read_text()
                 separator = "\n\n" if len(existing.strip()) > 0 else ""
                 output_path.write_text(existing + separator + new_content)
-                return json.dumps({
-                    "status": "appended",
-                    "file": output_file,
-                    "chars_added": len(new_content),
-                })
+                return json.dumps(
+                    {
+                        "status": "appended",
+                        "file": output_file,
+                        "chars_added": len(new_content),
+                    }
+                )
             return original_executor(function_name, function_arguments)
 
         tool_executor = appending_executor
@@ -206,10 +207,12 @@ def run_agent(
             last_turn_responses = _extract_last_turn_responses(all_messages)
             context_history = []
             if len(last_turn_responses) > 0:
-                context_history.append({
-                    "role": "user",
-                    "content": "Here is what you did in the previous step:",
-                })
+                context_history.append(
+                    {
+                        "role": "user",
+                        "content": "Here is what you did in the previous step:",
+                    }
+                )
                 context_history.extend(last_turn_responses)
 
             if verbose:
@@ -217,10 +220,7 @@ def run_agent(
                 print(f"    [loop] Including last turn ({len(last_turn_responses)} messages) as context")
 
             prompt_parts = [f"ORIGINAL TASK:\n{task}"]
-            prompt_parts.append(
-                f"PROGRESS: Step {step}/{max_steps}, "
-                f"{total_tool_calls} tool calls so far."
-            )
+            prompt_parts.append(f"PROGRESS: Step {step}/{max_steps}, {total_tool_calls} tool calls so far.")
             if workspace is not None:
                 exclude_dirs = [log_dir] if log_dir is not None else None
                 workspace_content = _read_workspace_files(workspace, exclude_dirs=exclude_dirs)

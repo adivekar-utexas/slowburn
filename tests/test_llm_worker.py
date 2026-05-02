@@ -15,6 +15,7 @@ from .conftest import MOCK_MODEL_NAME
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_acompletion_response(
     content: str = "Hello from the LLM",
     prompt_tokens: int = 50,
@@ -68,6 +69,7 @@ def _build_worker(budget_usd: float = 10.0) -> SlowBurnLLM:
 # Tests: _estimate_tokens helper
 # ===========================================================================
 
+
 class TestEstimateTokens:
     def test_basic_estimate(self) -> None:
         assert _estimate_tokens("hello world") >= 1
@@ -86,6 +88,7 @@ class TestEstimateTokens:
 # Tests: SlowBurnLLM call_llm
 # ===========================================================================
 
+
 class TestSlowBurnLLMCallLLM:
     """Test the core call_llm method with mocked litellm.acompletion."""
 
@@ -100,7 +103,8 @@ class TestSlowBurnLLMCallLLM:
         4. Verify the reporter logged one call with correct cost.
         """
         mock_acompletion.return_value = _make_acompletion_response(
-            content="Test response", cost=0.0005,
+            content="Test response",
+            cost=0.0005,
         )
         w = _build_worker()
         try:
@@ -214,6 +218,7 @@ class TestSlowBurnLLMCallLLM:
 # Tests: SlowBurnLLM call_llm_batch
 # ===========================================================================
 
+
 class TestSlowBurnLLMBatch:
     """Test batch execution."""
 
@@ -227,7 +232,8 @@ class TestSlowBurnLLMBatch:
         3. Verify reporter logged 3 calls.
         """
         mock_acompletion.return_value = _make_acompletion_response(
-            content="batch result", cost=0.0002,
+            content="batch result",
+            cost=0.0002,
         )
         w = _build_worker()
         try:
@@ -257,6 +263,7 @@ class TestSlowBurnLLMBatch:
 # Tests: SlowBurnLLM get_reporter
 # ===========================================================================
 
+
 class TestSlowBurnLLMReporter:
     """Test reporter access pattern."""
 
@@ -278,6 +285,7 @@ class TestSlowBurnLLMReporter:
 # ===========================================================================
 # Tests: litellm_params passthrough
 # ===========================================================================
+
 
 class TestSlowBurnLLMLitellmParams:
     """Test that litellm_params are passed through to litellm.acompletion."""

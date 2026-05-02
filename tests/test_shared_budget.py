@@ -26,6 +26,7 @@ from .conftest import MOCK_MODEL_NAME
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_shared_limit_set(budget_usd: float = 1.0, mode: str = "Threads") -> LimitSet:
     """Create a shared LimitSet with CostLimit + token limits."""
     return LimitSet(
@@ -107,8 +108,8 @@ def _make_langchain_llm_result(
 # Test 1: Two SlowBurnLLM workers sharing one CostLimit
 # ===========================================================================
 
-class TestSharedBudgetTwoWorkers:
 
+class TestSharedBudgetTwoWorkers:
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_two_workers_share_one_budget(self, mock_acompletion) -> None:
         """Two SlowBurnLLM workers sharing a LimitSet should both track cost
@@ -124,10 +125,14 @@ class TestSharedBudgetTwoWorkers:
         shared = _make_shared_limit_set(budget_usd=1.0, mode="Asyncio")
 
         w_a = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
-            name="worker-a", model_name=MOCK_MODEL_NAME, api_key="test",
+            name="worker-a",
+            model_name=MOCK_MODEL_NAME,
+            api_key="test",
         )
         w_b = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
-            name="worker-b", model_name=MOCK_MODEL_NAME, api_key="test",
+            name="worker-b",
+            model_name=MOCK_MODEL_NAME,
+            api_key="test",
         )
         try:
             for _ in range(3):
@@ -148,8 +153,8 @@ class TestSharedBudgetTwoWorkers:
 # Test 2: Shared budget exhaustion triggers backpressure
 # ===========================================================================
 
-class TestSharedBudgetBackpressure:
 
+class TestSharedBudgetBackpressure:
     def test_exhausted_budget_blocks_try_acquire(self) -> None:
         """When the shared budget is exhausted, try_acquire should fail.
 
@@ -178,8 +183,8 @@ class TestSharedBudgetBackpressure:
 # Test 3: Shared budget passed to SlowBurnCrewAI
 # ===========================================================================
 
-class TestSharedBudgetCrewAI:
 
+class TestSharedBudgetCrewAI:
     def test_crewai_accepts_external_limit_set(self) -> None:
         """SlowBurnCrewAI should use an externally provided LimitSet.
 
@@ -190,12 +195,14 @@ class TestSharedBudgetCrewAI:
         """
         shared = _make_shared_limit_set(budget_usd=5.0)
         from slowburn.integrations.crewai import SlowBurnCrewAI
+
         sb = SlowBurnCrewAI(limit_set=shared, max_tokens=1000)
         assert sb.limit_set is shared
 
     def test_crewai_requires_budget_or_limit_set(self) -> None:
         """SlowBurnCrewAI should raise if neither budget_usd nor limit_set is given."""
         from slowburn.integrations.crewai import SlowBurnCrewAI
+
         with pytest.raises(ValueError, match="requires either"):
             SlowBurnCrewAI()
 
@@ -204,8 +211,8 @@ class TestSharedBudgetCrewAI:
 # Test 4: Shared budget passed to SlowBurnModelClient (AutoGen)
 # ===========================================================================
 
-class TestSharedBudgetAutoGen:
 
+class TestSharedBudgetAutoGen:
     @patch("slowburn.integrations.autogen.litellm.completion")
     def test_autogen_uses_shared_limit_set(self, mock_completion) -> None:
         """SlowBurnModelClient should draw from a shared LimitSet.
@@ -225,10 +232,12 @@ class TestSharedBudgetAutoGen:
             limit_set=shared,
             reporter=reporter,
         )
-        client.create({
-            "messages": [{"role": "user", "content": "test"}],
-            "max_tokens": 100,
-        })
+        client.create(
+            {
+                "messages": [{"role": "user", "content": "test"}],
+                "max_tokens": 100,
+            }
+        )
 
         assert reporter.num_calls == 1
         assert reporter.total_cost() > 0
@@ -238,8 +247,8 @@ class TestSharedBudgetAutoGen:
 # Test 5: Shared budget passed to SlowBurnMiddleware (LangGraph)
 # ===========================================================================
 
-class TestSharedBudgetLangGraph:
 
+class TestSharedBudgetLangGraph:
     def test_langgraph_accepts_external_limit_set(self) -> None:
         """SlowBurnMiddleware should use an externally provided LimitSet."""
         shared = _make_shared_limit_set(budget_usd=5.0)
@@ -267,8 +276,8 @@ class TestSharedBudgetLangGraph:
 # Test 6: Shared budget passed to SlowBurnCallbackHandler (LangChain)
 # ===========================================================================
 
-class TestSharedBudgetLangChain:
 
+class TestSharedBudgetLangChain:
     def test_langchain_accepts_external_limit_set(self) -> None:
         """SlowBurnCallbackHandler should use an externally provided LimitSet."""
         shared = _make_shared_limit_set(budget_usd=5.0)
@@ -297,8 +306,8 @@ class TestSharedBudgetLangChain:
 # Test 7: Cross-framework shared budget (SlowBurnLLM + AutoGen + LangGraph)
 # ===========================================================================
 
-class TestCrossFrameworkSharedBudget:
 
+class TestCrossFrameworkSharedBudget:
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     @patch("slowburn.integrations.autogen.litellm.completion")
     def test_llm_and_autogen_share_budget(self, mock_completion, mock_acompletion) -> None:
@@ -319,7 +328,9 @@ class TestCrossFrameworkSharedBudget:
         reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
-            name="native-llm", model_name=MOCK_MODEL_NAME, api_key="test",
+            name="native-llm",
+            model_name=MOCK_MODEL_NAME,
+            api_key="test",
         )
         ag_client = SlowBurnModelClient(
             config={"model": MOCK_MODEL_NAME},
@@ -349,7 +360,9 @@ class TestCrossFrameworkSharedBudget:
         lg_reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
-            name="native", model_name=MOCK_MODEL_NAME, api_key="test",
+            name="native",
+            model_name=MOCK_MODEL_NAME,
+            api_key="test",
         )
         mw = SlowBurnMiddleware(limit_set=shared, reporter=lg_reporter)
 
@@ -375,7 +388,9 @@ class TestCrossFrameworkSharedBudget:
         lc_reporter = CostReporter()
 
         llm = SlowBurnLLM.options(mode="Asyncio", limits=shared).init(
-            name="native", model_name=MOCK_MODEL_NAME, api_key="test",
+            name="native",
+            model_name=MOCK_MODEL_NAME,
+            api_key="test",
         )
         cb = SlowBurnCallbackHandler(limit_set=shared, reporter=lc_reporter)
 
@@ -397,8 +412,8 @@ class TestCrossFrameworkSharedBudget:
 # Test 8: Shared reporter aggregates across all sources
 # ===========================================================================
 
-class TestSharedReporter:
 
+class TestSharedReporter:
     @patch("slowburn.integrations.autogen.litellm.completion")
     def test_single_reporter_aggregates_all_calls(self, mock_completion) -> None:
         """A single CostReporter shared across multiple integrations should

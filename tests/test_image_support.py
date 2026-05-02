@@ -41,6 +41,7 @@ ALL_TEST_IMAGES = sorted(FIXTURES_DIR.glob("test_image_*.jpg"))
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_acompletion_response(
     content: str = "I see an image",
     prompt_tokens: int = 1100,
@@ -100,6 +101,7 @@ def _extract_messages(mock_acompletion: AsyncMock) -> List[Dict[str, Any]]:
 # Precondition: fixture images exist
 # ===========================================================================
 
+
 class TestFixtureImages:
     """Verify that the 10 picsum test images are present and valid."""
 
@@ -120,8 +122,8 @@ class TestFixtureImages:
 # Tests: _mime_type_for_path
 # ===========================================================================
 
-class TestMimeTypeForPath:
 
+class TestMimeTypeForPath:
     def test_jpeg(self, tmp_path: Path) -> None:
         p = tmp_path / "photo.jpg"
         p.write_bytes(b"\xff\xd8dummy")
@@ -152,8 +154,8 @@ class TestMimeTypeForPath:
 # Tests: _encode_image_to_data_url
 # ===========================================================================
 
-class TestEncodeImageToDataUrl:
 
+class TestEncodeImageToDataUrl:
     def test_encodes_jpeg_fixture(self) -> None:
         img = ALL_TEST_IMAGES[0]
         data_url = _encode_image_to_data_url(img)
@@ -190,8 +192,8 @@ class TestEncodeImageToDataUrl:
 # Tests: _resolve_image_inputs
 # ===========================================================================
 
-class TestResolveImageInputs:
 
+class TestResolveImageInputs:
     def test_local_path_objects(self) -> None:
         paths = ALL_TEST_IMAGES[:3]
         urls = _resolve_image_inputs(paths)
@@ -244,6 +246,7 @@ class TestResolveImageInputs:
 # ===========================================================================
 # Tests: call_llm with images (mocked litellm)
 # ===========================================================================
+
 
 class TestCallLLMWithImages:
     """Test that call_llm correctly builds multimodal messages when images are provided."""
@@ -418,7 +421,8 @@ class TestCallLLMWithImages:
         w = _build_worker()
         try:
             w.call_llm(
-                prompt="Describe", images=[ALL_TEST_IMAGES[0]],
+                prompt="Describe",
+                images=[ALL_TEST_IMAGES[0]],
             ).result(timeout=10.0)
 
             reporter = w.get_reporter().result(timeout=5.0)
@@ -479,6 +483,7 @@ class TestCallLLMWithImages:
 # Tests: Token estimation with images
 # ===========================================================================
 
+
 class TestTokenEstimationWithImages:
     """Verify that image token overhead is included in limit requests."""
 
@@ -507,6 +512,7 @@ class TestTokenEstimationWithImages:
                     if requested is not None:
                         self.captured.append(requested.get("input_tokens", 0))
                     return original_method(requested=requested, **kwargs)
+
                 return patched_acquire
 
         w = _build_worker()
@@ -538,6 +544,7 @@ class TestTokenEstimationWithImages:
 # ===========================================================================
 # Tests: call_llm_batch with images
 # ===========================================================================
+
 
 class TestCallLLMBatchWithImages:
     """Test batch calls with per-prompt images."""
@@ -635,8 +642,8 @@ class TestCallLLMBatchWithImages:
 # Tests: Error handling for images
 # ===========================================================================
 
-class TestImageErrorHandling:
 
+class TestImageErrorHandling:
     def test_nonexistent_file_raises_on_resolve(self) -> None:
         with pytest.raises(FileNotFoundError):
             _resolve_image_inputs([Path("/tmp/does_not_exist_abc123.jpg")])
