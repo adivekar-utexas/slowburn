@@ -44,6 +44,14 @@ from .constants import (
     WindowAlias,
 )
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
+from .exceptions import (
+    BatchInputMismatchError,
+    BudgetOverflowError,
+    InvalidConfigValueError,
+    PricingUnavailableError,
+    SlowBurnNonRetryableError,
+    ToolCallContractError,
+)
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
 from .llm_worker import ImageInput, SlowBurnLLM
 from .pricing import ModelNotFoundError, PricingCache
@@ -55,6 +63,12 @@ __all__: List[str] = [
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
+    "SlowBurnNonRetryableError",
+    "PricingUnavailableError",
+    "BudgetOverflowError",
+    "ToolCallContractError",
+    "InvalidConfigValueError",
+    "BatchInputMismatchError",
     "CostLimit",
     "ImageInput",
     "SlowBurnLLM",
@@ -175,7 +189,7 @@ def create_llm(
             Defaults to slowburn_config.defaults.backpressure_notify.
         on_budget_overflow: Action when a single call's estimated cost exceeds
             the budget capacity. "warn" (default): proceed with the call but
-            log a warning. "error": raise ValueError. "ignore": proceed silently.
+            log a warning. "error": raise BudgetOverflowError. "ignore": proceed silently.
             Defaults to slowburn_config.defaults.on_budget_overflow.
 
     Returns:

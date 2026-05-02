@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from slowburn import create_llm
+from slowburn import SlowBurnNonRetryableError, create_llm
 from slowburn.limits import DEFAULT_COST_LIMIT_KEY
 
 from .conftest import MOCK_MODEL_NAME
@@ -202,19 +202,17 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_explicit_budget_unknown_model_raises_by_default(self, mock_acompletion) -> None:
-        """An explicit (finite) budget with an unknown model SHOULD raise ModelNotFoundError
-        when on_pricing_unavailable='error' (the default).
+        """An explicit budget with unknown pricing raises a non-retryable error by default.
 
         Steps:
         1. Create worker with unknown model and budget_usd=1.0.
         2. Call call_llm.
-        3. Verify it raises ModelNotFoundError.
+        3. Verify it raises SlowBurnNonRetryableError.
         """
         _set_mock_response(mock_acompletion)
-        from slowburn.pricing import ModelNotFoundError
         llm = create_llm(model=UNKNOWN_MODEL, budget_usd=1.0)
         try:
-            with pytest.raises(ModelNotFoundError):
+            with pytest.raises(SlowBurnNonRetryableError, match="not in the pricing database"):
                 llm.call_llm(prompt="test").result(timeout=10.0)
         finally:
             llm.stop()

@@ -7,10 +7,46 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from concurry import CallLimit, LimitSet, RateLimit
 
+from slowburn.exceptions import SlowBurnNonRetryableError
 from slowburn.limits import CostLimit
 from slowburn.llm_worker import SlowBurnLLM
 
 from .conftest import MOCK_MODEL_NAME
+
+
+class _MockLiteLLMMessage(SimpleNamespace):
+    """Minimal LiteLLM message mock with the model_dump() API used by SlowBurn."""
+
+    content: Optional[str]
+    tool_calls: Optional[List[SimpleNamespace]]
+
+    def model_dump(self, *, exclude_none: bool = False) -> Dict[str, Any]:
+        tool_calls: Optional[List[Dict[str, Any]]] = None
+        if self.tool_calls is not None:
+            tool_calls = [
+                {
+                    "id": tool_call.id,
+                    "type": tool_call.type,
+                    "function": {
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments,
+                    },
+                }
+                for tool_call in self.tool_calls
+            ]
+
+        message_dict: Dict[str, Any] = {
+            "role": "assistant",
+            "content": self.content,
+            "tool_calls": tool_calls,
+        }
+        if exclude_none:
+            message_dict = {
+                key: value
+                for key, value in message_dict.items()
+                if value is not None
+            }
+        return message_dict
 
 
 def _make_response(
@@ -25,7 +61,7 @@ def _make_response(
         completion_tokens=completion_tokens,
         total_tokens=prompt_tokens + completion_tokens,
     )
-    message = SimpleNamespace(content=content, tool_calls=tool_calls)
+    message = _MockLiteLLMMessage(content=content, tool_calls=tool_calls)
     choice = SimpleNamespace(message=message)
     return SimpleNamespace(
         usage=usage,
@@ -351,15 +387,27 @@ class TestToolsResolution:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_worker_level_tools(self, mock_acompletion: AsyncMock) -> None:
-        """Worker-level tools are passed to litellm."""
+        """Worker-level tools are passed to litellm when messages are requested."""
         mock_acompletion.return_value = _make_response()
         tool_schema = [{"type": "function", "function": {"name": "foo"}}]
         worker = _build_worker(tools=tool_schema, tool_choice="auto")
         try:
-            worker.call_llm(prompt="hello").result(timeout=10.0)
+            worker.call_llm(prompt="hello", return_messages=True).result(timeout=10.0)
             call_kwargs = mock_acompletion.call_args.kwargs
             assert call_kwargs["tools"] == tool_schema
             assert call_kwargs["tool_choice"] == "auto"
+        finally:
+            worker.stop()
+
+    @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
+    def test_tools_require_return_messages(self, mock_acompletion: AsyncMock) -> None:
+        """Tool calls require messages mode because tool calls are structured assistant data."""
+        tool_schema = [{"type": "function", "function": {"name": "foo"}}]
+        worker = _build_worker(tools=tool_schema, tool_choice="auto")
+        try:
+            with pytest.raises(SlowBurnNonRetryableError, match="return_messages=True"):
+                worker.call_llm(prompt="hello", return_messages=False).result(timeout=10.0)
+            assert mock_acompletion.call_count == 0
         finally:
             worker.stop()
 
@@ -375,6 +423,7 @@ class TestToolsResolution:
                 prompt="hello",
                 tools=call_tools,
                 tool_choice="required",
+                return_messages=True,
             ).result(timeout=10.0)
             call_kwargs = mock_acompletion.call_args.kwargs
             assert call_kwargs["tools"] == call_tools
@@ -441,10 +490,10 @@ class TestBatchMultiTurn:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_batch_history_length_mismatch(self, mock_acompletion: AsyncMock) -> None:
-        """Mismatched history_per_prompt length raises ValueError."""
+        """Mismatched history_per_prompt length raises a non-retryable error."""
         worker = _build_worker()
         try:
-            with pytest.raises(ValueError, match="history_per_prompt length"):
+            with pytest.raises(SlowBurnNonRetryableError, match="history_per_prompt length"):
                 worker.call_llm_batch(
                     prompts=["a", "b", "c"],
                     history_per_prompt=[None, None],
@@ -463,6 +512,7 @@ class TestBatchMultiTurn:
                 prompts=["a", "b"],
                 tools=tool_schema,
                 tool_choice="auto",
+                return_messages=True,
             ).result(timeout=15.0)
             for call_arguments in mock_acompletion.call_args_list:
                 assert call_arguments.kwargs["tools"] == tool_schema

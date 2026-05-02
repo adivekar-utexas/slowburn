@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from concurry import CallLimit, LimitSet, RateLimit
 
+from slowburn.exceptions import SlowBurnNonRetryableError
 from slowburn.limits import CostLimit
 from slowburn.llm_worker import (
     ImageInput,
@@ -618,10 +619,10 @@ class TestCallLLMBatchWithImages:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_batch_length_mismatch_raises(self, mock_acompletion) -> None:
-        """images_per_prompt with wrong length should raise ValueError."""
+        """images_per_prompt with wrong length should raise a non-retryable error."""
         w = _build_worker()
         try:
-            with pytest.raises(ValueError, match="images_per_prompt length"):
+            with pytest.raises(SlowBurnNonRetryableError, match="images_per_prompt length"):
                 w.call_llm_batch(
                     prompts=["a", "b", "c"],
                     images_per_prompt=[[ALL_TEST_IMAGES[0]]],

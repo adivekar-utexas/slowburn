@@ -18,10 +18,11 @@ import logging
 import mimetypes
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Self, TypeVar, Union
 
 import litellm
 from concurry import async_gather, worker
+from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
 from morphic import Typed, validate
 from morphic.string import format_exception_msg
 from pydantic import Field
@@ -34,17 +35,36 @@ from .constants import (
     PricingUnavailableAction,
     ToolChoiceOption,
 )
+from .exceptions import (
+    BatchInputMismatchError,
+    BudgetOverflowError,
+    InvalidConfigValueError,
+    PricingUnavailableError,
+    SlowBurnNonRetryableError,
+    ToolCallContractError,
+)
 from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
-litellm.success_callback = []   # SlowBurn tracks cost internally; litellm callbacks unused
-litellm.failure_callback = []   # Clearing these also prevents the LoggingWorker race condition
-                                # under high concurrency (litellm bug: coroutine reuse in queue)
+litellm.success_callback = []  # SlowBurn tracks cost internally; litellm callbacks unused
+litellm.failure_callback = []  # Clearing these also prevents the LoggingWorker race condition
+# under high concurrency (litellm bug: coroutine reuse in queue)
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("litellm").setLevel(logging.ERROR)
+
+# Disable LiteLLM's GLOBAL_LOGGING_WORKER entirely.
+# SlowBurn clears all callbacks and manages its own cost accounting, so the background
+# worker serves no purpose. Without this, the singleton binds to Concurry's private
+# event loops and crashes with "RuntimeError: Event loop is closed" on worker shutdown.
+# We explicitly .close() the coroutine to prevent "RuntimeWarning: coroutine was never awaited".
+def _no_op_enqueue(async_coroutine: Any, **kwargs: Any) -> None:
+    if hasattr(async_coroutine, "close"):
+        async_coroutine.close()
+
+GLOBAL_LOGGING_WORKER.ensure_initialized_and_enqueue = _no_op_enqueue  # type: ignore[method-assign]
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +139,42 @@ def _resolve_image_inputs(images: List[ImageInput]) -> List[str]:
                 f"Image input must be a Path, URL string, or data-URL string, got {type(img).__name__}"
             )
     return urls
+
+
+def _build_user_content(
+    prompt: str,
+    images: Optional[List[ImageInput]],
+    image_detail: ImageDetailLevel,
+) -> Union[str, List[Dict[str, Any]]]:
+    """Build the user message content, with optional vision parts."""
+    if images is None or len(images) == 0:
+        return prompt
+    image_urls = _resolve_image_inputs(images)
+    content_parts: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for url in image_urls:
+        content_parts.append({"type": "image_url", "image_url": {"url": url, "detail": image_detail}})
+    return content_parts
+
+
+class Usage(Typed):
+    """Token and cost quantities for a single LLM attempt."""
+
+    input_tokens: int
+    output_tokens: int
+    cost_microdollars: int
+
+    @validate
+    def with_output_tokens(self, *, output_tokens: int) -> Self:
+        """Return the same usage with a different output token count.
+
+        This is used for failure paths where input tokens may have been
+        consumed but no reliable response usage exists.
+        """
+        return Usage(
+            input_tokens=self.input_tokens,
+            output_tokens=output_tokens,
+            cost_microdollars=self.cost_microdollars,
+        )
 
 
 @worker(mode="Asyncio")
@@ -206,7 +262,7 @@ class SlowBurnLLM(Typed):
         description=(
             "Action when a single call's estimated cost exceeds the budget capacity. "
             '"warn" (default): proceed with the call but log a warning. '
-            '"error": raise ValueError. "ignore": proceed silently. '
+            '"error": raise BudgetOverflowError. "ignore": proceed silently. '
             "Defaults to slowburn_config.defaults.on_budget_overflow."
         ),
     )
@@ -214,7 +270,7 @@ class SlowBurnLLM(Typed):
         default="error",
         description=(
             "Action when the model is not in litellm's pricing database. "
-            '"error" (default): raise ModelNotFoundError. '
+            '"error" (default): raise PricingUnavailableError. '
             '"warn": log a warning and skip cost tracking (set cost to 0). '
             '"ignore": silently skip cost tracking. '
             "This only matters when a CostLimit is active (finite budget)."
@@ -283,44 +339,253 @@ class SlowBurnLLM(Typed):
                 messages.insert(0, {"role": "system", "content": system_prompt})
 
             if len(prompt) > 0:
-                if images is not None and len(images) > 0:
-                    image_urls = _resolve_image_inputs(images)
-                    content_parts: List[Dict[str, Any]] = [
-                        {"type": "text", "text": prompt},
-                    ]
-                    for url in image_urls:
-                        content_parts.append(
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": url, "detail": image_detail},
-                            }
-                        )
-                    messages.append({"role": "user", "content": content_parts})
-                else:
-                    messages.append({"role": "user", "content": prompt})
+                user_content = _build_user_content(prompt, images, image_detail)
+                messages.append({"role": "user", "content": user_content})
             return messages
 
         messages: List[Dict[str, Any]] = []
         if system_prompt is not None:
             messages.append({"role": "system", "content": system_prompt})
 
-        if images is not None and len(images) > 0:
-            image_urls = _resolve_image_inputs(images)
-            content_parts = [
-                {"type": "text", "text": prompt},
-            ]
-            for url in image_urls:
-                content_parts.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": url, "detail": image_detail},
-                    }
-                )
-            messages.append({"role": "user", "content": content_parts})
-        else:
-            messages.append({"role": "user", "content": prompt})
-
+        user_content = _build_user_content(prompt, images, image_detail)
+        messages.append({"role": "user", "content": user_content})
         return messages
+
+    def _has_cost_limit(self) -> bool:
+        """Return whether this worker has an active dollar-denominated CostLimit."""
+        try:
+            for limit_set in self.limits.limit_sets:
+                for limit in limit_set.limits:
+                    if getattr(limit, "key", None) == DEFAULT_COST_LIMIT_KEY:
+                        return True
+        except (AttributeError, TypeError):
+            return False
+        return False
+
+    def _should_track_cost(self) -> bool:
+        """Return whether CostLimit accounting should include cost.
+
+        Cost tracking is runtime accounting state, not part of Usage itself. A
+        configured CostLimit only becomes enforceable when model pricing is
+        available before the call; warn/ignore policies disable CostLimit
+        enforcement while leaving token/call limits and reporter logging intact.
+        """
+        if self._has_cost_limit() is False:
+            return False
+        try:
+            PricingCache.get_token_costs(self.model_name)
+            return True
+        except ModelNotFoundError as model_not_found_error:
+            # Unknown pricing is deterministic configuration state, not a transient
+            # LLM failure. Do not raise ValueError here: ValueError is retryable
+            # because validators use it for stochastic malformed responses.
+            if self.on_pricing_unavailable == "error":
+                raise PricingUnavailableError(
+                    f"Model {self.model_name!r} is not in the pricing database, "
+                    "and on_pricing_unavailable='error'. "
+                    "Set on_pricing_unavailable='warn' or provide model pricing to continue."
+                ) from model_not_found_error
+            elif self.on_pricing_unavailable == "warn":
+                logger.warning(
+                    f"[{self.name}] Model '{self.model_name}' not in pricing database. "
+                    f"Cost estimation disabled; CostLimit will not enforce budget for this model."
+                )
+                return False
+            elif self.on_pricing_unavailable == "ignore":
+                return False
+            else:
+                raise InvalidConfigValueError(
+                    f"Unknown on_pricing_unavailable={self.on_pricing_unavailable!r}. "
+                    "Must be 'error', 'warn', or 'ignore'."
+                ) from model_not_found_error
+
+    def _build_litellm_params(
+        self,
+        *,
+        worker_params: Dict[str, Any],
+        call_params: Optional[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[ToolChoiceOption],
+    ) -> Dict[str, Any]:
+        """Merge worker-level and call-level LiteLLM parameters.
+
+        Call-level values intentionally override worker defaults so that
+        per-call reasoning controls, response_format, etc. do not mutate
+        the worker's persistent configuration.
+        """
+        merged: Dict[str, Any] = {**worker_params}
+        if call_params is not None:
+            merged.update(call_params)
+        if tools is not None:
+            merged["tools"] = tools
+        if tool_choice is not None:
+            merged["tool_choice"] = tool_choice
+        return merged
+
+    def _estimate_usage(
+        self,
+        *,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
+        tool_choice: Optional[ToolChoiceOption],
+        should_track_cost: bool,
+    ) -> Usage:
+        """Estimate token and cost quantities for a pre-call reservation.
+
+        Token estimation uses litellm's local tokenizer over the full messages
+        list (history, tool schemas, tool results, images), then applies a
+        safety multiplier and overhead so reserved capacity is conservative.
+
+        Cost is only estimated when cost tracking is active. Token/call-only
+        limit sets do not require pricing data and receive cost_microdollars=0.
+        """
+        defaults = slowburn_config.defaults
+        base_input_tokens: int = litellm.token_counter(
+            model=self.model_name,
+            messages=messages,
+            tools=tools,
+            tool_choice=tool_choice,
+            use_default_image_token_count=True,
+        )
+        input_tokens: int = (
+            int(base_input_tokens * defaults.input_token_estimate_multiplier)
+            + defaults.input_token_estimate_overhead
+        )
+        output_tokens: int = (
+            int(self.max_tokens * defaults.output_token_estimate_multiplier)
+            + defaults.output_token_estimate_overhead
+        )
+        cost_microdollars: int = 0
+        if should_track_cost:
+            cost_microdollars = PricingCache.estimate_cost_microdollars(
+                self.model_name,
+                input_tokens,
+                output_tokens,
+            )
+        return Usage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_microdollars=cost_microdollars,
+        )
+
+    def _build_limit_usage(
+        self,
+        *,
+        usage: Usage,
+        should_track_cost: bool,
+    ) -> Dict[str, int]:
+        """Build the usage dict for acquisition.update().
+
+        The Concurry limit layer needs a dict keyed by limit names. Usage owns
+        token and cost quantities; should_track_cost is separate runtime
+        accounting state that controls whether the CostLimit key is included.
+        """
+        limit_usage: Dict[str, int] = {
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "call_count": 1,
+        }
+        if should_track_cost:
+            limit_usage[DEFAULT_COST_LIMIT_KEY] = usage.cost_microdollars
+        return limit_usage
+
+    def _extract_actual_cost(self, response: Any) -> int:
+        """Extract actual cost from a litellm response, falling back to 0.
+
+        Pricing failures here are deliberately swallowed: the response was
+        already produced and accounted in tokens; an unknown price should
+        not propagate as a retryable error after a successful call.
+        """
+        try:
+            return PricingCache.actual_cost_microdollars(response, model=self.model_name)
+        except (ModelNotFoundError, ValueError, TypeError, KeyError, AttributeError):
+            return 0
+
+    def _account_call(
+        self,
+        *,
+        acquisition: Any,
+        usage: Usage,
+        should_track_cost: bool,
+    ) -> None:
+        """Update both the Concurry acquisition and the CostReporter.
+
+        This is the single point of truth for cost accounting. Every path
+        that consumed (or potentially consumed) tokens — success or failure —
+        must call this exactly once before re-raising. Otherwise the
+        acquisition leaks reserved capacity, or the CostReporter under-reports
+        the budget consumed by a failed attempt.
+        """
+        acquisition.update(
+            usage=self._build_limit_usage(
+                usage=usage,
+                should_track_cost=should_track_cost,
+            )
+        )
+        self._reporter.log_call(
+            model=self.model_name,
+            cost_usd=microdollars_to_dollars(usage.cost_microdollars),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
+
+    async def _call_with_timeout(
+        self,
+        *,
+        acquisition: Any,
+        estimated_usage: Usage,
+        should_track_cost: bool,
+        merged_params: Dict[str, Any],
+        messages: List[Dict[str, Any]],
+        prompt_hash: str,
+        call_t0: float,
+        verbosity: int,
+    ) -> Any:
+        """Execute the litellm call with timeout and account on timeout failure.
+
+        On timeout, no response object exists, so usage accounting falls back
+        to the conservative estimate reserved before the request was sent,
+        with output tokens set to zero because no completion usage exists.
+        Both the acquisition and the reporter are updated before re-raising.
+        """
+        api_t0: float = time.monotonic()
+        try:
+            litellm.drop_params = True
+            response = await asyncio.wait_for(
+                litellm.acompletion(
+                    model=self.model_name,
+                    messages=messages,
+                    api_key=self.api_key if len(self.api_key) > 0 else None,
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                    **merged_params,
+                ),
+                timeout=self.timeout,
+            )
+        except asyncio.TimeoutError as timeout_error:
+            self._account_call(
+                acquisition=acquisition,
+                usage=estimated_usage.with_output_tokens(output_tokens=0),
+                should_track_cost=should_track_cost,
+            )
+            if verbosity >= 3:
+                print(
+                    f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                    f"asyncio.TimeoutError at {time.monotonic() - call_t0:.2f}s "
+                    f"(will retry if configured)\n"
+                    f"  {format_exception_msg(timeout_error)}"
+                )
+            raise timeout_error
+
+        if verbosity >= 3:
+            actual_input: int = response.usage.prompt_tokens
+            actual_output: int = response.usage.completion_tokens
+            print(
+                f"[{self.name}] [Prompt={prompt_hash}] RESPONSE     | "
+                f"api={time.monotonic() - api_t0:.2f}s total={time.monotonic() - call_t0:.2f}s | "
+                f"in={actual_input} out={actual_output}"
+            )
+        return response
 
     @validate
     async def call_llm(
@@ -337,7 +602,7 @@ class SlowBurnLLM(Typed):
         image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
-    ) -> Union[str, List[Dict[str, Any]]]:
+    ) -> Union[str, T, List[Dict[str, Any]]]:
         """Execute a single LLM call with cost-aware backpressure.
 
         Args:
@@ -362,7 +627,9 @@ class SlowBurnLLM(Typed):
                 ``True`` forces messages-list output. ``False`` forces
                 string output.
             validator: Optional callable that parses/validates the response text.
-                Ignored when *return_messages* resolves to True.
+                When *return_messages* resolves to True, validation is still
+                executed for retry/failure semantics, but the returned value
+                remains the complete messages list.
             image_detail: Detail level for vision queries ("low"/"high"/"auto").
                 Defaults to slowburn_config.defaults.image_detail.
             verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
@@ -381,13 +648,27 @@ class SlowBurnLLM(Typed):
         if is_no_arg(image_detail):
             image_detail = slowburn_config.defaults.image_detail
 
-        should_return_messages: bool
-        if return_messages is not None:
-            should_return_messages = return_messages
-        elif history is not None or isinstance(prompt, list):
-            should_return_messages = True
-        else:
-            should_return_messages = False
+        # Returning messages is the structured-conversation mode. It is required for
+        # multi-turn continuations and pre-built message lists because callers need the
+        # assistant message appended to the conversation state.
+        if return_messages is None:
+            return_messages = history is not None or isinstance(prompt, list)
+
+        # Resolve tools/tool_choice from caller or worker defaults
+        if is_no_arg(tools):
+            tools = self.tools
+        if is_no_arg(tool_choice):
+            tool_choice = self.tool_choice
+
+        # Tool calls are structured assistant-message data. They cannot be faithfully
+        # represented as a response string, so fail before making an API call rather
+        # than serializing tool calls into fake text or retrying a deterministic caller error.
+        if tools is not None and len(tools) > 0 and return_messages is False:
+            raise ToolCallContractError(
+                "call_llm() was called with tools but return_messages=False. "
+                "Tool-call responses are structured assistant messages, not response text. "
+                "Pass return_messages=True when using tools."
+            )
 
         messages = self.build_messages(
             prompt=prompt,
@@ -397,305 +678,233 @@ class SlowBurnLLM(Typed):
             image_detail=image_detail,
         )
 
-        merged_params: Dict[str, Any] = {**self.litellm_params}
-        if litellm_params is not None:
-            merged_params.update(litellm_params)
+        merged_params: Dict[str, Any] = self._build_litellm_params(
+            worker_params=self.litellm_params,
+            call_params=litellm_params,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
 
-        resolved_tools = tools if not is_no_arg(tools) else self.tools
-        resolved_tool_choice = tool_choice if not is_no_arg(tool_choice) else self.tool_choice
-
-        if resolved_tools is not None:
-            merged_params["tools"] = resolved_tools
-        if resolved_tool_choice is not None:
-            merged_params["tool_choice"] = resolved_tool_choice
-
-        # 1. ESTIMATE tokens using litellm's local tokenizer
-        # This accounts for the full messages list (history, tool schemas,
-        # tool results, images) rather than just the current prompt string.
-        # A safety multiplier and buffer are applied on top to account for
-        # differences between litellm's tokenizer and the actual provider.
-        defaults = slowburn_config.defaults
-        base_input_tokens = litellm.token_counter(
-            model=self.model_name,
+        should_track_cost: bool = self._should_track_cost()
+        estimated_usage: Usage = self._estimate_usage(
             messages=messages,
-            tools=resolved_tools,
-            tool_choice=resolved_tool_choice,
-            use_default_image_token_count=True,
+            tools=tools,
+            tool_choice=tool_choice,
+            should_track_cost=should_track_cost,
         )
-        estimated_input_tokens = (
-            int(base_input_tokens * defaults.input_token_estimate_multiplier)
-            + defaults.input_token_estimate_overhead
-        )
-        estimated_output_tokens = (
-            int(self.max_tokens * defaults.output_token_estimate_multiplier)
-            + defaults.output_token_estimate_overhead
+        estimated_limit_usage: Dict[str, int] = self._build_limit_usage(
+            usage=estimated_usage,
+            should_track_cost=should_track_cost,
         )
 
-        # 2. ESTIMATE cost in microdollars (only if a CostLimit is active)
-        has_cost_limit = False
-        try:
-            for limit_set in self.limits.limit_sets:
-                for lim in limit_set.limits:
-                    if getattr(lim, "key", None) == DEFAULT_COST_LIMIT_KEY:
-                        has_cost_limit = True
-                        break
-                if has_cost_limit:
-                    break
-        except (AttributeError, TypeError):
-            pass
-        estimated_cost: int = 0
-        if has_cost_limit:
-            try:
-                estimated_cost = PricingCache.estimate_cost_microdollars(
-                    self.model_name,
-                    estimated_input_tokens,
-                    estimated_output_tokens,
-                )
-            except ModelNotFoundError:
-                if self.on_pricing_unavailable == "error":
-                    raise
-                if self.on_pricing_unavailable == "warn":
-                    logger.warning(
-                        f"[{self.name}] Model '{self.model_name}' not in pricing database. "
-                        f"Cost estimation disabled; CostLimit will not enforce budget for this model."
-                    )
-                has_cost_limit = False
-
-        # 3. ACQUIRE (yields to event loop if budget/rate exhausted)
-        requested: Dict[str, int] = {
-            "input_tokens": estimated_input_tokens,
-            "output_tokens": estimated_output_tokens,
-            "call_count": 1,
-        }
-        if has_cost_limit:
-            requested[DEFAULT_COST_LIMIT_KEY] = estimated_cost
-
-        call_t0 = time.monotonic()
+        call_t0: float = time.monotonic()
+        prompt_hash: str = _hash_prompt(prompt)
         if verbosity >= 3:
-            prompt_hash: str = _hash_prompt(prompt)
             print(
                 f"[{self.name}] [Prompt={prompt_hash}] ACQUIRE_WAIT | "
-                f"est_in={estimated_input_tokens} est_out={estimated_output_tokens}"
+                f"est_in={estimated_usage.input_tokens} est_out={estimated_usage.output_tokens}"
             )
 
         try:
-            acquire_start = time.monotonic()
-            context_manager = await self.limits.async_acquire(requested=requested)
-            acquire_elapsed = time.monotonic() - acquire_start
+            acquire_start: float = time.monotonic()
+            context_manager: Any = await self.limits.async_acquire(requested=estimated_limit_usage)
+            acquire_elapsed: float = time.monotonic() - acquire_start
         except ValueError as acquire_error:
+            # Concurry uses ValueError for both generic acquire failures and the
+            # specific "single request exceeds limit capacity" case. Only the
+            # latter is handled by SlowBurn's budget-overflow policy.
             if "exceeds capacity" not in str(acquire_error):
-                raise
+                raise acquire_error
 
-            overflow_message = (
+            overflow_message: str = (
                 f"A single call_llm() call to {self.model_name} is estimated to cost "
-                f"${microdollars_to_dollars(estimated_cost):.6f} "
-                f"(~{estimated_input_tokens} input + {estimated_output_tokens} output tokens), "
+                f"${microdollars_to_dollars(estimated_usage.cost_microdollars):.6f} "
+                f"(~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens), "
                 f"which exceeds your budget_usd per window. "
                 f"Fix by: (1) increasing the budget while creating the LLM, "
                 f"(2) reducing max_tokens (currently {self.max_tokens}), "
                 f"or (3) using a more budget-friendly model."
             )
 
+            # Budget overflow is a caller/configuration problem. Retrying the same
+            # request cannot make it fit inside the configured capacity.
             if self.on_budget_overflow == "error":
-                raise ValueError(overflow_message) from acquire_error
-
-            if self.on_budget_overflow == "warn":
+                raise BudgetOverflowError(overflow_message) from acquire_error
+            elif self.on_budget_overflow == "warn":
                 logger.warning(f"[{self.name}] Budget overflow: {overflow_message}")
+            elif self.on_budget_overflow == "ignore":
+                pass
+            else:
+                raise InvalidConfigValueError(
+                    f"Unknown on_budget_overflow={self.on_budget_overflow!r}. "
+                    "Must be 'error', 'warn', or 'ignore'."
+                ) from acquire_error
 
-            capped_requested = dict(requested)
-            if has_cost_limit:
-                capped_requested[DEFAULT_COST_LIMIT_KEY] = 1
+            # In warn/ignore mode, acquire the non-cost limits normally but cap the
+            # cost request to the smallest positive amount so a single expensive call
+            # does not permanently block on a capacity it can never fit into.
+            capped_limit_usage: Dict[str, int] = dict(estimated_limit_usage)
+            if should_track_cost:
+                capped_limit_usage[DEFAULT_COST_LIMIT_KEY] = 1
             acquire_start = time.monotonic()
-            context_manager = await self.limits.async_acquire(requested=capped_requested)
+            context_manager = await self.limits.async_acquire(requested=capped_limit_usage)
             acquire_elapsed = time.monotonic() - acquire_start
 
         if self.backpressure_notify == "warn":
-            threshold = slowburn_config.defaults.backpressure_threshold_seconds
+            threshold: float = slowburn_config.defaults.backpressure_threshold_seconds
             if acquire_elapsed > threshold:
                 logger.warning(
                     f"[{self.name}] Backpressure: blocked {acquire_elapsed:.1f}s "
                     f"waiting for budget/rate capacity "
-                    f"(estimated ${microdollars_to_dollars(estimated_cost):.6f}, "
-                    f"~{estimated_input_tokens} input + {estimated_output_tokens} output tokens)"
+                    f"(estimated ${microdollars_to_dollars(estimated_usage.cost_microdollars):.6f}, "
+                    f"~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens)"
                 )
 
+        # From this point on, every failure path must update both the acquisition and
+        # reporter exactly once with either actual usage (after a response exists) or
+        # estimated usage (before a response exists).
         async with context_manager as acquisition:
             if verbosity >= 3:
                 print(
                     f"[{self.name}] [Prompt={prompt_hash}] ACQUIRED     | "
                     f"wait={time.monotonic() - call_t0:.2f}s | sending request..."
                 )
-                api_t0 = time.monotonic()
 
             try:
-                litellm.drop_params = True
-                response = await asyncio.wait_for(
-                    litellm.acompletion(
-                        model=self.model_name,
-                        messages=messages,
-                        api_key=self.api_key if len(self.api_key) > 0 else None,
-                        temperature=self.temperature,
-                        max_tokens=self.max_tokens,
-                        **merged_params,
-                    ),
-                    timeout=self.timeout,
+                response: Any = await self._call_with_timeout(
+                    acquisition=acquisition,
+                    estimated_usage=estimated_usage,
+                    should_track_cost=should_track_cost,
+                    merged_params=merged_params,
+                    messages=messages,
+                    prompt_hash=prompt_hash,
+                    call_t0=call_t0,
+                    verbosity=verbosity,
                 )
-
-                actual_input = response.usage.prompt_tokens
-                actual_output = response.usage.completion_tokens
-
+            except asyncio.TimeoutError:
+                raise
+            except BaseException as base_exception:
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=estimated_usage.with_output_tokens(output_tokens=0),
+                    should_track_cost=should_track_cost,
+                )
                 if verbosity >= 3:
                     print(
-                        f"[{self.name}] [Prompt={prompt_hash}] RESPONSE     | "
-                        f"api={time.monotonic() - api_t0:.2f}s total={time.monotonic() - call_t0:.2f}s | "
-                        f"in={actual_input} out={actual_output}"
+                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                        f"{type(base_exception).__name__} at "
+                        f"{time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
+                        f"  {format_exception_msg(base_exception)}"
                     )
+                raise base_exception
 
-                try:
-                    actual_cost = PricingCache.actual_cost_microdollars(
-                        response,
-                        model=self.model_name,
-                    )
-                except (ModelNotFoundError, Exception):
-                    actual_cost = 0
+            actual_usage: Usage = Usage(
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=response.usage.completion_tokens,
+                cost_microdollars=self._extract_actual_cost(response),
+            )
 
-                response_message = response.choices[0].message
-                response_text = response_message.content
-                tool_calls = response_message.tool_calls
+            try:
+                # LiteLLM normalizes provider responses into an assistant message.
+                # SlowBurn only treats textual content as response text; tool_calls
+                # remain structured message fields and are returned only in messages mode.
+                response_message: Any = response.choices[0].message
+                response_text: Optional[str] = response_message.content
+                tool_calls: Optional[List[Any]] = response_message.tool_calls
 
+                # Null content with no tool calls is usually a refusal/content-filter
+                # or provider anomaly. Keep it retryable because a repeated stochastic
+                # call may produce a usable response.
                 if response_text is None and tool_calls is None:
-                    _usage = {
-                        "input_tokens": actual_input,
-                        "output_tokens": actual_output,
-                        "call_count": 1,
-                    }
-                    if has_cost_limit:
-                        _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
-                    acquisition.update(usage=_usage)
                     raise ValueError(
                         f"LLM returned null content with no tool calls "
                         f"(model={self.model_name}). "
                         f"This may indicate a refusal or content filter."
                     )
 
-                if response_text is None and tool_calls is not None:
-                    import json as _json
-
-                    response_text = _json.dumps(
-                        {
-                            "tool_calls": [
-                                {
-                                    "id": tc.id,
-                                    "function": {
-                                        "name": tc.function.name,
-                                        "arguments": tc.function.arguments,
-                                    },
-                                }
-                                for tc in tool_calls
-                            ]
-                        }
+                # Provider anomaly guard: the LLM returned tool_calls even though
+                # the caller did not pass tool schemas (or did so without requesting
+                # message-mode output). This is a non-retryable protocol violation.
+                if response_text is None and tool_calls is not None and return_messages is False:
+                    raise ToolCallContractError(
+                        "LLM returned tool_calls with no text content, but return_messages=False. "
+                        "Tool-call responses must be consumed as assistant messages. "
+                        "Pass return_messages=True when using tools."
                     )
 
-                # 5. Apply validator if provided (skipped when returning messages)
-                result: Union[str, List[Dict[str, Any]]]
-                if should_return_messages:
-                    assistant_message: Dict[str, Any] = {"role": "assistant"}
-                    if response_message.content is not None:
-                        assistant_message["content"] = response_message.content
-                    if tool_calls is not None:
-                        assistant_message["tool_calls"] = [
-                            {
-                                "id": tc.id,
-                                "type": "function",
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in tool_calls
-                        ]
+                # Validators parse response text. A tool-only response is a valid
+                # assistant message, but it is invalid for a text validator; leave this
+                # as retryable ValueError because another model attempt may choose text.
+                if response_text is None and tool_calls is not None and validator is not None:
+                    raise ValueError(
+                        "LLM returned tool_calls with no text content, but a text validator was provided. "
+                        "This is retryable because another stochastic LLM call may return text content."
+                    )
+
+                result: Union[str, T, List[Dict[str, Any]]]
+                if validator is not None:
+                    try:
+                        result = validator(response_text)
+                    except ValueError as validation_error:
+                        raise validation_error
+                    except Exception as validation_error:
+                        raise ValueError(f"Validator error: {validation_error}") from validation_error
+                elif response_text is not None:
+                    result = response_text
+                else:
+                    result = messages
+
+                # In messages mode, return LiteLLM's full normalized assistant message
+                # so provider extensions such as reasoning_content and tool_calls are preserved.
+                if return_messages:
+                    assistant_message: Dict[str, Any] = response_message.model_dump(exclude_none=True)
                     if "content" not in assistant_message:
                         assistant_message["content"] = None
                     messages.append(assistant_message)
                     result = messages
-                elif validator is not None:
-                    try:
-                        result = validator(response_text)
-                    except ValueError:
-                        _usage = {
-                            "input_tokens": actual_input,
-                            "output_tokens": actual_output,
-                            "call_count": 1,
-                        }
-                        if has_cost_limit:
-                            _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
-                        acquisition.update(usage=_usage)
-                        raise
-                    except Exception as e:
-                        _usage = {
-                            "input_tokens": actual_input,
-                            "output_tokens": actual_output,
-                            "call_count": 1,
-                        }
-                        if has_cost_limit:
-                            _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
-                        acquisition.update(usage=_usage)
-                        raise ValueError(f"Validator error: {e}") from e
-                else:
-                    result = response_text
 
-                # 6. UPDATE limits with actuals (refunds unused budget)
-                _usage = {
-                    "input_tokens": actual_input,
-                    "output_tokens": actual_output,
-                    "call_count": 1,
-                }
-                if has_cost_limit:
-                    _usage[DEFAULT_COST_LIMIT_KEY] = actual_cost
-                acquisition.update(usage=_usage)
-
-                # 7. LOG to reporter
-                self._reporter.log_call(
-                    model=self.model_name,
-                    cost_usd=microdollars_to_dollars(actual_cost),
-                    input_tokens=actual_input,
-                    output_tokens=actual_output,
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=actual_usage,
+                    should_track_cost=should_track_cost,
                 )
 
                 if verbosity >= 2:
                     logger.info(
                         f"[{self.name}] {self.model_name}: "
-                        f"{actual_input}+{actual_output} tokens, "
-                        f"${microdollars_to_dollars(actual_cost):.6f}"
+                        f"{actual_usage.input_tokens}+{actual_usage.output_tokens} tokens, "
+                        f"${microdollars_to_dollars(actual_usage.cost_microdollars):.6f}"
                     )
 
                 return result
-
-            except ValueError as ve:
+            except (ValueError, SlowBurnNonRetryableError) as post_response_error:
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=actual_usage,
+                    should_track_cost=should_track_cost,
+                )
                 if verbosity >= 3:
                     print(
                         f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
-                        f"ValueError at {time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
-                        f"  {format_exception_msg(ve)}"
+                        f"{type(post_response_error).__name__} at {time.monotonic() - call_t0:.2f}s "
+                        f"(will retry if configured)\n"
+                        f"  {format_exception_msg(post_response_error)}"
                     )
-                raise
-            except (asyncio.TimeoutError, BaseException) as exc:
+                raise post_response_error
+            except BaseException as base_exception:
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=estimated_usage.with_output_tokens(output_tokens=0),
+                    should_track_cost=should_track_cost,
+                )
                 if verbosity >= 3:
                     print(
                         f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
-                        f"{type(exc).__name__} at "
+                        f"{type(base_exception).__name__} at "
                         f"{time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
-                        f"  {format_exception_msg(exc)}"
+                        f"  {format_exception_msg(base_exception)}"
                     )
-                _usage = {
-                    "input_tokens": estimated_input_tokens,
-                    "output_tokens": 0,
-                    "call_count": 1,
-                }
-                if has_cost_limit:
-                    _usage[DEFAULT_COST_LIMIT_KEY] = estimated_cost
-                acquisition.update(usage=_usage)
-                raise
+                raise base_exception
 
     @validate
     async def call_llm_batch(
@@ -712,7 +921,7 @@ class SlowBurnLLM(Typed):
         image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
-    ) -> List[Union[str, List[Dict[str, Any]]]]:
+    ) -> List[Union[str, T, List[Dict[str, Any]]]]:
         """Execute multiple LLM calls concurrently with shared backpressure.
 
         Args:
@@ -739,12 +948,12 @@ class SlowBurnLLM(Typed):
             return []
 
         if images_per_prompt is not None and len(images_per_prompt) != len(prompts):
-            raise ValueError(
+            raise BatchInputMismatchError(
                 f"images_per_prompt length ({len(images_per_prompt)}) "
                 f"must match prompts length ({len(prompts)})"
             )
         if history_per_prompt is not None and len(history_per_prompt) != len(prompts):
-            raise ValueError(
+            raise BatchInputMismatchError(
                 f"history_per_prompt length ({len(history_per_prompt)}) "
                 f"must match prompts length ({len(prompts)})"
             )
@@ -775,7 +984,7 @@ class SlowBurnLLM(Typed):
             )
         ]
 
-        results: List[Union[str, List[Dict[str, Any]]]] = await async_gather(
+        results: List[Union[str, T, List[Dict[str, Any]]]] = await async_gather(
             tasks,
             progress=dict(
                 disable=verbosity < 2,
