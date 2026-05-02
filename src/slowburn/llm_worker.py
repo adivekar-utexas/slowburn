@@ -55,6 +55,7 @@ litellm.failure_callback = []  # Clearing these also prevents the LoggingWorker 
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("litellm").setLevel(logging.ERROR)
 
+
 # Disable LiteLLM's GLOBAL_LOGGING_WORKER entirely.
 # SlowBurn clears all callbacks and manages its own cost accounting, so the background
 # worker serves no purpose. Without this, the singleton binds to Concurry's private
@@ -63,6 +64,7 @@ logging.getLogger("litellm").setLevel(logging.ERROR)
 def _no_op_enqueue(async_coroutine: Any, **kwargs: Any) -> None:
     if hasattr(async_coroutine, "close"):
         async_coroutine.close()
+
 
 GLOBAL_LOGGING_WORKER.ensure_initialized_and_enqueue = _no_op_enqueue  # type: ignore[method-assign]
 
@@ -568,20 +570,19 @@ class SlowBurnLLM(Typed):
                 usage=estimated_usage.with_output_tokens(output_tokens=0),
                 should_track_cost=should_track_cost,
             )
-            if verbosity >= 3:
-                print(
-                    f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
-                    f"asyncio.TimeoutError at {time.monotonic() - call_t0:.2f}s "
-                    f"(will retry if configured)\n"
-                    f"  {format_exception_msg(timeout_error)}"
+            if verbosity >= 2:
+                logger.warning(
+                    f"[{self.name}] [Prompt={prompt_hash}] TIMEOUT | "
+                    f"after {time.monotonic() - call_t0:.2f}s "
+                    f"(timeout={self.timeout}s)"
                 )
             raise timeout_error
 
         if verbosity >= 3:
             actual_input: int = response.usage.prompt_tokens
             actual_output: int = response.usage.completion_tokens
-            print(
-                f"[{self.name}] [Prompt={prompt_hash}] RESPONSE     | "
+            logger.info(
+                f"[{self.name}] [Prompt={prompt_hash}] RESPONSE | "
                 f"api={time.monotonic() - api_t0:.2f}s total={time.monotonic() - call_t0:.2f}s | "
                 f"in={actual_input} out={actual_output}"
             )
@@ -632,7 +633,8 @@ class SlowBurnLLM(Typed):
                 remains the complete messages list.
             image_detail: Detail level for vision queries ("low"/"high"/"auto").
                 Defaults to slowburn_config.defaults.image_detail.
-            verbosity: Logging verbosity (0=silent, 1=normal, 2=debug).
+            verbosity: Logging verbosity (0=silent, 1=minimal,
+                2=warnings+progress, 3=full debug with per-event logging).
             litellm_params: Per-call parameters passed through to
                 ``litellm.acompletion()``. Merged on top of the worker-level
                 ``self.litellm_params``.
@@ -700,9 +702,11 @@ class SlowBurnLLM(Typed):
         call_t0: float = time.monotonic()
         prompt_hash: str = _hash_prompt(prompt)
         if verbosity >= 3:
-            print(
-                f"[{self.name}] [Prompt={prompt_hash}] ACQUIRE_WAIT | "
-                f"est_in={estimated_usage.input_tokens} est_out={estimated_usage.output_tokens}"
+            logger.info(
+                f"[{self.name}] [Prompt={prompt_hash}] CALL_START | "
+                f"model={self.model_name} "
+                f"est_in={estimated_usage.input_tokens} est_out={estimated_usage.output_tokens} "
+                f"timeout={self.timeout}s tools={tools is not None and len(tools) > 0}"
             )
 
         try:
@@ -765,8 +769,8 @@ class SlowBurnLLM(Typed):
         # estimated usage (before a response exists).
         async with context_manager as acquisition:
             if verbosity >= 3:
-                print(
-                    f"[{self.name}] [Prompt={prompt_hash}] ACQUIRED     | "
+                logger.info(
+                    f"[{self.name}] [Prompt={prompt_hash}] ACQUIRED | "
                     f"wait={time.monotonic() - call_t0:.2f}s | sending request..."
                 )
 
@@ -790,11 +794,11 @@ class SlowBurnLLM(Typed):
                     should_track_cost=should_track_cost,
                 )
                 if verbosity >= 3:
-                    print(
-                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                    logger.warning(
+                        f"[{self.name}] [Prompt={prompt_hash}] ERROR | "
                         f"{type(base_exception).__name__} at "
-                        f"{time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
-                        f"  {format_exception_msg(base_exception)}"
+                        f"{time.monotonic() - call_t0:.2f}s (will retry if configured): "
+                        f"{format_exception_msg(base_exception)}"
                     )
                 raise base_exception
 
@@ -883,12 +887,11 @@ class SlowBurnLLM(Typed):
                     usage=actual_usage,
                     should_track_cost=should_track_cost,
                 )
-                if verbosity >= 3:
-                    print(
-                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
-                        f"{type(post_response_error).__name__} at {time.monotonic() - call_t0:.2f}s "
-                        f"(will retry if configured)\n"
-                        f"  {format_exception_msg(post_response_error)}"
+                if verbosity >= 2:
+                    logger.warning(
+                        f"[{self.name}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
+                        f"{type(post_response_error).__name__} at {time.monotonic() - call_t0:.2f}s: "
+                        f"{format_exception_msg(post_response_error)}"
                     )
                 raise post_response_error
             except BaseException as base_exception:
@@ -897,12 +900,12 @@ class SlowBurnLLM(Typed):
                     usage=estimated_usage.with_output_tokens(output_tokens=0),
                     should_track_cost=should_track_cost,
                 )
-                if verbosity >= 3:
-                    print(
-                        f"[{self.name}] [Prompt={prompt_hash}] ERROR        | "
+                if verbosity >= 2:
+                    logger.warning(
+                        f"[{self.name}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
                         f"{type(base_exception).__name__} at "
-                        f"{time.monotonic() - call_t0:.2f}s (will retry if configured)\n"
-                        f"  {format_exception_msg(base_exception)}"
+                        f"{time.monotonic() - call_t0:.2f}s: "
+                        f"{format_exception_msg(base_exception)}"
                     )
                 raise base_exception
 
