@@ -85,7 +85,7 @@ class TestSonnet46ThinkingBudget:
             budget_usd=5.0,
             window="daily",
             max_tokens=16000,  # Ensure enough headroom for thinking + content
-            temperature=1.0,   # Temperature must be 1.0 when thinking is enabled
+            temperature=1.0,  # Temperature must be 1.0 when thinking is enabled
             litellm_params=litellm_params,
             on_pricing_unavailable="warn",
         )
@@ -115,10 +115,7 @@ class TestSonnet46ThinkingBudget:
                 f"  REASONING ({len(reasoning) if reasoning else 0} chars):\n"
                 f"{'═' * 50}\n{reasoning}\n{'═' * 50}"
             )
-            print(
-                f"  CONTENT ({len(content)} chars):\n"
-                f"{'═' * 50}\n{content}\n{'═' * 50}"
-            )
+            print(f"  CONTENT ({len(content)} chars):\n{'═' * 50}\n{content}\n{'═' * 50}")
 
             assert reasoning is not None and len(reasoning) > 0, "Model did not produce reasoning content"
             assert len(content) > 0, "Model did not produce final content"

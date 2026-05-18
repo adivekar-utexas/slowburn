@@ -82,10 +82,10 @@ def _make_tool_call(
 def _build_worker(**init_kwargs: Any) -> SlowBurnLLM:
     limit_set = LimitSet(
         limits=[
-            CostLimit(budget_usd=10.0, window_seconds=3600),
-            RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-            RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-            CallLimit(window_seconds=60, capacity=500),
+            CostLimit(budget_usd=10.0, window=3600),
+            RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+            RateLimit(key="output_tokens", window=60, capacity=200_000),
+            CallLimit(window=60, capacity=500),
         ],
         mode="Asyncio",
         shared=True,

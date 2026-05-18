@@ -62,7 +62,7 @@ def main():
     reporter = CostReporter()
     sb = SlowBurnCrewAI(
         budget_usd=BUDGET_USD,
-        window_seconds=WINDOW_SECONDS,
+        window=WINDOW_SECONDS,
         max_tokens=500,
         reporter=reporter,
     )

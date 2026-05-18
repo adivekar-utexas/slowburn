@@ -1,4 +1,12 @@
-"""Tests for infinite budget behavior: no CostLimit, no pricing DB required."""
+"""Tests for infinite budget behavior: ``inf`` budget → no cost enforcement,
+no pricing DB required.
+
+In the new ``SlowBurnLimits`` design every slot is always populated, so a
+worker with the library default budget *does* have a CostLimit — but with
+``budget_usd=float("inf")``. The worker recognizes this and skips cost
+enforcement (and pricing-database lookups) the same way it used to skip
+when the slot was absent.
+"""
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -38,36 +46,43 @@ def _get_limit_keys(llm) -> set:
     return keys
 
 
+def _get_cost_limit_budget(llm) -> float:
+    """Return the budget_usd of the (single) CostLimit in the first LimitSet."""
+    for limit_set in llm.limits.limit_sets:
+        for lim in limit_set.limits:
+            if getattr(lim, "key", None) == DEFAULT_COST_LIMIT_KEY:
+                return lim.budget_usd
+    raise AssertionError("no CostLimit on the pool")
+
+
 class TestInfiniteBudgetCreateLLM:
-    """create_llm with default budget (inf) should not create a CostLimit."""
+    """``create_llm`` with default (inf) budget should produce a CostLimit
+    with ``budget_usd=inf`` (the library default), and the worker should treat
+    that as 'no real cost enforcement' for unknown models."""
 
-    def test_default_budget_has_no_cost_limit(self) -> None:
-        """Default budget_usd=inf should produce a LimitSet without CostLimit.
-
-        Steps:
-        1. Create worker with default budget (no budget_usd arg).
-        2. Inspect the LimitSet's limits.
-        3. Verify no limit has the cost_microdollars key.
-        """
+    def test_default_budget_has_inf_cost_limit(self) -> None:
+        """Default budget should produce a CostLimit with ``budget_usd=inf``."""
         llm = create_llm(model=MOCK_MODEL_NAME)
         try:
-            assert DEFAULT_COST_LIMIT_KEY not in _get_limit_keys(llm)
+            assert DEFAULT_COST_LIMIT_KEY in _get_limit_keys(llm)
+            assert _get_cost_limit_budget(llm) == float("inf")
         finally:
             llm.stop()
 
-    def test_explicit_budget_has_cost_limit(self) -> None:
-        """Explicit budget_usd=5.0 should include a CostLimit."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=5.0)
+    def test_explicit_budget_has_finite_cost_limit(self) -> None:
+        """Explicit ``budget_per_day=5.0`` should include a finite CostLimit."""
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_day=5.0))
         try:
             assert DEFAULT_COST_LIMIT_KEY in _get_limit_keys(llm)
+            assert _get_cost_limit_budget(llm) == 5.0
         finally:
             llm.stop()
 
-    def test_explicit_inf_budget_has_no_cost_limit(self) -> None:
-        """Passing budget_usd=float('inf') explicitly should also skip CostLimit."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=float("inf"))
+    def test_explicit_inf_budget_keeps_inf_cost_limit(self) -> None:
+        """Passing ``budget_per_day=float('inf')`` explicitly is equivalent to default."""
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_day=float("inf")))
         try:
-            assert DEFAULT_COST_LIMIT_KEY not in _get_limit_keys(llm)
+            assert _get_cost_limit_budget(llm) == float("inf")
         finally:
             llm.stop()
 
@@ -78,7 +93,7 @@ class TestInfiniteBudgetCreateLLM:
             keys = _get_limit_keys(llm)
             assert "input_tokens" in keys
             assert "output_tokens" in keys
-            assert "call_count" in keys
+            assert "requests" in keys
         finally:
             llm.stop()
 
@@ -114,14 +129,7 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_unknown_model_reporter_tracks_calls_and_tokens(self, mock_acompletion) -> None:
-        """Reporter should still track call count and tokens even without cost data.
-
-        Steps:
-        1. Create worker with unknown model, inf budget.
-        2. Make a call.
-        3. Verify reporter has 1 call and correct token counts.
-        4. Verify cost is 0 (unknown model, no pricing).
-        """
+        """Reporter should still track call count and tokens even without cost data."""
         usage = SimpleNamespace(prompt_tokens=50, completion_tokens=20, total_tokens=70)
         message = SimpleNamespace(content="response", tool_calls=None)
         choice = SimpleNamespace(message=message)
@@ -147,13 +155,7 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_known_model_with_inf_budget_still_tracks_cost(self, mock_acompletion) -> None:
-        """A known model with inf budget should still report actual cost.
-
-        Steps:
-        1. Create worker with known model (gpt-4o-mini), inf budget.
-        2. Mock acompletion with _hidden_params response_cost.
-        3. Verify reporter logs the cost from the response.
-        """
+        """A known model with inf budget should still report actual cost."""
         usage = SimpleNamespace(prompt_tokens=30, completion_tokens=15, total_tokens=45)
         message = SimpleNamespace(content="output", tool_calls=None)
         choice = SimpleNamespace(message=message)
@@ -174,13 +176,7 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_multiple_calls_unknown_model_accumulate(self, mock_acompletion) -> None:
-        """Multiple calls with unknown model should accumulate call count.
-
-        Steps:
-        1. Create worker with unknown model, inf budget.
-        2. Make 3 calls.
-        3. Verify reporter has 3 calls, 0 cost.
-        """
+        """Multiple calls with unknown model should accumulate call count."""
         usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         message = SimpleNamespace(content="ok", tool_calls=None)
         choice = SimpleNamespace(message=message)
@@ -202,15 +198,9 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_explicit_budget_unknown_model_raises_by_default(self, mock_acompletion) -> None:
-        """An explicit budget with unknown pricing raises a non-retryable error by default.
-
-        Steps:
-        1. Create worker with unknown model and budget_usd=1.0.
-        2. Call call_llm.
-        3. Verify it raises SlowBurnNonRetryableError.
-        """
+        """An explicit (finite) budget with unknown pricing raises a non-retryable error by default."""
         _set_mock_response(mock_acompletion)
-        llm = create_llm(model=UNKNOWN_MODEL, budget_usd=1.0)
+        llm = create_llm(model=UNKNOWN_MODEL, limits=dict(budget_per_day=1.0))
         try:
             with pytest.raises(SlowBurnNonRetryableError, match="not in the pricing database"):
                 llm.call_llm(prompt="test").result(timeout=10.0)
@@ -219,16 +209,13 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_explicit_budget_unknown_model_warn_succeeds(self, mock_acompletion) -> None:
-        """on_pricing_unavailable='warn' should log a warning and proceed.
-
-        Steps:
-        1. Create worker with unknown model, budget_usd=1.0, on_pricing_unavailable='warn'.
-        2. Call call_llm.
-        3. Verify it succeeds (no exception).
-        4. Verify reporter shows 0 cost (pricing unavailable).
-        """
+        """on_pricing_unavailable='warn' should log a warning and proceed."""
         _set_mock_response(mock_acompletion)
-        llm = create_llm(model=UNKNOWN_MODEL, budget_usd=1.0, on_pricing_unavailable="warn")
+        llm = create_llm(
+            model=UNKNOWN_MODEL,
+            limits=dict(budget_per_day=1.0),
+            on_pricing_unavailable="warn",
+        )
         try:
             result = llm.call_llm(prompt="test").result(timeout=10.0)
             assert result == "ok"
@@ -240,15 +227,13 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_explicit_budget_unknown_model_ignore_succeeds(self, mock_acompletion) -> None:
-        """on_pricing_unavailable='ignore' should silently skip cost tracking.
-
-        Steps:
-        1. Create worker with unknown model, budget_usd=1.0, on_pricing_unavailable='ignore'.
-        2. Make multiple calls.
-        3. Verify all succeed, reporter tracks calls but not cost.
-        """
+        """on_pricing_unavailable='ignore' should silently skip cost tracking."""
         _set_mock_response(mock_acompletion)
-        llm = create_llm(model=UNKNOWN_MODEL, budget_usd=1.0, on_pricing_unavailable="ignore")
+        llm = create_llm(
+            model=UNKNOWN_MODEL,
+            limits=dict(budget_per_day=1.0),
+            on_pricing_unavailable="ignore",
+        )
         try:
             for _ in range(3):
                 llm.call_llm(prompt="test").result(timeout=10.0)
@@ -260,11 +245,13 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_known_model_with_budget_still_tracks_cost(self, mock_acompletion) -> None:
-        """A known model with explicit budget should track cost normally
-        regardless of on_pricing_unavailable setting.
-        """
+        """A known model with explicit budget should track cost normally."""
         _set_mock_response(mock_acompletion, cost=0.001)
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=5.0, on_pricing_unavailable="warn")
+        llm = create_llm(
+            model=MOCK_MODEL_NAME,
+            limits=dict(budget_per_day=5.0),
+            on_pricing_unavailable="warn",
+        )
         try:
             llm.call_llm(prompt="test").result(timeout=10.0)
             reporter = llm.get_reporter().result(timeout=5.0)
@@ -275,13 +262,7 @@ class TestInfiniteBudgetCallLLM:
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_validator_works_with_inf_budget_unknown_model(self, mock_acompletion) -> None:
-        """Validators should work with inf budget and unknown model.
-
-        Steps:
-        1. Create worker with unknown model, inf budget.
-        2. Call with a validator that parses int.
-        3. Verify parsed result is returned.
-        """
+        """Validators should work with inf budget and unknown model."""
         usage = SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15)
         message = SimpleNamespace(content="42", tool_calls=None)
         choice = SimpleNamespace(message=message)

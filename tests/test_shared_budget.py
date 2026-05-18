@@ -31,10 +31,10 @@ def _make_shared_limit_set(budget_usd: float = 1.0, mode: str = "Threads") -> Li
     """Create a shared LimitSet with CostLimit + token limits."""
     return LimitSet(
         limits=[
-            CostLimit(budget_usd=budget_usd, window_seconds=3600),
-            RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-            RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-            CallLimit(window_seconds=60, capacity=500),
+            CostLimit(budget_usd=budget_usd, window=3600),
+            RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+            RateLimit(key="output_tokens", window=60, capacity=200_000),
+            CallLimit(window=60, capacity=500),
         ],
         mode=mode,
         shared=True,
@@ -164,7 +164,7 @@ class TestSharedBudgetBackpressure:
         3. Verify try_acquire fails for the remaining amount.
         """
         shared = LimitSet(
-            limits=[CostLimit(budget_usd=0.01, window_seconds=3600)],
+            limits=[CostLimit(budget_usd=0.01, window=3600)],
             mode="Threads",
             shared=True,
         )

@@ -40,7 +40,7 @@ def _make_client(
     model: str = f"slowburn/{MOCK_MODEL_NAME}",
 ) -> tuple:
     limit_set = LimitSet(
-        limits=[CostLimit(budget_usd=budget_usd, window_seconds=3600)],
+        limits=[CostLimit(budget_usd=budget_usd, window=3600)],
         mode="Threads",
         shared=True,
     )
@@ -62,7 +62,7 @@ class TestSlowBurnModelClientInit:
     def test_missing_model_raises(self) -> None:
         """Config without 'model' key should raise ValueError."""
         limit_set = LimitSet(
-            limits=[CostLimit(budget_usd=1.0)],
+            limits=[CostLimit(budget_usd=1.0, window=86400)],
             mode="Threads",
             shared=True,
         )
@@ -71,7 +71,7 @@ class TestSlowBurnModelClientInit:
 
     def test_creates_own_reporter_if_none(self) -> None:
         limit_set = LimitSet(
-            limits=[CostLimit(budget_usd=1.0)],
+            limits=[CostLimit(budget_usd=1.0, window=86400)],
             mode="Threads",
             shared=True,
         )

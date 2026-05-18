@@ -28,13 +28,13 @@ Requires: ``pip install slowburn[langgraph]``
 """
 
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
-from concurry import LimitSet
+from concurry import LimitSet, RateWindow
 
 from ..config import slowburn_config
 from ..cost_accounting import cost_controlled_call, estimate_input_tokens
-from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
+from ..limits import CostLimit
 from ..pricing import PricingCache
 from ..reporter import CostReporter
 
@@ -79,7 +79,10 @@ class SlowBurnMiddleware:
 
     Args:
         budget_usd: Maximum dollar spend per window. Ignored if ``limit_set`` is provided.
-        window_seconds: Length of the budget window in seconds. Ignored if ``limit_set`` is provided.
+        window: Length of the budget window. Accepts a :class:`RateWindow`
+            member, a string alias (``"daily"``, ``"hourly"``, ``"weekly"``,
+            etc.), or a positive number of seconds. Ignored if ``limit_set``
+            is provided.
         limit_set: Optional pre-created LimitSet to use. Enables sharing a single budget
             across multiple SlowBurn integrations.
         reporter: Optional pre-existing CostReporter to share.
@@ -88,14 +91,12 @@ class SlowBurnMiddleware:
     def __init__(
         self,
         budget_usd: float = 0.0,
-        window_seconds: Optional[float] = None,
+        window: Optional[Union[RateWindow, str, int, float]] = None,
         limit_set: Optional[LimitSet] = None,
         reporter: Optional[CostReporter] = None,
     ):
-        if window_seconds is None:
-            from concurry.core.constants import RATE_WINDOW_SECONDS
-
-            window_seconds = RATE_WINDOW_SECONDS[slowburn_config.defaults.budget_usd_window]
+        if window is None:
+            window = RateWindow.Daily
         if limit_set is not None:
             self.limit_set = limit_set
         else:
@@ -104,7 +105,7 @@ class SlowBurnMiddleware:
                     "SlowBurnMiddleware requires either a positive budget_usd or a pre-created limit_set."
                 )
             self.limit_set = LimitSet(
-                limits=[CostLimit(budget_usd=budget_usd, window=window_seconds)],
+                limits=[CostLimit(budget_usd=budget_usd, window=window)],
                 mode="Threads",
                 shared=True,
             )

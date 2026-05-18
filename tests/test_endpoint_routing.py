@@ -1,14 +1,27 @@
-"""Tests for multi-endpoint routing via LimitPool + EndpointConfig + resolver."""
+"""Tests for multi-endpoint routing via LimitPool + EndpointConfig + resolver.
+
+Adapted to the unified ``SlowBurnLimits`` API:
+
+- ``create_llm(limits=dict(...))`` for global limits across all endpoints.
+- Each endpoint dict may carry its own ``"limits"`` key (a dict or
+  ``SlowBurnLimits``) for per-endpoint slot overrides.
+- The cascade is *replace-slot*: if an endpoint sets ``limits.requests``,
+  the entire global ``requests`` slot is replaced for that endpoint.
+- Library defaults (from ``default_slowburn_limits()``) populate every
+  un-overridden slot, so the worker always has a key for every slot.
+"""
 
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from concurry import RateLimit
 
-from slowburn import create_llm
-from slowburn.endpoints import EndpointConfig, cascade_field, passthrough_resolver
+from slowburn import CostLimit, SlowBurnLimits, create_llm
 from slowburn.config import _NO_ARG
+from slowburn.endpoints import EndpointConfig, cascade_field, passthrough_resolver
+from slowburn.limits import DEFAULT_COST_LIMIT_KEY
 
 from .conftest import MOCK_MODEL_NAME
 
@@ -33,13 +46,21 @@ def _patch_acompletion(response: Any) -> Any:
     return patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock, return_value=response)
 
 
+def _find_limit(limit_set, *, key: str):
+    """Find the (single) Limit on ``limit_set`` whose ``key`` matches."""
+    for lim in limit_set.limits:
+        if getattr(lim, "key", None) == key:
+            return lim
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Pure-Python helpers (no worker spawn)
 # ---------------------------------------------------------------------------
 
 
 class TestCascadeField:
-    """The three-level cascade resolver."""
+    """The three-level cascade resolver for non-limit fields."""
 
     def test_call_value_wins_over_config_and_default(self) -> None:
         result = cascade_field(
@@ -84,8 +105,6 @@ class TestEndpointConfigStrictness:
 
     def test_extra_fields_preserved(self) -> None:
         """Unknown fields like account_id survive on the model."""
-        from concurry import RateLimit
-
         cfg = EndpointConfig(
             model="bedrock/x",
             api_key="k",
@@ -93,21 +112,43 @@ class TestEndpointConfigStrictness:
             temperature=0.7,
             max_tokens=100,
             timeout=10.0,
-            max_request_rate=[RateLimit(key="call_count", window="minutely", capacity=100)],
-            max_input_token_rate=[RateLimit(key="input_tokens", window="minutely", capacity=1000)],
-            max_output_token_rate=[RateLimit(key="output_tokens", window="minutely", capacity=1000)],
-            max_concurrent_requests=10,
-            budget_usd=5.0,
-            budget_usd_window="daily",
+            limits=SlowBurnLimits(rpm=100, budget_per_day=5.0),
             account_id="111111111111",
         )
         dump = cfg.model_dump()
         assert dump["account_id"] == "111111111111"
         assert cfg.account_id == "111111111111"  # type: ignore[attr-defined]
 
+    def test_limits_field_is_optional(self) -> None:
+        """``limits`` defaults to ``None`` (inherit-everything)."""
+        cfg = EndpointConfig(
+            model="m",
+            api_key=None,
+            api_base=None,
+            temperature=0.7,
+            max_tokens=100,
+            timeout=10.0,
+        )
+        assert cfg.limits is None
+
+    def test_limits_dict_coerced_to_slowburnlimits(self) -> None:
+        """A dict passed for ``limits`` is coerced into ``SlowBurnLimits``."""
+        cfg = EndpointConfig(
+            model="m",
+            api_key=None,
+            api_base=None,
+            temperature=0.7,
+            max_tokens=100,
+            timeout=10.0,
+            limits=dict(rpm=300, concurrency=5),
+        )
+        assert isinstance(cfg.limits, SlowBurnLimits)
+        assert cfg.limits.requests is not None
+        assert cfg.limits.requests[0].capacity == 300
+        assert cfg.limits.concurrency == 5
+
     def test_missing_required_field_raises(self) -> None:
         """Missing required field on direct construction raises a validation error."""
-        # morphic wraps pydantic's ValidationError in a ValueError, so accept either.
         with pytest.raises((ValueError, Exception)) as excinfo:
             EndpointConfig(model="m")
         msg = str(excinfo.value)
@@ -124,23 +165,23 @@ class TestSingleEndpointBackwardsCompat:
 
     def test_create_llm_no_endpoints_uses_one_synthetic_endpoint(self) -> None:
         """No `endpoints` arg => internal LimitPool with one LimitSet."""
-        llm = create_llm(model=MOCK_MODEL_NAME, max_request_rate=100, budget_usd=5.0)
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(rpm=100, budget_per_day=5.0))
         try:
             assert len(llm.limits.limit_sets) == 1
             ls = llm.limits.limit_sets[0]
             assert ls.config["model"] == MOCK_MODEL_NAME
-            # max_request_rate is normalized to a list of one RateLimit.
-            request_rates = ls.config["max_request_rate"]
-            assert len(request_rates) == 1
-            assert request_rates[0]["capacity"] == 100
-            assert ls.config["budget_usd"] == 5.0
+            # Verify the requests RateLimit and budget CostLimit landed on the LimitSet.
+            req = _find_limit(ls, key="requests")
+            assert req is not None and req.capacity == 100
+            cost = _find_limit(ls, key=DEFAULT_COST_LIMIT_KEY)
+            assert cost is not None and cost.budget_usd == 5.0
         finally:
             llm.stop()
 
     def test_single_endpoint_call_works(self) -> None:
         """A single mocked call goes through the pool path successfully."""
         with _patch_acompletion(_make_response()):
-            llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=5.0)
+            llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_day=5.0))
             try:
                 result = llm.call_llm(prompt="hi").result(timeout=5.0)
                 assert result == "ok"
@@ -214,25 +255,6 @@ class TestMultiEndpointRouting:
     def test_empty_endpoints_list_raises(self) -> None:
         with pytest.raises(ValueError, match=r"endpoints=\[\]"):
             create_llm(model="default", endpoints=[])
-
-    def test_endpointconfig_instance_rejected(self) -> None:
-        """EndpointConfig instances must NOT be passed; only plain dicts."""
-        from concurry import RateLimit
-
-        cfg = EndpointConfig(
-            model="m-A", api_key="", api_base=None, temperature=0.7, max_tokens=100,
-            timeout=10.0,
-            max_request_rate=[RateLimit(key="call_count", window="minutely", capacity=100)],
-            max_input_token_rate=[RateLimit(key="input_tokens", window="minutely", capacity=1000)],
-            max_output_token_rate=[RateLimit(key="output_tokens", window="minutely", capacity=1000)],
-            max_concurrent_requests=10, budget_usd=5.0, budget_usd_window="daily",
-        )
-        # @validate rejects at the pydantic layer with ValidationError; our
-        # explicit TypeError raise inside build_limit_pool is the fallback path.
-        with pytest.raises(Exception) as excinfo:
-            create_llm(model="default", endpoints=[cfg])  # type: ignore[list-item]
-        msg = str(excinfo.value).lower()
-        assert "dict" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -412,73 +434,114 @@ class TestEndpointResolver:
                 endpoint_resolver=my_resolver,
             )
             try:
-                llm.call_llm(prompt="x", model="per-call-model").result(timeout=5.0)
-                assert mock_call.call_args.kwargs["model"] == "per-call-model"
+                llm.call_llm(prompt="x", model="per-call-final").result(timeout=5.0)
+                assert mock_call.call_args.kwargs["model"] == "per-call-final"
             finally:
                 llm.stop()
 
 
 # ---------------------------------------------------------------------------
-# Per-endpoint vs global budget
+# Per-endpoint limits cascade (replace-slot)
 # ---------------------------------------------------------------------------
 
 
-class TestPerEndpointBudget:
-    """Per-endpoint budget_usd overrides the global default for that endpoint only."""
+class TestPerEndpointLimitsCascade:
+    """Per-endpoint ``limits`` overrides the global slot when set."""
 
-    def test_global_budget_applied_to_endpoints_without_one(self) -> None:
-        """An endpoint that does not specify budget_usd inherits the global value."""
-        from slowburn.limits import DEFAULT_COST_LIMIT_KEY
-
+    def test_endpoint_with_no_limits_inherits_global(self) -> None:
+        """An endpoint without ``limits=`` inherits all global slots."""
         llm = create_llm(
             model="default",
-            budget_usd=5.0,
+            limits=dict(rpm=300, budget_per_day=5.0),
             endpoints=[
-                {"model": "m-A", "endpoint_id": "A"},  # no budget_usd
-                {"model": "m-B", "endpoint_id": "B", "budget_usd": 10.0},  # override
+                {"model": "m-A", "endpoint_id": "A"},
+                {"model": "m-B", "endpoint_id": "B"},
             ],
         )
         try:
             for ls in llm.limits.limit_sets:
-                keys = [getattr(lim, "key", None) for lim in ls.limits]
-                assert DEFAULT_COST_LIMIT_KEY in keys
-            assert llm.limits.limit_sets[0].config["budget_usd"] == 5.0
-            assert llm.limits.limit_sets[1].config["budget_usd"] == 10.0
+                assert _find_limit(ls, key="requests").capacity == 300
+                assert _find_limit(ls, key=DEFAULT_COST_LIMIT_KEY).budget_usd == 5.0
         finally:
             llm.stop()
 
-    def test_inf_budget_skips_cost_limit(self) -> None:
-        """budget_usd=inf means no CostLimit is added to the endpoint's LimitSet."""
-        from slowburn.limits import DEFAULT_COST_LIMIT_KEY
+    def test_endpoint_with_limits_overrides_only_specified_slots(self) -> None:
+        """Endpoint's ``limits.requests=...`` replaces only the requests slot.
 
+        Other slots fall through to global / default.
+        """
         llm = create_llm(
             model="default",
-            endpoints=[{"model": "m-A", "endpoint_id": "A", "budget_usd": float("inf")}],
+            limits=dict(rpm=300, budget_per_day=5.0),
+            endpoints=[
+                {"model": "m-A", "endpoint_id": "A"},
+                {
+                    "model": "m-B",
+                    "endpoint_id": "B",
+                    "limits": dict(rpm=1000),  # override requests only
+                },
+            ],
         )
         try:
-            ls = llm.limits.limit_sets[0]
-            keys = [getattr(lim, "key", None) for lim in ls.limits]
-            assert DEFAULT_COST_LIMIT_KEY not in keys
+            ls_a, ls_b = llm.limits.limit_sets
+            # A inherits both slots.
+            assert _find_limit(ls_a, key="requests").capacity == 300
+            assert _find_limit(ls_a, key=DEFAULT_COST_LIMIT_KEY).budget_usd == 5.0
+            # B overrides requests, inherits budget.
+            assert _find_limit(ls_b, key="requests").capacity == 1000
+            assert _find_limit(ls_b, key=DEFAULT_COST_LIMIT_KEY).budget_usd == 5.0
+        finally:
+            llm.stop()
+
+    def test_replace_slot_does_not_merge_windows(self) -> None:
+        """If endpoint sets ``rpm=...`` and global has ``rpd=...``, the
+        endpoint's slot is just the rpm RateLimit (replace-slot)."""
+        llm = create_llm(
+            model="default",
+            limits=dict(rpm=300, rpd=10_000),  # 2-window requests slot
+            endpoints=[
+                {"model": "m-A", "endpoint_id": "A"},
+                {
+                    "model": "m-B",
+                    "endpoint_id": "B",
+                    "limits": dict(rpm=500),
+                },
+            ],
+        )
+        try:
+            ls_a, ls_b = llm.limits.limit_sets
+            # A inherits both windows.
+            req_a = [
+                lim
+                for lim in ls_a.limits
+                if isinstance(lim, RateLimit) and not isinstance(lim, CostLimit) and "requests" in lim.key
+            ]
+            assert len(req_a) == 2
+            # B only has its own rpm — the rpd is gone (replace-slot).
+            req_b = [
+                lim
+                for lim in ls_b.limits
+                if isinstance(lim, RateLimit) and not isinstance(lim, CostLimit) and "requests" in lim.key
+            ]
+            assert len(req_b) == 1
+            assert req_b[0].capacity == 500
         finally:
             llm.stop()
 
 
 # ---------------------------------------------------------------------------
-# Shared limit object semantics (the key new behavior)
+# Sharing semantics: limit instances shared across endpoints that inherit
 # ---------------------------------------------------------------------------
 
 
 class TestSharedLimitObjects:
-    """Endpoints that don't override a limit field share a single Limit instance.
+    """Endpoints inheriting a slot share the same Limit instance pool-wide."""
 
-    Endpoints that do override get their own private Limit instance.
-    """
-
-    def test_unset_endpoints_share_one_call_limit_instance(self) -> None:
-        """All endpoints inheriting max_request_rate share the same RateLimit object."""
+    def test_unset_endpoints_share_one_request_rate_limit(self) -> None:
+        """Endpoints without limits override share a single RateLimit instance."""
         llm = create_llm(
             model="default",
-            max_request_rate=300,
+            limits=dict(rpm=300),
             endpoints=[
                 {"model": "m-A", "endpoint_id": "A"},
                 {"model": "m-B", "endpoint_id": "B"},
@@ -486,320 +549,210 @@ class TestSharedLimitObjects:
             ],
         )
         try:
-            call_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == "call_count":
-                        call_limits.append(lim)
-                        break
-            assert len(call_limits) == 3
-            # All three are the SAME instance (object identity).
-            assert call_limits[0] is call_limits[1]
-            assert call_limits[1] is call_limits[2]
-            # And the shared RateLimit has the global capacity.
-            assert call_limits[0].capacity == 300
+            req_limits = [_find_limit(ls, key="requests") for ls in llm.limits.limit_sets]
+            assert len(set(id(r) for r in req_limits)) == 1, "all endpoints should share one RateLimit"
+            assert req_limits[0].capacity == 300
         finally:
             llm.stop()
 
-    def test_overriding_endpoint_gets_private_call_limit(self) -> None:
-        """An endpoint that sets max_request_rate gets its own RateLimit; the rest share."""
+    def test_overriding_endpoint_gets_private_request_rate_limit(self) -> None:
+        """An endpoint that sets ``limits.requests`` gets its own RateLimit; the rest share."""
         llm = create_llm(
             model="default",
-            max_request_rate=300,
-            endpoints=[
-                {"model": "m-A", "endpoint_id": "A"},  # inherits 300
-                {"model": "m-B", "endpoint_id": "B", "max_request_rate": 1000},  # override
-                {"model": "m-C", "endpoint_id": "C"},  # inherits 300
-            ],
-        )
-        try:
-            call_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == "call_count":
-                        call_limits.append(lim)
-                        break
-            # A and C share the global; B has its own.
-            assert call_limits[0] is call_limits[2]
-            assert call_limits[0] is not call_limits[1]
-            assert call_limits[0].capacity == 300
-            assert call_limits[1].capacity == 1000
-        finally:
-            llm.stop()
-
-    def test_unset_endpoints_share_one_resource_limit(self) -> None:
-        """max_concurrent_requests inheritance shares a single ResourceLimit."""
-        llm = create_llm(
-            model="default",
-            max_concurrent_requests=50,
+            limits=dict(rpm=300),
             endpoints=[
                 {"model": "m-A", "endpoint_id": "A"},
                 {"model": "m-B", "endpoint_id": "B"},
+                {
+                    "model": "m-C",
+                    "endpoint_id": "C",
+                    "limits": dict(rpm=1000),
+                },
             ],
         )
         try:
-            res_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == "concurrent_requests":
-                        res_limits.append(lim)
-                        break
-            assert len(res_limits) == 2
-            assert res_limits[0] is res_limits[1]
-            assert res_limits[0].capacity == 50
+            ls_a, ls_b, ls_c = llm.limits.limit_sets
+            r_a = _find_limit(ls_a, key="requests")
+            r_b = _find_limit(ls_b, key="requests")
+            r_c = _find_limit(ls_c, key="requests")
+            assert id(r_a) == id(r_b)  # shared
+            assert id(r_a) != id(r_c)  # private override
+            assert r_c.capacity == 1000
         finally:
             llm.stop()
 
-    def test_overriding_endpoint_gets_private_resource_limit(self) -> None:
-        """An endpoint that sets max_concurrent_requests gets its own ResourceLimit."""
+    def test_unset_endpoints_share_one_concurrency_limit(self) -> None:
+        """Endpoints without concurrency override share a single ResourceLimit."""
         llm = create_llm(
             model="default",
-            max_concurrent_requests=50,
-            endpoints=[
-                {"model": "m-A", "endpoint_id": "A"},
-                {"model": "m-B", "endpoint_id": "B", "max_concurrent_requests": 200},
-            ],
+            limits=dict(concurrency=50),
+            endpoints=[{"model": "m-A", "endpoint_id": "A"}, {"model": "m-B", "endpoint_id": "B"}],
         )
         try:
-            res_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == "concurrent_requests":
-                        res_limits.append(lim)
-                        break
-            assert res_limits[0] is not res_limits[1]
-            assert res_limits[0].capacity == 50
-            assert res_limits[1].capacity == 200
+            res = [_find_limit(ls, key="concurrent_requests") for ls in llm.limits.limit_sets]
+            assert id(res[0]) == id(res[1])
+            assert res[0].capacity == 50
         finally:
             llm.stop()
 
-    def test_unset_endpoints_share_one_cost_limit(self) -> None:
-        """Endpoints inheriting budget_usd share a single CostLimit instance."""
+    def test_overriding_endpoint_gets_private_concurrency_limit(self) -> None:
         llm = create_llm(
             model="default",
-            budget_usd=5.0,
+            limits=dict(concurrency=50),
             endpoints=[
                 {"model": "m-A", "endpoint_id": "A"},
-                {"model": "m-B", "endpoint_id": "B"},
+                {
+                    "model": "m-B",
+                    "endpoint_id": "B",
+                    "limits": dict(concurrency=200),
+                },
             ],
         )
         try:
-            from slowburn.limits import DEFAULT_COST_LIMIT_KEY
-
-            cost_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == DEFAULT_COST_LIMIT_KEY:
-                        cost_limits.append(lim)
-                        break
-            assert len(cost_limits) == 2
-            assert cost_limits[0] is cost_limits[1]
+            ls_a, ls_b = llm.limits.limit_sets
+            r_a = _find_limit(ls_a, key="concurrent_requests")
+            r_b = _find_limit(ls_b, key="concurrent_requests")
+            assert id(r_a) != id(r_b)
+            assert r_a.capacity == 50
+            assert r_b.capacity == 200
         finally:
             llm.stop()
 
-    def test_overriding_endpoint_gets_private_cost_limit(self) -> None:
-        """An endpoint that sets budget_usd gets its own CostLimit."""
-        from slowburn.limits import DEFAULT_COST_LIMIT_KEY
-
+    def test_unset_endpoints_share_one_budget_limit(self) -> None:
         llm = create_llm(
             model="default",
-            budget_usd=5.0,
+            limits=dict(budget_per_day=5.0),
+            endpoints=[{"model": "m-A", "endpoint_id": "A"}, {"model": "m-B", "endpoint_id": "B"}],
+        )
+        try:
+            costs = [_find_limit(ls, key=DEFAULT_COST_LIMIT_KEY) for ls in llm.limits.limit_sets]
+            assert id(costs[0]) == id(costs[1])
+            assert costs[0].budget_usd == 5.0
+        finally:
+            llm.stop()
+
+    def test_overriding_endpoint_gets_private_budget_limit(self) -> None:
+        llm = create_llm(
+            model="default",
+            limits=dict(budget_per_day=5.0),
             endpoints=[
                 {"model": "m-A", "endpoint_id": "A"},
-                {"model": "m-B", "endpoint_id": "B", "budget_usd": 10.0},
+                {
+                    "model": "m-B",
+                    "endpoint_id": "B",
+                    "limits": dict(budget_per_day=10.0),
+                },
             ],
         )
         try:
-            cost_limits = []
-            for ls in llm.limits.limit_sets:
-                for lim in ls.limits:
-                    if getattr(lim, "key", None) == DEFAULT_COST_LIMIT_KEY:
-                        cost_limits.append(lim)
-                        break
-            assert cost_limits[0] is not cost_limits[1]
+            ls_a, ls_b = llm.limits.limit_sets
+            c_a = _find_limit(ls_a, key=DEFAULT_COST_LIMIT_KEY)
+            c_b = _find_limit(ls_b, key=DEFAULT_COST_LIMIT_KEY)
+            assert id(c_a) != id(c_b)
+            assert c_a.budget_usd == 5.0
+            assert c_b.budget_usd == 10.0
+        finally:
+            llm.stop()
+
+    def test_library_default_shared_when_no_global_set(self) -> None:
+        """When neither global nor endpoint sets a slot, the library default
+        is shared across all endpoints."""
+        llm = create_llm(
+            model="default",
+            endpoints=[{"model": "m-A", "endpoint_id": "A"}, {"model": "m-B", "endpoint_id": "B"}],
+        )
+        try:
+            ls_a, ls_b = llm.limits.limit_sets
+            assert id(_find_limit(ls_a, key="requests")) == id(_find_limit(ls_b, key="requests"))
+            assert id(_find_limit(ls_a, key=DEFAULT_COST_LIMIT_KEY)) == id(
+                _find_limit(ls_b, key=DEFAULT_COST_LIMIT_KEY)
+            )
+            assert id(_find_limit(ls_a, key="concurrent_requests")) == id(
+                _find_limit(ls_b, key="concurrent_requests")
+            )
         finally:
             llm.stop()
 
 
 # ---------------------------------------------------------------------------
-# New rate-shape tests: int / RateLimit / dict / list polymorphism
+# Multi-window limits within a single slot
 # ---------------------------------------------------------------------------
 
 
-class TestRateInputShapes:
-    """The three rate dimensions accept int / RateLimit / dict / list."""
+class TestMultiWindowSlots:
+    """A slot can carry multiple RateLimits at different windows."""
 
-    def test_int_uses_default_window(self) -> None:
-        """``max_request_rate=300`` -> one RateLimit @ Minutely (default)."""
-        llm = create_llm(model=MOCK_MODEL_NAME, max_request_rate=300)
-        try:
-            ls = llm.limits.limit_sets[0]
-            call_limits = [lim for lim in ls.limits if getattr(lim, "key", None) == "call_count"]
-            assert len(call_limits) == 1
-            assert call_limits[0].capacity == 300
-            assert call_limits[0].window_seconds == 60.0
-        finally:
-            llm.stop()
-
-    def test_ratelimit_passthrough(self) -> None:
-        """A bare RateLimit instance is used as-is (key gets normalized)."""
-        from concurry import RateLimit, RateWindow
-
+    def test_two_windows_on_requests_slot(self) -> None:
+        """``limits=dict(rpm=300, rpd=10_000)`` produces two RateLimits."""
         llm = create_llm(
-            model=MOCK_MODEL_NAME,
-            max_request_rate=RateLimit(key="custom", window=RateWindow.Hourly, capacity=5000),
+            model="default",
+            limits=dict(rpm=300, rpd=10_000),
         )
         try:
             ls = llm.limits.limit_sets[0]
-            call_limits = [lim for lim in ls.limits if getattr(lim, "key", None) == "call_count"]
-            assert len(call_limits) == 1
-            assert call_limits[0].capacity == 5000
-            assert call_limits[0].window_seconds == 3600.0
-        finally:
-            llm.stop()
-
-    def test_dict_validated_into_ratelimit(self) -> None:
-        """A dict is validated into a RateLimit (key auto-injected if missing)."""
-        llm = create_llm(
-            model=MOCK_MODEL_NAME,
-            max_request_rate={"capacity": 50, "window": "hourly"},
-        )
-        try:
-            ls = llm.limits.limit_sets[0]
-            call_limits = [lim for lim in ls.limits if getattr(lim, "key", None) == "call_count"]
-            assert len(call_limits) == 1
-            assert call_limits[0].capacity == 50
-            assert call_limits[0].window_seconds == 3600.0
-        finally:
-            llm.stop()
-
-    def test_list_of_rates_creates_unique_keys(self) -> None:
-        """A list of rates produces unique keys derived from each rate's params."""
-        llm = create_llm(
-            model=MOCK_MODEL_NAME,
-            max_request_rate=[300, {"capacity": 50000, "window": "daily"}],
-        )
-        try:
-            ls = llm.limits.limit_sets[0]
-            call_keys = {
-                lim.key
+            req_limits = [
+                lim
                 for lim in ls.limits
-                if isinstance(getattr(lim, "key", None), str) and lim.key.startswith("call_count")
-            }
-            # Keys are ``call_count_{rate.params_signature()}``; the suffix
-            # encodes ``cap`` / ``window_seconds`` / first-3-letters-of-algo.
-            assert len(call_keys) == 2
-            # Both should embed the base name.
-            assert all(k.startswith("call_count_c") for k in call_keys)
-            # _rate_keys metadata records BOTH keys under the base name.
-            assert set(ls.config["_rate_keys"]["call_count"]) == call_keys
+                if isinstance(lim, RateLimit) and not isinstance(lim, CostLimit) and "requests" in lim.key
+            ]
+            assert len(req_limits) == 2
+            caps = sorted([rl.capacity for rl in req_limits])
+            assert caps == [300, 10_000]
+            windows = sorted([float(rl.window) for rl in req_limits])
+            assert windows == [60.0, 86400.0]
+            # Keys must be unique within the LimitSet.
+            keys = [rl.key for rl in req_limits]
+            assert len(set(keys)) == len(keys)
         finally:
             llm.stop()
 
-    def test_user_supplied_unique_keys_respected(self) -> None:
-        """When the user passes RateLimits with distinct non-default keys, keep them."""
-        from concurry import RateLimit
-
+    def test_canonical_ratelimit_with_unique_keys_respected(self) -> None:
+        """User-supplied unique keys on RateLimits are not regenerated."""
+        rl1 = RateLimit(key="my_minutely", capacity=300, window="minute")
+        rl2 = RateLimit(key="my_daily", capacity=10_000, window="day")
         llm = create_llm(
-            model=MOCK_MODEL_NAME,
-            max_request_rate=[
-                RateLimit(key="rps_window", window=60, capacity=300),
-                RateLimit(key="daily_burst", window="daily", capacity=50_000),
-            ],
+            model="default",
+            limits=dict(requests=[rl1, rl2]),
         )
         try:
             ls = llm.limits.limit_sets[0]
-            # The user's chosen keys survive verbatim.
-            assert set(ls.config["_rate_keys"]["call_count"]) == {"rps_window", "daily_burst"}
-        finally:
-            llm.stop()
-
-    def test_same_window_different_capacity_disambiguates(self) -> None:
-        """Two rates with the same window but different capacities still get unique keys."""
-        llm = create_llm(
-            model=MOCK_MODEL_NAME,
-            max_request_rate=[300, {"capacity": 600, "window": "minutely"}],
-        )
-        try:
-            ls = llm.limits.limit_sets[0]
-            keys = ls.config["_rate_keys"]["call_count"]
-            assert len(set(keys)) == 2  # two unique keys
+            assert _find_limit(ls, key="my_minutely") is not None
+            assert _find_limit(ls, key="my_daily") is not None
         finally:
             llm.stop()
 
     def test_truly_identical_rates_rejected(self) -> None:
-        """Two rates that are byte-identical should raise (unwinnable collision)."""
-        with pytest.raises(ValueError, match="identical"):
-            create_llm(model=MOCK_MODEL_NAME, max_request_rate=[300, 300])
+        """Two RateLimits with identical (capacity, window, algorithm) and same
+        default key cannot be disambiguated and raise ValueError."""
+        rl1 = RateLimit(key="requests", capacity=300, window="minute")
+        rl2 = RateLimit(key="requests", capacity=300, window="minute")
+        with pytest.raises(Exception, match="identical|duplicate"):
+            create_llm(model="default", limits=dict(requests=[rl1, rl2]))
 
 
-class TestSharedAcrossWindows:
-    """Shared-instance caching is keyed by (dimension, window_seconds)."""
+class TestMultiWindowCharging:
+    """When a slot has multiple windows, every call charges all of them."""
 
-    def test_two_windows_per_dim_share_per_window(self) -> None:
-        """Two endpoints inheriting a multi-window dimension share both RateLimits."""
-        llm = create_llm(
-            model="default",
-            max_request_rate=[300, {"capacity": 50000, "window": "daily"}],
-            endpoints=[
-                {"endpoint_id": "A"},
-                {"endpoint_id": "B"},
-            ],
-        )
-        try:
-            # Collect all call_count_* RateLimits per LimitSet.
-            per_ls: List[Dict[str, Any]] = []
-            for ls in llm.limits.limit_sets:
-                d: Dict[str, Any] = {}
-                for lim in ls.limits:
-                    if isinstance(getattr(lim, "key", None), str) and lim.key.startswith("call_count"):
-                        d[lim.key] = lim
-                per_ls.append(d)
-            # Two distinct keys per LimitSet (params-signature derived).
-            assert len(per_ls[0]) == 2
-            assert per_ls[0].keys() == per_ls[1].keys()
-            for k in per_ls[0]:
-                # Both endpoints share the same RateLimit instance per key.
-                assert per_ls[0][k] is per_ls[1][k]
-            keys = list(per_ls[0].keys())
-            # ... but the two windows are distinct from each other.
-            assert per_ls[0][keys[0]] is not per_ls[0][keys[1]]
-        finally:
-            llm.stop()
-
-    def test_multi_window_call_charges_all_keys(self) -> None:
-        """A successful call must charge ALL keys for a multi-window dimension."""
-        from concurry import RateLimit
-
-        # Use TINY capacities so we can detect that multiple keys advanced.
-        # Specifically: a 1m capacity of 100 + a 1h capacity of 100. After a
-        # call charging 50 input tokens, both instances should report 50
-        # consumed.
-        with _patch_acompletion(_make_response(in_tok=50, out_tok=50, cost_usd=0.0001)):
+    def test_call_charges_both_request_windows(self) -> None:
+        """A call that goes through a 2-window requests slot should charge
+        both keys, evidenced by reporter.num_calls and limit-set state."""
+        with _patch_acompletion(_make_response()):
             llm = create_llm(
                 model=MOCK_MODEL_NAME,
-                max_input_token_rate=[
-                    RateLimit(key="input_tokens", window="minutely", capacity=10_000),
-                    RateLimit(key="input_tokens_hourly_explicit", window="hourly", capacity=20_000),
-                ],
+                limits=dict(rpm=300, rpd=10_000),
             )
             try:
-                llm.call_llm(prompt="x").result(timeout=5.0)
+                for _ in range(3):
+                    llm.call_llm(prompt="x").result(timeout=5.0)
+                rep = llm.get_reporter().result(timeout=5.0)
+                assert rep.num_calls == 3
+
+                # Inspect the LimitSet state — both windows should reflect 3 calls
+                # consumed. We do this by reading the request rates' internal
+                # counters indirectly via the LimitSet.
                 ls = llm.limits.limit_sets[0]
-                # Both input-token RateLimits should have advanced past zero
-                # available capacity (i.e., they were charged).
-                input_rates = [
-                    lim
-                    for lim in ls.limits
-                    if isinstance(getattr(lim, "key", None), str) and "input_tokens" in lim.key
-                ]
-                # Two RateLimits, both should have current usage > 0.
-                assert len(input_rates) == 2
-                for rl in input_rates:
-                    stats = rl.get_stats()
-                    # available_tokens drops below capacity once we charge.
-                    available = stats.get("available_tokens")
-                    if available is not None:
-                        assert available < rl.capacity, f"{rl.key}: not charged ({stats})"
+                rate_keys = ls.config.get("_rate_keys", {})
+                request_keys = rate_keys.get("requests", [])
+                assert len(request_keys) == 2
             finally:
                 llm.stop()

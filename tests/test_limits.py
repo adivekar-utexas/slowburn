@@ -72,35 +72,35 @@ class TestCostLimitCreation:
     """Test CostLimit instantiation and properties."""
 
     def test_basic_creation(self) -> None:
-        cl = CostLimit(budget_usd=5.0, window_seconds=86400)
+        cl = CostLimit(budget_usd=5.0, window=86400)
         assert cl.key == DEFAULT_COST_LIMIT_KEY
         assert cl.capacity == 5_000_000
-        assert cl.window_seconds == 86400
+        assert cl.window == 86400
         assert cl.budget_usd == 5.0
         assert cl.budget_microdollars == 5_000_000
 
     def test_custom_key(self) -> None:
-        cl = CostLimit(budget_usd=1.0, key="my_budget")
+        cl = CostLimit(budget_usd=1.0, window=86400, key="my_budget")
         assert cl.key == "my_budget"
 
     def test_hourly_window(self) -> None:
-        cl = CostLimit(budget_usd=2.0, window_seconds=3600)
-        assert cl.window_seconds == 3600
+        cl = CostLimit(budget_usd=2.0, window=3600)
+        assert cl.window == 3600
 
     def test_small_budget(self) -> None:
         """Very small budgets should still have capacity >= 1."""
-        cl = CostLimit(budget_usd=0.000001)
+        cl = CostLimit(budget_usd=0.000001, window=86400)
         assert cl.capacity >= 1
 
     def test_is_rate_limit_subclass(self) -> None:
-        cl = CostLimit(budget_usd=5.0)
+        cl = CostLimit(budget_usd=5.0, window=86400)
         assert isinstance(cl, RateLimit)
 
     def test_infinite_budget(self) -> None:
         """float('inf') budget should create a CostLimit with very large capacity."""
         import sys
 
-        cl = CostLimit(budget_usd=float("inf"))
+        cl = CostLimit(budget_usd=float("inf"), window=86400)
         assert cl.budget_usd == float("inf")
         assert cl.capacity == sys.maxsize
 
@@ -118,7 +118,7 @@ class TestCostLimitWithLimitSet:
         4. Update with actual usage of 50,000 microdollars (= $0.05).
         5. Verify the acquisition succeeds (no exception).
         """
-        cl = CostLimit(budget_usd=5.0, window_seconds=3600)
+        cl = CostLimit(budget_usd=5.0, window=3600)
         ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 100_000}) as acq:
@@ -132,7 +132,7 @@ class TestCostLimitWithLimitSet:
         2. Make 10 acquisitions of 50,000 microdollars each (= $0.50 total).
         3. Each should succeed without blocking.
         """
-        cl = CostLimit(budget_usd=1.0, window_seconds=3600)
+        cl = CostLimit(budget_usd=1.0, window=3600)
         ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         for _ in range(10):
@@ -147,7 +147,7 @@ class TestCostLimitWithLimitSet:
         2. Acquire the full budget.
         3. A subsequent try_acquire for more should fail (not successful).
         """
-        cl = CostLimit(budget_usd=0.01, window_seconds=3600)
+        cl = CostLimit(budget_usd=0.01, window=3600)
         ls = LimitSet(limits=[cl], mode="Threads", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 10_000}) as acq:
@@ -158,7 +158,7 @@ class TestCostLimitWithLimitSet:
 
     def test_works_with_asyncio_mode(self) -> None:
         """CostLimit should also work with asyncio-mode LimitSet."""
-        cl = CostLimit(budget_usd=5.0, window_seconds=3600)
+        cl = CostLimit(budget_usd=5.0, window=3600)
         ls = LimitSet(limits=[cl], mode="Asyncio", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 1_000}) as acq:
@@ -172,8 +172,8 @@ class TestCostLimitWithLimitSet:
         2. Acquire both in one call.
         3. Update both with actual usage.
         """
-        cl = CostLimit(budget_usd=5.0, window_seconds=3600)
-        tl = RateLimit(key="tokens", window_seconds=60, capacity=10_000)
+        cl = CostLimit(budget_usd=5.0, window=3600)
+        tl = RateLimit(key="tokens", window=60, capacity=10_000)
         ls = LimitSet(limits=[cl, tl], mode="Threads", shared=True)
 
         with ls.acquire(requested={DEFAULT_COST_LIMIT_KEY: 1_000, "tokens": 500}) as acq:

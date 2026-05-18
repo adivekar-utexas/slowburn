@@ -27,7 +27,7 @@ class TestCreateLLMRealCalls:
         model, key = llm_model_and_key
         self.llm = create_llm(
             model=model,
-            budget_usd=1.0,
+            limits=dict(budget_per_day=1.0),
             window="hourly",
             api_key=key,
             max_tokens=150,
@@ -90,7 +90,7 @@ class TestValidatorRealCall:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=50,
@@ -126,7 +126,7 @@ class TestAutoGenModelClient:
         model, key = llm_model_and_key
 
         limit_set = LimitSet(
-            limits=[CostLimit(budget_usd=0.50, window_seconds=3600)],
+            limits=[CostLimit(budget_usd=0.50, window=3600)],
             mode="Threads",
             shared=True,
         )
@@ -170,7 +170,7 @@ class TestCostReporterFormats:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=50,
@@ -215,7 +215,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=50,
@@ -248,7 +248,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=50,
@@ -293,7 +293,7 @@ class TestRetryConfigRealCalls:
 
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=50,
@@ -328,7 +328,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=30,
@@ -368,7 +368,7 @@ class TestMultiTurnRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=100,
@@ -428,7 +428,7 @@ class TestMultiTurnRealCalls:
         ]
         llm = create_llm(
             model=model,
-            budget_usd=0.50,
+            limits=dict(budget_per_day=0.50),
             window="hourly",
             api_key=key,
             max_tokens=150,

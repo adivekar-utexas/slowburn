@@ -148,7 +148,7 @@ def main():
     runs_dir.mkdir(parents=True, exist_ok=True)
 
     limit_set = LimitSet(
-        limits=[CostLimit(budget_usd=BUDGET_USD, window_seconds=WINDOW_SECONDS)],
+        limits=[CostLimit(budget_usd=BUDGET_USD, window=WINDOW_SECONDS)],
         mode="Threads",
         shared=True,
     )

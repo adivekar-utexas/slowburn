@@ -63,27 +63,46 @@ class TestSlowBurnDefaults:
     def test_default_image_tokens_high_detail(self) -> None:
         assert slowburn_config.defaults.image_tokens_high_detail == 1000
 
-    def test_default_budget_usd(self) -> None:
-        assert slowburn_config.defaults.budget_usd == float("inf")
+    def test_default_limits_factory_populates_every_slot(self) -> None:
+        # The library default is a fully-populated SlowBurnLimits returned by
+        # ``default_slowburn_limits()``. Every slot is non-None so the worker
+        # always has a key for every slot.
+        from slowburn import default_slowburn_limits
 
-    def test_default_window_seconds(self) -> None:
-        # The cost-budget window is now ``budget_usd_window``, defaulting to
-        # ``RateWindow.Daily`` (86400 seconds when resolved).
-        from concurry import RateWindow
+        d = default_slowburn_limits()
+        assert d.requests is not None
+        assert d.input_tokens is not None
+        assert d.output_tokens is not None
+        assert d.budget is not None
+        assert d.concurrency is not None
 
-        assert slowburn_config.defaults.budget_usd_window == RateWindow.Daily
+    def test_default_budget_is_infinite_daily(self) -> None:
+        from slowburn import default_slowburn_limits
 
-    def test_default_max_rpm(self) -> None:
-        # ``max_rpm`` was renamed to ``max_request_rate`` (with a separate
-        # ``max_request_rate_window``, defaulting to Minutely so that the
-        # numeric capacity is requests/min, matching the old behavior).
-        assert slowburn_config.defaults.max_request_rate == 100_000
+        d = default_slowburn_limits()
+        assert d.budget[0].budget_usd == float("inf")
+        assert float(d.budget[0].window) == 86400.0
 
-    def test_default_max_input_tpm(self) -> None:
-        assert slowburn_config.defaults.max_input_token_rate == 1_000_000_000
+    def test_default_requests_is_minutely(self) -> None:
+        from slowburn import default_slowburn_limits
 
-    def test_default_max_output_tpm(self) -> None:
-        assert slowburn_config.defaults.max_output_token_rate == 100_000_000
+        d = default_slowburn_limits()
+        assert d.requests[0].capacity == 100_000
+        assert float(d.requests[0].window) == 60.0
+
+    def test_default_input_tokens_is_minutely(self) -> None:
+        from slowburn import default_slowburn_limits
+
+        d = default_slowburn_limits()
+        assert d.input_tokens[0].capacity == 1_000_000_000
+        assert float(d.input_tokens[0].window) == 60.0
+
+    def test_default_output_tokens_is_minutely(self) -> None:
+        from slowburn import default_slowburn_limits
+
+        d = default_slowburn_limits()
+        assert d.output_tokens[0].capacity == 100_000_000
+        assert float(d.output_tokens[0].window) == 60.0
 
     def test_default_num_retries(self) -> None:
         assert slowburn_config.defaults.num_retries == 5
@@ -326,28 +345,28 @@ class TestConfigAffectsComponents:
             result_tuned = _estimate_tokens("a" * 300)
         assert result_tuned > result_default
 
-    def test_config_affects_cost_limit_window(self) -> None:
-        """CostLimit with no explicit window reads ``budget_usd_window`` from config."""
+    def test_cost_limit_requires_explicit_window(self) -> None:
+        """``CostLimit`` no longer falls back to a config default — the user must specify a window."""
+        from slowburn.limits import CostLimit
+
+        with pytest.raises(TypeError):
+            # No window — should fail.
+            CostLimit(budget_usd=1.0)  # type: ignore[call-arg]
+
+    def test_cost_limit_window_is_settable(self) -> None:
+        """An explicit window is honored verbatim."""
         from concurry import RateWindow
 
         from slowburn.limits import CostLimit
 
-        default_limit = CostLimit(budget_usd=1.0)
-        assert default_limit.window_seconds == 86400.0
+        hourly_limit = CostLimit(budget_usd=1.0, window=RateWindow.Hourly)
+        assert hourly_limit.window == 3600.0
 
-        with temp_config(budget_usd_window=RateWindow.Hourly):
-            hourly_limit = CostLimit(budget_usd=1.0)
-            assert hourly_limit.window_seconds == 3600.0
+        daily_limit = CostLimit(budget_usd=1.0, window="daily")
+        assert daily_limit.window == 86400.0
 
-    def test_explicit_arg_overrides_config(self) -> None:
-        """Explicit window overrides the config default."""
-        from concurry import RateWindow
-
-        from slowburn.limits import CostLimit
-
-        with temp_config(budget_usd_window=RateWindow.Hourly):
-            explicit_limit = CostLimit(budget_usd=1.0, window=7200.0)
-            assert explicit_limit.window_seconds == 7200.0
+        explicit_seconds = CostLimit(budget_usd=1.0, window=7200.0)
+        assert explicit_seconds.window == 7200.0
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_config_affects_create_llm_defaults(self, mock_acompletion) -> None:

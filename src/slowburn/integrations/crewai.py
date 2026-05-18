@@ -17,7 +17,7 @@ Usage::
 
     from slowburn.integrations.crewai import SlowBurnCrewAI
 
-    sb = SlowBurnCrewAI(budget_usd=5.0, window_seconds=86400)
+    sb = SlowBurnCrewAI(budget_usd=5.0, window="daily")
     sb.install()
     crew.kickoff()
     sb.uninstall()
@@ -26,9 +26,9 @@ Usage::
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
-from concurry import LimitSet
+from concurry import LimitSet, RateWindow
 
 from ..config import slowburn_config
 from ..cost_accounting import estimate_input_tokens
@@ -46,7 +46,10 @@ class SlowBurnCrewAI:
 
     Args:
         budget_usd: Maximum dollar spend per window. Ignored if ``limit_set`` is provided.
-        window_seconds: Length of the budget window in seconds. Ignored if ``limit_set`` is provided.
+        window: Length of the budget window. Accepts a :class:`RateWindow`
+            member, a string alias (``"daily"``, ``"hourly"``, ``"weekly"``,
+            etc.), or a positive number of seconds. Ignored if ``limit_set``
+            is provided.
         limit_set: Optional pre-created LimitSet to use. Enables sharing a single budget
             across multiple SlowBurn integrations (e.g., CrewAI + AutoGen + SlowBurnLLM).
         reporter: Optional pre-existing CostReporter to share with other components.
@@ -55,15 +58,13 @@ class SlowBurnCrewAI:
     def __init__(
         self,
         budget_usd: float = 0.0,
-        window_seconds: Optional[float] = None,
+        window: Optional[Union[RateWindow, str, int, float]] = None,
         max_tokens: Optional[int] = None,
         limit_set: Optional[LimitSet] = None,
         reporter: Optional[CostReporter] = None,
     ):
-        if window_seconds is None:
-            from concurry.core.constants import RATE_WINDOW_SECONDS
-
-            window_seconds = RATE_WINDOW_SECONDS[slowburn_config.defaults.budget_usd_window]
+        if window is None:
+            window = RateWindow.Daily
         if limit_set is not None:
             self.limit_set = limit_set
         else:
@@ -72,7 +73,7 @@ class SlowBurnCrewAI:
                     "SlowBurnCrewAI requires either a positive budget_usd or a pre-created limit_set."
                 )
             self.limit_set = LimitSet(
-                limits=[CostLimit(budget_usd=budget_usd, window=window_seconds)],
+                limits=[CostLimit(budget_usd=budget_usd, window=window)],
                 mode="Threads",
                 shared=True,
             )

@@ -64,7 +64,7 @@ def _make_llm_result_no_usage(text: str = "Generated text") -> SimpleNamespace:
 
 class TestSlowBurnCallbackHandlerInit:
     def test_creates_limit_set_and_reporter(self) -> None:
-        cb = SlowBurnCallbackHandler(budget_usd=5.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=5.0, window=3600)
         assert cb.limit_set is not None
         assert cb.reporter is not None
         assert cb.reporter.num_calls == 0
@@ -152,7 +152,7 @@ class TestCallbackFullCycle:
         2. Call on_llm_end with a response that has token_usage.
         3. Verify reporter has 1 call with correct tokens.
         """
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         run_id = uuid4()
         serialized = _make_serialized()
 
@@ -167,7 +167,7 @@ class TestCallbackFullCycle:
 
     def test_multiple_cycles(self) -> None:
         """Multiple start/end cycles should accumulate correctly."""
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         serialized = _make_serialized()
 
         for _ in range(3):
@@ -179,13 +179,13 @@ class TestCallbackFullCycle:
 
     def test_end_without_start_raises(self) -> None:
         """on_llm_end without on_llm_start should raise RuntimeError."""
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         with pytest.raises(RuntimeError, match="No pending acquisition"):
             cb.on_llm_end(_make_llm_result(), run_id=uuid4())
 
     def test_no_token_usage_falls_back_to_text_length(self) -> None:
         """If token_usage is missing, cost should be estimated from text length."""
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         run_id = uuid4()
         serialized = _make_serialized()
 
@@ -203,7 +203,7 @@ class TestCallbackFullCycle:
         2. End them in reverse order.
         3. Verify both are logged correctly (2 calls total).
         """
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         serialized = _make_serialized()
         rid_a = uuid4()
         rid_b = uuid4()
@@ -232,7 +232,7 @@ class TestCallbackOnError:
         3. Verify the pending acquisition is cleaned up.
         4. Verify no call is logged in reporter (error, not success).
         """
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         run_id = uuid4()
         serialized = _make_serialized()
 
@@ -244,12 +244,12 @@ class TestCallbackOnError:
 
     def test_error_without_start_is_safe(self) -> None:
         """on_llm_error for an unknown run_id should not raise."""
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         cb.on_llm_error(RuntimeError("oops"), run_id=uuid4())
 
     def test_error_then_end_raises(self) -> None:
         """If on_llm_error already cleaned up, on_llm_end should raise."""
-        cb = SlowBurnCallbackHandler(budget_usd=10.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=10.0, window=3600)
         run_id = uuid4()
         serialized = _make_serialized()
 
@@ -274,7 +274,7 @@ class TestCallbackThreadSafety:
         2. Wait for all threads.
         3. Verify reporter logged exactly 10 calls.
         """
-        cb = SlowBurnCallbackHandler(budget_usd=100.0, window_seconds=3600)
+        cb = SlowBurnCallbackHandler(budget_usd=100.0, window=3600)
         serialized = _make_serialized()
         num_threads = 10
         errors = []

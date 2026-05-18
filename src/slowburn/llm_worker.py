@@ -15,13 +15,14 @@ import asyncio
 import base64
 import hashlib
 import logging
+import math
 import mimetypes
 import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Self, TypeVar, Union
 
 import litellm
-from concurry import RateLimit, async_gather, worker
+from concurry import async_gather, worker
 from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
 from morphic import Typed, validate
 from morphic.string import format_exception_msg
@@ -205,10 +206,10 @@ class SlowBurnLLM(Typed):
         llm = SlowBurnLLM.options(
             limits=LimitSet(
                 limits=[
-                    CostLimit(budget_usd=5.0, window_seconds=86400),
-                    RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-                    RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-                    CallLimit(window_seconds=60, capacity=500),
+                    CostLimit(budget_usd=5.0, window=86400),
+                    RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+                    RateLimit(key="output_tokens", window=60, capacity=200_000),
+                    CallLimit(window=60, capacity=500),
                 ],
                 mode="Asyncio",
                 shared=True,
@@ -389,11 +390,19 @@ class SlowBurnLLM(Typed):
         return messages
 
     def _has_cost_limit(self) -> bool:
-        """Return whether this worker has an active dollar-denominated CostLimit."""
+        """Return whether this worker has an active (finite) dollar-denominated CostLimit.
+
+        Returns ``False`` if the only CostLimit on the pool is the library
+        default ``CostLimit(inf, "daily")`` — that's a "no real budget"
+        signal even though the slot is technically populated.
+        """
         try:
             for limit_set in self.limits.limit_sets:
                 for limit in limit_set.limits:
                     if getattr(limit, "key", None) == DEFAULT_COST_LIMIT_KEY:
+                        budget_usd = getattr(limit, "budget_usd", None)
+                        if budget_usd is None or math.isinf(budget_usd):
+                            continue
                         return True
         except (AttributeError, TypeError):
             return False
@@ -498,17 +507,23 @@ class SlowBurnLLM(Typed):
         )
 
     def _pre_acquire_rate_keys(self) -> Dict[str, List[str]]:
-        """Union of per-dimension rate-limit keys across every LimitSet in the pool.
+        """Union of per-slot limit keys across every LimitSet in the pool.
 
         Cached on first read. We need this BEFORE the LimitPool selects an
         endpoint at acquire time because the worker has to specify amounts for
-        each ``RateLimit`` key the eventually-selected LimitSet might carry.
-        Concurry skips unknown keys silently, so it's safe to overspecify.
+        each ``RateLimit`` / ``CostLimit`` key the eventually-selected LimitSet
+        might carry. Concurry skips unknown keys silently, so it's safe to
+        overspecify.
         """
         cached = getattr(self, "_pre_acquire_rate_keys_cache", None)
         if cached is not None:
             return cached
-        union: Dict[str, set] = {"call_count": set(), "input_tokens": set(), "output_tokens": set()}
+        union: Dict[str, set] = {
+            "requests": set(),
+            "input_tokens": set(),
+            "output_tokens": set(),
+            "budget": set(),
+        }
         # ``self.limits`` is the LimitPool; each LimitSet's config carries
         # ``_rate_keys`` from build_limit_pool.
         limit_sets = getattr(self.limits, "limit_sets", None)
@@ -519,11 +534,17 @@ class SlowBurnLLM(Typed):
                 for base, keys in rate_keys_for_ls.items():
                     union.setdefault(base, set()).update(keys)
         # Fall back: when the worker is built directly with a hand-rolled
-        # LimitSet (no ``_rate_keys`` config), assume the legacy hardcoded
-        # base keys are present so the existing test fixtures keep working.
-        for base in ("call_count", "input_tokens", "output_tokens"):
+        # LimitSet (no ``_rate_keys`` config), assume the canonical base
+        # keys are present so manually-built fixtures keep working.
+        _fallbacks: Dict[str, str] = {
+            "requests": "requests",
+            "input_tokens": "input_tokens",
+            "output_tokens": "output_tokens",
+            "budget": DEFAULT_COST_LIMIT_KEY,
+        }
+        for base, fallback_key in _fallbacks.items():
             if not union[base]:
-                union[base].add(base)
+                union[base].add(fallback_key)
         result = {base: sorted(keys) for base, keys in union.items()}
         # Stash on the instance via object.__setattr__ since SlowBurnLLM is
         # a Typed model and direct attribute assignment is restricted.
@@ -539,15 +560,16 @@ class SlowBurnLLM(Typed):
     ) -> Dict[str, int]:
         """Build the usage dict for acquire / acquisition.update().
 
-        The dict is keyed by Concurry limit-set keys. For the three rate
-        dimensions, the worker emits the same numeric value (input tokens /
-        output tokens / call count) under every actual key the relevant
-        LimitSet exposes for that dimension.
+        The dict is keyed by Concurry limit-set keys. For the four rate-style
+        slots (``requests``, ``input_tokens``, ``output_tokens``, ``budget``),
+        the worker emits the same numeric value under every actual key the
+        relevant LimitSet exposes for that slot — so a slot with two windows
+        (e.g. per-minute and per-day) charges both.
 
         Args:
             usage: Tokens and cost to record.
             should_track_cost: Whether to include the cost-limit key.
-            rate_keys: Per-dimension key mapping to use. If ``None``, the
+            rate_keys: Per-slot key mapping to use. If ``None``, the
                 worker's pool-level union (across every LimitSet) is used —
                 appropriate for pre-acquire, when we don't yet know which
                 LimitSet the pool will pick. When the post-acquisition
@@ -561,10 +583,11 @@ class SlowBurnLLM(Typed):
             limit_usage[k] = usage.input_tokens
         for k in keys.get("output_tokens", ["output_tokens"]):
             limit_usage[k] = usage.output_tokens
-        for k in keys.get("call_count", ["call_count"]):
+        for k in keys.get("requests", ["requests"]):
             limit_usage[k] = 1
         if should_track_cost:
-            limit_usage[DEFAULT_COST_LIMIT_KEY] = usage.cost_microdollars
+            for k in keys.get("budget", [DEFAULT_COST_LIMIT_KEY]):
+                limit_usage[k] = usage.cost_microdollars
         return limit_usage
 
     def _extract_actual_cost(self, response: Any, model: Optional[str] = None) -> int:
@@ -691,8 +714,7 @@ class SlowBurnLLM(Typed):
                 if k == "messages":
                     # Messages can be huge; show only the role+length per turn.
                     redacted[k] = [
-                        {"role": m.get("role"), "content_len": len(str(m.get("content", "")))}
-                        for m in v
+                        {"role": m.get("role"), "content_len": len(str(m.get("content", "")))} for m in v
                     ]
                 elif k in _SECRET_KEYS:
                     if v is None or v == "":
@@ -704,8 +726,7 @@ class SlowBurnLLM(Typed):
                 else:
                     redacted[k] = v
             logger.info(
-                f"[{model}] [Prompt={prompt_hash}] LITELLM_CALL | "
-                f"endpoint={endpoint_id} | kwargs={redacted}"
+                f"[{model}] [Prompt={prompt_hash}] LITELLM_CALL | endpoint={endpoint_id} | kwargs={redacted}"
             )
 
         try:
@@ -957,30 +978,17 @@ class SlowBurnLLM(Typed):
             _resolved_max_tokens_default: int = (
                 self.max_tokens if not is_no_arg(self.max_tokens) else cfg.max_tokens
             )
-            _resolved_timeout_default: float = (
-                self.timeout if not is_no_arg(self.timeout) else cfg.timeout
-            )
+            _resolved_timeout_default: float = self.timeout if not is_no_arg(self.timeout) else cfg.timeout
             _resolved_temperature_default: Optional[float] = (
                 self.temperature if not is_no_arg(self.temperature) else cfg.temperature
             )
-            # For each rate dimension, build a synthetic single-RateLimit list
-            # from the slowburn defaults if the field is missing. This keeps
-            # manually-built LimitSets (no config dict) working.
-            _synthetic_request_rate = RateLimit(
-                key="call_count",
-                window=cfg.max_request_rate_window,
-                capacity=cfg.max_request_rate,
-            )
-            _synthetic_input_rate = RateLimit(
-                key="input_tokens",
-                window=cfg.max_input_token_rate_window,
-                capacity=cfg.max_input_token_rate,
-            )
-            _synthetic_output_rate = RateLimit(
-                key="output_tokens",
-                window=cfg.max_output_token_rate_window,
-                capacity=cfg.max_output_token_rate,
-            )
+            # Backfill any missing EndpointConfig fields from the worker's own
+            # attributes / library defaults. ``limits`` is left untouched —
+            # ``None`` is a valid value (means "inherit"), and the LimitSet
+            # the worker is using has already been built and contains the
+            # actual Limit objects. The ``EndpointConfig`` is rebuilt here
+            # purely so the per-call cascade and the resolver can read its
+            # fields; it is not used to re-derive limits.
             _worker_endpoint_defaults: Dict[str, Any] = {
                 "model": self.model_name,
                 "api_key": self.api_key,
@@ -988,12 +996,6 @@ class SlowBurnLLM(Typed):
                 "temperature": _resolved_temperature_default,
                 "max_tokens": _resolved_max_tokens_default,
                 "timeout": _resolved_timeout_default,
-                "max_request_rate": [_synthetic_request_rate],
-                "max_input_token_rate": [_synthetic_input_rate],
-                "max_output_token_rate": [_synthetic_output_rate],
-                "max_concurrent_requests": cfg.max_concurrent_requests,
-                "budget_usd": cfg.budget_usd,
-                "budget_usd_window": cfg.budget_usd_window,
             }
             for _field, _default in _worker_endpoint_defaults.items():
                 raw_config.setdefault(_field, _default)

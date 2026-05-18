@@ -12,11 +12,9 @@ window rolls over. The agent slows down rather than crashing.
 
 import math
 import sys
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from concurry import RateLimit, RateWindow
-
-from .config import slowburn_config
 
 MICRODOLLARS_PER_DOLLAR: int = 1_000_000
 
@@ -53,9 +51,11 @@ class CostLimit(RateLimit):
         budget_usd: Maximum dollar spend allowed per window.
         window: Length of the budget window. Accepts a
             :class:`RateWindow` member, a string alias (``"daily"``,
-            ``"hourly"``, ``"weekly"``, etc.), or a positive number of seconds.
-            Defaults to ``slowburn_config.defaults.budget_usd_window``
-            (``RateWindow.Daily``).
+            ``"hourly"``, ``"weekly"``, etc.), or a positive number of
+            seconds. Required — there is no library default; the user
+            must always specify the window explicitly. Use shorthand
+            kwargs like ``budget_per_day=5.0`` on
+            :class:`slowburn.SlowBurnLimits` for a more readable API.
         key: Limit key used in acquire/update dicts. Defaults to
             ``"cost_microdollars"``.
         **kwargs: Additional arguments passed to RateLimit (e.g., algorithm).
@@ -75,20 +75,10 @@ class CostLimit(RateLimit):
     def __init__(
         self,
         budget_usd: float,
-        window: Optional[Union[RateWindow, str, int, float]] = None,
-        window_seconds: Optional[float] = None,
+        window: Union[RateWindow, str, int, float],
         key: str = DEFAULT_COST_LIMIT_KEY,
         **kwargs: Any,
     ):
-        # Backwards-compat: callers passing the deprecated ``window_seconds=``
-        # kwarg get the value forwarded as ``window`` (which accepts numeric
-        # seconds verbatim). Concurry's RateLimit emits the DeprecationWarning.
-        if window is None and window_seconds is not None:
-            window = window_seconds
-        elif window is not None and window_seconds is not None:
-            raise ValueError("Pass either `window` (preferred) or `window_seconds`, not both.")
-        if window is None:
-            window = slowburn_config.defaults.budget_usd_window
         capacity_microdollars = dollars_to_microdollars(budget_usd)
         super().__init__(
             key=key,

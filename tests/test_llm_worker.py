@@ -43,10 +43,10 @@ def _build_worker(budget_usd: float = 10.0) -> SlowBurnLLM:
     """Create a SlowBurnLLM worker with a reasonable limit set."""
     limit_set = LimitSet(
         limits=[
-            CostLimit(budget_usd=budget_usd, window_seconds=3600),
-            RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-            RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-            CallLimit(window_seconds=60, capacity=500),
+            CostLimit(budget_usd=budget_usd, window=3600),
+            RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+            RateLimit(key="output_tokens", window=60, capacity=200_000),
+            CallLimit(window=60, capacity=500),
         ],
         mode="Asyncio",
         shared=True,
@@ -302,10 +302,10 @@ class TestSlowBurnLLMLitellmParams:
         mock_acompletion.return_value = _make_acompletion_response()
         limit_set = LimitSet(
             limits=[
-                CostLimit(budget_usd=10.0, window_seconds=3600),
-                RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-                RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-                CallLimit(window_seconds=60, capacity=500),
+                CostLimit(budget_usd=10.0, window=3600),
+                RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+                RateLimit(key="output_tokens", window=60, capacity=200_000),
+                CallLimit(window=60, capacity=500),
             ],
             mode="Asyncio",
             shared=True,
@@ -357,10 +357,10 @@ class TestSlowBurnLLMLitellmParams:
         mock_acompletion.return_value = _make_acompletion_response()
         limit_set = LimitSet(
             limits=[
-                CostLimit(budget_usd=10.0, window_seconds=3600),
-                RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-                RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-                CallLimit(window_seconds=60, capacity=500),
+                CostLimit(budget_usd=10.0, window=3600),
+                RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+                RateLimit(key="output_tokens", window=60, capacity=200_000),
+                CallLimit(window=60, capacity=500),
             ],
             mode="Asyncio",
             shared=True,

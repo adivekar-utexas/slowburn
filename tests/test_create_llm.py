@@ -32,8 +32,8 @@ class TestCreateLLM:
             llm.stop()
 
     def test_daily_window_alias(self) -> None:
-        """budget_usd_window='daily' should set a 86400-second budget window."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd_window="daily")
+        """``limits=dict(budget_per_day=...)`` should set a 86400-second budget window."""
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_day=1.0))
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -41,8 +41,8 @@ class TestCreateLLM:
             llm.stop()
 
     def test_hourly_window_alias(self) -> None:
-        """budget_usd_window='hourly' should work."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd_window="hourly")
+        """``limits=dict(budget_per_hour=...)`` should work."""
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_hour=1.0))
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -50,8 +50,8 @@ class TestCreateLLM:
             llm.stop()
 
     def test_minutely_window_alias(self) -> None:
-        """budget_usd_window='minutely' should work."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd_window="minutely")
+        """``limits=dict(budget_per_minute=...)`` should work."""
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_minute=1.0))
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -59,8 +59,13 @@ class TestCreateLLM:
             llm.stop()
 
     def test_numeric_window(self) -> None:
-        """A numeric budget_usd_window (seconds) should work."""
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd_window=7200)
+        """A canonical CostLimit with a numeric window (seconds) should work."""
+        from slowburn import CostLimit
+
+        llm = create_llm(
+            model=MOCK_MODEL_NAME,
+            limits=dict(budget=[CostLimit(budget_usd=1.0, window=7200)]),
+        )
         try:
             reporter = llm.get_reporter().result(timeout=5.0)
             assert reporter is not None
@@ -68,9 +73,9 @@ class TestCreateLLM:
             llm.stop()
 
     def test_invalid_window_alias_raises(self) -> None:
-        """An unrecognized string budget_usd_window should be rejected."""
-        with pytest.raises(Exception, match="biweekly|window"):
-            create_llm(model=MOCK_MODEL_NAME, budget_usd_window="biweekly")
+        """An unrecognized shorthand should be rejected."""
+        with pytest.raises(Exception, match="biweekly|kwarg|extra"):
+            create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_biweekly=1.0))
 
     def test_custom_name(self) -> None:
         """Passing name= should set the worker name."""
@@ -255,7 +260,7 @@ class TestCreateLLM:
             model=MOCK_MODEL_NAME,
             _hidden_params={"response_cost": 0.0001},
         )
-        llm = create_llm(model=MOCK_MODEL_NAME, budget_usd=1.0, budget_usd_window="hourly")
+        llm = create_llm(model=MOCK_MODEL_NAME, limits=dict(budget_per_hour=1.0))
         try:
             result = llm.call_llm(prompt="Hi").result(timeout=10.0)
             assert result == "test output"

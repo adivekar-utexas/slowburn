@@ -108,7 +108,7 @@ class TestExtractTextFromMessages:
 
 class TestSlowBurnMiddlewareInit:
     def test_creates_limit_set_and_reporter(self) -> None:
-        mw = SlowBurnMiddleware(budget_usd=5.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=5.0, window=3600)
         assert mw.limit_set is not None
         assert mw.reporter is not None
         assert mw.reporter.num_calls == 0
@@ -136,7 +136,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
         3. Call wrap_model_call with a handler that returns a response.
         4. Verify reporter has 1 call with positive cost.
         """
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         request = _make_request()
         handler = lambda req: _make_response(content="The answer is 42.")
 
@@ -148,7 +148,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
 
     def test_multiple_calls_accumulate(self) -> None:
         """Multiple wrap_model_call invocations should accumulate cost."""
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
 
         for i in range(5):
             request = _make_request(messages=[_make_message(f"Question {i}")])
@@ -159,7 +159,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
 
     def test_uses_usage_metadata_when_available(self) -> None:
         """If response has usage_metadata, it should be used for cost calc."""
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         request = _make_request()
 
         response = _make_response(
@@ -174,7 +174,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
 
     def test_max_tokens_from_model_settings(self) -> None:
         """max_tokens should be read from model_settings if present."""
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         model = SimpleNamespace(model_name=MOCK_MODEL_NAME)  # no max_tokens attr
         request = SimpleNamespace(
             model=model,
@@ -213,7 +213,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
 
     def test_includes_system_message_in_estimation(self) -> None:
         """System message text should be included in input token estimation."""
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         sys_msg = SimpleNamespace(content="You are a helpful assistant." * 50)
         request = _make_request(system_message=sys_msg)
         mw.wrap_model_call(request, lambda req: _make_response())
@@ -228,7 +228,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
         3. Verify the exception propagates.
         4. Verify no call was logged (handler never succeeded).
         """
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         request = _make_request()
 
         def failing_handler(req):
@@ -241,7 +241,7 @@ class TestSlowBurnMiddlewareWrapModelCall:
 
     def test_handler_return_value_passed_through(self) -> None:
         """The return value from handler should be returned by wrap_model_call."""
-        mw = SlowBurnMiddleware(budget_usd=10.0, window_seconds=3600)
+        mw = SlowBurnMiddleware(budget_usd=10.0, window=3600)
         request = _make_request()
         response = _make_response(content="passthrough test")
         result = mw.wrap_model_call(request, lambda req: response)

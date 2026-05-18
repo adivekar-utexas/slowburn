@@ -93,7 +93,7 @@ def main():
     reporter = CostReporter()
     budget_handler = SlowBurnCallbackHandler(
         budget_usd=BUDGET_USD,
-        window_seconds=WINDOW_SECONDS,
+        window=WINDOW_SECONDS,
         reporter=reporter,
     )
 

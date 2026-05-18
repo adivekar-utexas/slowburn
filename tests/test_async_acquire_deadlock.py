@@ -40,17 +40,17 @@ def _make_response():
     )
 
 
-def _build_worker_with_call_limit(capacity: int, window_seconds: float = 1.0) -> SlowBurnLLM:
+def _build_worker_with_call_limit(capacity: int, window: float = 1.0) -> SlowBurnLLM:
     """Create a SlowBurnLLM with a tight CallLimit.
 
     Uses a short window (1s default) so capacity refills quickly during tests.
     """
     limit_set = LimitSet(
         limits=[
-            CostLimit(budget_usd=100.0, window_seconds=3600),
-            RateLimit(key="input_tokens", window_seconds=60, capacity=1_000_000),
-            RateLimit(key="output_tokens", window_seconds=60, capacity=200_000),
-            CallLimit(window_seconds=window_seconds, capacity=capacity),
+            CostLimit(budget_usd=100.0, window=3600),
+            RateLimit(key="input_tokens", window=60, capacity=1_000_000),
+            RateLimit(key="output_tokens", window=60, capacity=200_000),
+            CallLimit(window=window, capacity=capacity),
         ],
         mode="Asyncio",
         shared=True,
@@ -82,7 +82,7 @@ class TestAsyncAcquireDeadlockPrevention:
     def test_batch_at_capacity_succeeds(self, mock_acompletion) -> None:
         """Batch size == capacity should succeed immediately (baseline)."""
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=5, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=5, window=1.0)
         try:
             results = w.call_llm_batch(prompts=["Hi"] * 5).result(timeout=30.0)
             assert len(results) == 5
@@ -100,7 +100,7 @@ class TestAsyncAcquireDeadlockPrevention:
         loop stays responsive.
         """
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=5, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=5, window=1.0)
         try:
             start = time.monotonic()
             results = w.call_llm_batch(prompts=["Hi"] * 10).result(timeout=30.0)
@@ -114,7 +114,7 @@ class TestAsyncAcquireDeadlockPrevention:
     def test_batch_3x_capacity_no_deadlock(self, mock_acompletion) -> None:
         """Batch 3x capacity completes across three refill waves."""
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=3, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=3, window=1.0)
         try:
             results = w.call_llm_batch(prompts=["Hi"] * 9).result(timeout=30.0)
             assert len(results) == 9
@@ -125,7 +125,7 @@ class TestAsyncAcquireDeadlockPrevention:
     def test_single_calls_below_capacity_fast(self, mock_acompletion) -> None:
         """Sequential single calls below capacity should complete quickly."""
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=10, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=10, window=1.0)
         try:
             for i in range(5):
                 result = w.call_llm(prompt=f"Hi {i}").result(timeout=10.0)
@@ -150,9 +150,7 @@ class TestCreateLLMBatchCapacity:
         mock_acompletion.return_value = _make_response()
         llm = create_llm(
             model=MOCK_MODEL_NAME,
-            budget_usd=100.0,
-            budget_usd_window="hourly",
-            max_request_rate=500,
+            limits=dict(budget_per_hour=100.0, rpm=500),
         )
         try:
             results = llm.call_llm_batch(prompts=["Hi"] * 20).result(timeout=30.0)
@@ -168,7 +166,7 @@ class TestCreateLLMBatchCapacity:
         to verify that create_llm-style workers don't deadlock.
         """
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=4, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=4, window=1.0)
         try:
             results = w.call_llm_batch(prompts=["Hi"] * 8).result(timeout=30.0)
             assert len(results) == 8
@@ -197,7 +195,7 @@ class TestSyncAcquireDeadlockProof:
         import threading
 
         ls = LimitSet(
-            limits=[CallLimit(window_seconds=300.0, capacity=3)],
+            limits=[CallLimit(window=300.0, capacity=3)],
             mode="Asyncio",
             shared=True,
         )
@@ -238,7 +236,7 @@ class TestSyncAcquireDeadlockProof:
         once the 1s window refills capacity.
         """
         ls = LimitSet(
-            limits=[CallLimit(window_seconds=1.0, capacity=3)],
+            limits=[CallLimit(window=1.0, capacity=3)],
             mode="Asyncio",
             shared=True,
         )
@@ -271,7 +269,7 @@ class TestBatchCostReporterAccuracy:
     def test_reporter_counts_all_calls_in_batch(self, mock_acompletion) -> None:
         """Every call in a multi-wave batch is logged to the CostReporter."""
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=4, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=4, window=1.0)
         try:
             results = w.call_llm_batch(prompts=["Hi"] * 8).result(timeout=30.0)
             assert len(results) == 8
@@ -286,7 +284,7 @@ class TestBatchCostReporterAccuracy:
     def test_reporter_correct_after_sequential_batches(self, mock_acompletion) -> None:
         """Two sequential batches accumulate cost correctly."""
         mock_acompletion.return_value = _make_response()
-        w = _build_worker_with_call_limit(capacity=5, window_seconds=1.0)
+        w = _build_worker_with_call_limit(capacity=5, window=1.0)
         try:
             w.call_llm_batch(prompts=["Hi"] * 3).result(timeout=30.0)
             w.call_llm_batch(prompts=["Hi"] * 4).result(timeout=30.0)
