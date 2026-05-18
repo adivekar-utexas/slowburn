@@ -26,6 +26,7 @@ from concurry import (
     CallLimit,
     LimitPool,
     LimitSet,
+    LoadBalancingAlgorithm,
     RateLimit,
     RateLimitAlgorithm,
     ResourceLimit,
@@ -55,6 +56,7 @@ from .cost_accounting import CostCallContext, cost_controlled_call, estimate_inp
 from .endpoints import (
     EndpointConfig,
     EndpointResolver,
+    _build_endpoint_configs,
     passthrough_resolver,
 )
 from .exceptions import (
@@ -89,6 +91,7 @@ __all__: List[str] = [
     "ModelNotFoundError",
     "CostReporter",
     "EndpointResolver",
+    "build_limit_pool",
     "passthrough_resolver",
     "dollars_to_microdollars",
     "microdollars_to_dollars",
@@ -120,12 +123,196 @@ def _window_to_seconds(window: Union[WindowAlias, int, float]) -> float:
     return float(window)
 
 
-def _build_limit_pool(
+def build_limit_pool(
+    *,
+    endpoints: Optional[List[Dict[str, Any]]] = None,
+    model: str,
+    api_key: Optional[str] = None,
+    api_base: Optional[str] = None,
+    temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
+    max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+    max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_concurrent_calls: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    budget_usd: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+    window: Union[WindowAlias, int, float, _NO_ARG_TYPE] = _NO_ARG,
+    rate_limit_algorithm: Union[str, RateLimitAlgorithm, _NO_ARG_TYPE] = _NO_ARG,
+    extra_limits: Optional[List[Any]] = None,
+    backend: ExecutionBackend = "Asyncio",
+    load_balancing: Union[LoadBalancingAlgorithm, str] = LoadBalancingAlgorithm.RoundRobin,
+    worker_index: int = 0,
+) -> LimitPool:
+    """Build a Concurry ``LimitPool`` for SlowBurn from endpoint dicts + globals.
+
+    This helper is for power users who construct :class:`SlowBurnLLM` directly
+    via ``SlowBurnLLM.options(limits=...).init(...)`` instead of through
+    :func:`create_llm`. It performs the same dict-overlay, override tracking,
+    and shared-vs-private ``Limit`` routing that ``create_llm`` does
+    internally — and returns the resulting ``LimitPool`` so the caller can
+    pass it to ``SlowBurnLLM.options(limits=...)``.
+
+    Shared global limits (CRITICAL):
+        For each limit-shaping field (``max_rpm``, ``max_input_tpm``,
+        ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``):
+
+        - Endpoints that did NOT explicitly set the field (i.e., they
+          inherited the global default) all share a *single* Concurry
+          ``Limit`` instance for that field across the pool.
+        - Endpoints that DID set the field get their own private ``Limit``
+          instance with the endpoint-specific capacity.
+
+        Example: ``build_limit_pool(max_rpm=300, endpoints=[56 endpoints,
+        none overriding])`` creates one shared ``CallLimit(capacity=300)``
+        across all 56 ``LimitSet``s, so total RPM across the pool is 300
+        (not 300 per endpoint).
+
+    Args:
+        endpoints: List of plain endpoint dicts. Each may set any
+            ``EndpointConfig`` field plus arbitrary extras. When ``None``,
+            a single synthetic endpoint is built from the global kwargs.
+        model: Default model identifier (litellm format).
+        api_key: Default API key. ``None`` means 'fall back to provider env
+            vars or to credentials injected by the resolver via
+            ``litellm_params``'.
+        api_base: Default API base URL.
+        temperature: Default sampling temperature.
+        max_tokens: Default max output tokens.
+        timeout: Default per-call timeout in seconds.
+        max_rpm: Default requests-per-minute cap.
+        max_input_tpm: Default input-tokens-per-minute cap.
+        max_output_tpm: Default output-tokens-per-minute cap.
+        max_concurrent_calls: Default in-flight call cap (ResourceLimit).
+        budget_usd: Default dollar budget per window. ``float('inf')``
+            disables cost limiting.
+        window: Default budget window (alias or seconds).
+        rate_limit_algorithm: Default rate-limit algorithm. Accepts the
+            Concurry ``RateLimitAlgorithm`` enum or its string form.
+        extra_limits: Default ``extra_limits`` list applied to endpoints
+            whose ``extra_limits`` is empty.
+        backend: Concurry execution backend ("Asyncio" or "Ray").
+        load_balancing: Pool load-balancing algorithm. Accepts the Concurry
+            ``LoadBalancingAlgorithm`` enum or its string form (defaults to
+            ``RoundRobin``).
+        worker_index: Round-robin offset (lets you stagger multiple workers).
+
+    Returns:
+        A :class:`LimitPool` ready to pass to ``SlowBurnLLM.options(limits=...)``.
+
+    Example::
+
+        from slowburn import SlowBurnLLM, build_limit_pool
+
+        limit_pool = build_limit_pool(
+            model="bedrock/us.anthropic.claude-sonnet-4-6",
+            max_rpm=300,
+            budget_usd=10.0,
+            endpoints=[
+                {"endpoint_id": f"acct{i}/{region}", "account_id": str(i),
+                 "region": region, "max_concurrent_calls": 3}
+                for i, region in enumerate(["us-east-1", "us-west-2"])
+            ],
+        )
+        llm = SlowBurnLLM.options(limits=limit_pool).init(
+            name="my-llm",
+            model_name="bedrock/us.anthropic.claude-sonnet-4-6",
+            endpoint_resolver=my_sts_resolver,
+        )
+    """
+    defaults = slowburn_config.defaults
+    if is_no_arg(temperature):
+        temperature = defaults.temperature
+    if is_no_arg(max_tokens):
+        max_tokens = defaults.max_tokens
+    if is_no_arg(timeout):
+        timeout = defaults.timeout
+    if is_no_arg(max_rpm):
+        max_rpm = defaults.max_rpm
+    if is_no_arg(max_input_tpm):
+        max_input_tpm = defaults.max_input_tpm
+    if is_no_arg(max_output_tpm):
+        max_output_tpm = defaults.max_output_tpm
+    if is_no_arg(max_concurrent_calls):
+        max_concurrent_calls = defaults.max_concurrent_calls
+    if is_no_arg(budget_usd):
+        budget_usd = defaults.budget_usd
+    if is_no_arg(window):
+        window = defaults.window
+    if is_no_arg(rate_limit_algorithm):
+        rate_limit_algorithm = defaults.rate_limit_algorithm
+    rate_limit_algorithm_enum: RateLimitAlgorithm = (
+        rate_limit_algorithm
+        if isinstance(rate_limit_algorithm, RateLimitAlgorithm)
+        else RateLimitAlgorithm(rate_limit_algorithm)
+    )
+    load_balancing_enum: LoadBalancingAlgorithm = (
+        load_balancing
+        if isinstance(load_balancing, LoadBalancingAlgorithm)
+        else LoadBalancingAlgorithm(load_balancing)
+    )
+
+    worker_extra_limits: List[Any] = list(extra_limits) if extra_limits is not None else []
+    worker_defaults: Dict[str, Any] = {
+        "model": model,
+        "api_key": api_key,
+        "api_base": api_base,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": timeout,
+        "max_rpm": max_rpm,
+        "max_input_tpm": max_input_tpm,
+        "max_output_tpm": max_output_tpm,
+        "max_concurrent_calls": max_concurrent_calls,
+        "budget_usd": budget_usd,
+        "window": window,
+        "rate_limit_algorithm": rate_limit_algorithm_enum.value,
+        "extra_limits": worker_extra_limits,
+    }
+
+    # Validate endpoints argument up front for clear errors.
+    if endpoints is None:
+        endpoint_dicts: List[Dict[str, Any]] = [{}]
+    else:
+        if len(endpoints) == 0:
+            raise ValueError(
+                "build_limit_pool(endpoints=[]) is not allowed. Pass at least one endpoint dict "
+                "or omit `endpoints` for a single-endpoint pool."
+            )
+        for i, ep in enumerate(endpoints):
+            if not isinstance(ep, dict):
+                raise TypeError(
+                    f"build_limit_pool(endpoints=[...]) entry {i} must be a plain dict, "
+                    f"got {type(ep).__name__}."
+                )
+        endpoint_dicts = list(endpoints)
+
+    resolved_endpoints, endpoint_overrides = _build_endpoint_configs(
+        endpoints=endpoint_dicts, defaults=worker_defaults
+    )
+
+    return _build_limit_pool_from_configs(
+        endpoints=resolved_endpoints,
+        endpoint_overrides=endpoint_overrides,
+        backend=backend,
+        load_balancing=load_balancing_enum,
+        worker_index=worker_index,
+        global_max_rpm=max_rpm,
+        global_max_input_tpm=max_input_tpm,
+        global_max_output_tpm=max_output_tpm,
+        global_max_concurrent_calls=max_concurrent_calls,
+        global_budget_usd=budget_usd,
+        global_window_seconds=_window_to_seconds(window),
+        global_rate_limit_algorithm=rate_limit_algorithm_enum,
+    )
+
+
+def _build_limit_pool_from_configs(
     *,
     endpoints: List[EndpointConfig],
-    endpoint_overrides: List[set],
+    endpoint_overrides: List[frozenset],
     backend: ExecutionBackend,
-    load_balancing: str,
+    load_balancing: LoadBalancingAlgorithm,
     worker_index: int,
     global_max_rpm: int,
     global_max_input_tpm: int,
@@ -135,31 +322,10 @@ def _build_limit_pool(
     global_window_seconds: float,
     global_rate_limit_algorithm: RateLimitAlgorithm,
 ) -> LimitPool:
-    """Build a ``LimitPool`` with shared global limits + per-endpoint overrides.
+    """Internal: build the ``LimitPool`` from already-resolved EndpointConfigs.
 
-    For each limit-shaping field (``max_rpm``, ``max_input_tpm``,
-    ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``):
-
-    - If an endpoint did NOT explicitly set that field (i.e., it inherited
-      the ``create_llm`` default), this LimitSet receives a reference to a
-      single SHARED ``Limit`` instance that is also shared by every other
-      endpoint that did not set it. Concurry's ``InMemorySharedLimitSet``
-      accesses the limit's internal state directly, so two LimitSets holding
-      the same limit instance share its capacity.
-    - If an endpoint DID set that field, this LimitSet gets its own private
-      ``Limit`` instance with the endpoint-specific capacity.
-
-    This means:
-
-    - With ``max_rpm=300`` at create_llm and 56 endpoints (none overriding),
-      total RPM across the pool is **300** (one shared CallLimit).
-    - With ``max_rpm=300`` at create_llm and one endpoint overriding to 1000,
-      the 55 unset endpoints share a 300-rpm CallLimit and the one explicit
-      endpoint has its own 1000-rpm CallLimit.
-
-    The token RateLimits and CallLimit always use a 60-second window (industry
-    convention for "rpm" / "tpm"). The CostLimit uses the configured cost
-    window.
+    Implements the shared-vs-private routing using the ``endpoint_overrides``
+    sets; see :func:`build_limit_pool` for the user-facing entry point.
     """
     # Build a single shared instance for each global limit that endpoints
     # might inherit. These are constructed lazily — we only allocate the ones
@@ -318,7 +484,7 @@ def create_llm(
     max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_concurrent_calls: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     rate_limit_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
-    api_key: str = "",
+    api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     backend: ExecutionBackend = "Asyncio",
     name: Optional[str] = None,
@@ -339,7 +505,7 @@ def create_llm(
     on_pricing_unavailable: PricingUnavailableAction = "error",
     endpoints: Optional[List[Dict[str, Any]]] = None,
     endpoint_resolver: Optional[EndpointResolver] = None,
-    load_balancing: str = "round_robin",
+    load_balancing: Union[LoadBalancingAlgorithm, str] = LoadBalancingAlgorithm.RoundRobin,
     worker_index: int = 0,
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
@@ -468,9 +634,12 @@ def create_llm(
             credentials — write a function that reads ``cfg["account_id"]``
             / ``cfg["role_arn"]`` (or whatever you stored on the endpoint)
             and returns them merged with fresh credentials.
-        load_balancing: Pool load-balancing algorithm — "round_robin"
-            (default) or "random". Only meaningful when ``endpoints`` has
-            more than one entry.
+        load_balancing: Pool load-balancing algorithm. Accepts a Concurry
+            :class:`LoadBalancingAlgorithm` enum value
+            (``LoadBalancingAlgorithm.RoundRobin`` or ``.Random``) or the
+            equivalent string ("RoundRobin", "Random"). Defaults to
+            ``RoundRobin``. Only meaningful when ``endpoints`` has more
+            than one entry.
         worker_index: Round-robin offset for the load-balancer. Only
             meaningful when ``endpoints`` has more than one entry; lets you
             stagger multiple workers so they pick different starting
@@ -536,28 +705,12 @@ def create_llm(
         )
     """
     defaults = slowburn_config.defaults
-    # ----- 1. Resolve every _NO_ARG bare kwarg through slowburn_config.defaults
-    if is_no_arg(budget_usd):
-        budget_usd = defaults.budget_usd
-    if is_no_arg(window):
-        window = defaults.window
-    if is_no_arg(max_rpm):
-        max_rpm = defaults.max_rpm
-    if is_no_arg(max_input_tpm):
-        max_input_tpm = defaults.max_input_tpm
-    if is_no_arg(max_output_tpm):
-        max_output_tpm = defaults.max_output_tpm
-    if is_no_arg(max_concurrent_calls):
-        max_concurrent_calls = defaults.max_concurrent_calls
-    if is_no_arg(rate_limit_algorithm):
-        rate_limit_algorithm = defaults.rate_limit_algorithm
-    rate_limit_algorithm: RateLimitAlgorithm = RateLimitAlgorithm(rate_limit_algorithm)
-    if is_no_arg(temperature):
-        temperature = defaults.temperature
-    if is_no_arg(max_tokens):
-        max_tokens = defaults.max_tokens
-    if is_no_arg(timeout):
-        timeout = defaults.timeout
+    # ----- 1. Resolve only the kwargs that this function itself consumes —
+    # i.e., the ones plumbed into ``SlowBurnLLM.options(...)`` for retry
+    # behavior. Everything else (limit-shaping kwargs, per-endpoint defaults,
+    # and worker-init kwargs that already accept ``_NO_ARG``) is forwarded
+    # downstream as-is, where the receiver does its own ``slowburn_config``
+    # fall-back.
     if is_no_arg(num_retries):
         num_retries = defaults.num_retries
     if is_no_arg(retry_on):
@@ -573,74 +726,29 @@ def create_llm(
     if name is None:
         name = model
 
-    # ----- 2. Concrete create_llm-level values (fall-back layer for endpoints)
-    worker_extra_limits: List[Any] = list(extra_limits) if extra_limits is not None else []
-    worker_defaults: Dict[str, Any] = {
-        "model": model,
-        "api_key": api_key,
-        "api_base": api_base,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "timeout": timeout,
-        "max_rpm": max_rpm,
-        "max_input_tpm": max_input_tpm,
-        "max_output_tpm": max_output_tpm,
-        "max_concurrent_calls": max_concurrent_calls,
-        "budget_usd": budget_usd,
-        "window": window,
-        "rate_limit_algorithm": rate_limit_algorithm,
-        "extra_limits": worker_extra_limits,
-    }
-
-    # ----- 3. Normalize endpoint dicts. Each entry must be a plain dict; we
-    # build the fully-resolved EndpointConfig later, after recording which
-    # fields were explicitly overridden (for the shared-limit-object logic).
-    if endpoints is None:
-        endpoint_dicts: List[Dict[str, Any]] = [{}]
-    else:
-        if len(endpoints) == 0:
-            raise ValueError(
-                "create_llm(endpoints=[]) is not allowed. Pass at least one endpoint dict "
-                "or omit `endpoints` for a single-endpoint setup."
-            )
-        endpoint_dicts = []
-        for i, ep in enumerate(endpoints):
-            if not isinstance(ep, dict):
-                raise TypeError(
-                    f"create_llm(endpoints=[...]) entry {i} must be a plain dict, "
-                    f"got {type(ep).__name__}. EndpointConfig is an internal type "
-                    "that SlowBurn constructs from your dicts."
-                )
-            endpoint_dicts.append(dict(ep))
-
-    # ----- 4. For each endpoint dict, record which fields it explicitly set
-    # (before overlaying defaults), then overlay create_llm-level values for
-    # everything else, and finally validate into an EndpointConfig.
-    resolved_endpoints: List[EndpointConfig] = []
-    endpoint_overrides: List[set] = []
-    for ep_dict in endpoint_dicts:
-        overrides: set = {k for k in ep_dict.keys() if k in worker_defaults}
-        for field, default_value in worker_defaults.items():
-            if field not in ep_dict:
-                ep_dict[field] = default_value
-        resolved_endpoints.append(EndpointConfig(**ep_dict))
-        endpoint_overrides.append(overrides)
-
-    # ----- 5. Build the LimitPool with shared global limits + per-endpoint
-    # overrides where the endpoint set its own value.
-    limit_pool: LimitPool = _build_limit_pool(
-        endpoints=resolved_endpoints,
-        endpoint_overrides=endpoint_overrides,
+    # ----- 2. Build the LimitPool. ``build_limit_pool`` owns the dict
+    # overlay, override tracking, shared-vs-private Limit-instance routing,
+    # AND the ``_NO_ARG → slowburn_config.defaults`` fall-back for every
+    # field it needs. We forward our kwargs verbatim (sentinels included).
+    limit_pool: LimitPool = build_limit_pool(
+        endpoints=endpoints,
+        model=model,
+        api_key=api_key,
+        api_base=api_base,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=timeout,
+        max_rpm=max_rpm,
+        max_input_tpm=max_input_tpm,
+        max_output_tpm=max_output_tpm,
+        max_concurrent_calls=max_concurrent_calls,
+        budget_usd=budget_usd,
+        window=window,
+        rate_limit_algorithm=rate_limit_algorithm,
+        extra_limits=extra_limits,
         backend=backend,
         load_balancing=load_balancing,
         worker_index=worker_index,
-        global_max_rpm=max_rpm,
-        global_max_input_tpm=max_input_tpm,
-        global_max_output_tpm=max_output_tpm,
-        global_max_concurrent_calls=max_concurrent_calls,
-        global_budget_usd=budget_usd,
-        global_window_seconds=_window_to_seconds(window),
-        global_rate_limit_algorithm=rate_limit_algorithm,
     )
 
     llm = SlowBurnLLM.options(

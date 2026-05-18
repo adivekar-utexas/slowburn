@@ -49,23 +49,29 @@ cascade, and proceeds with the call. This is how the user injects
 request-time data such as freshly-assumed STS credentials.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-from morphic import MutableTyped
+from morphic import Typed
 from pydantic import ConfigDict, Field
 
 from .config import is_no_arg
 from .constants import WindowAlias
 
 
-class EndpointConfig(MutableTyped):
+class EndpointConfig(Typed):
     """Fully-resolved per-endpoint configuration in a multi-account SlowBurnLLM.
 
     All fields with a counterpart at the ``create_llm`` layer are required:
-    by the time ``EndpointConfig`` is constructed (inside ``create_llm``), the
-    cascade against the ``create_llm`` kwargs and ``slowburn_config.defaults``
-    has already been applied, so every field is guaranteed to have a concrete
-    value.
+    by the time ``EndpointConfig`` is constructed (inside ``create_llm`` or via
+    :func:`build_endpoint_configs`), the cascade against the ``create_llm``
+    kwargs and ``slowburn_config.defaults`` has already been applied, so every
+    field is guaranteed to have a concrete value.
+
+    ``EndpointConfig`` is **immutable** — once built, its fields don't change.
+    Per-call cascading (per-call > resolver-augmented > config) happens at
+    call time and produces *new* values without mutating the config. The
+    resolver returns a new dict that is re-validated into a *new*
+    ``EndpointConfig`` instance.
 
     Unknown fields are preserved (``extra="allow"``) so the user can attach
     bookkeeping such as ``account_id`` / ``role_arn`` / ``region`` /
@@ -73,9 +79,9 @@ class EndpointConfig(MutableTyped):
     to ``litellm.acompletion`` — only known fields and the contents of
     ``litellm_params`` are.
 
-    End users do not construct ``EndpointConfig`` directly. Pass plain dicts
-    to ``create_llm(endpoints=[...])`` and SlowBurn will construct the
-    ``EndpointConfig`` instances internally::
+    The simplest way to construct ``EndpointConfig`` instances is via
+    :func:`create_llm` — pass plain dicts to ``endpoints=[...]`` and SlowBurn
+    builds the ``EndpointConfig`` instances internally::
 
         endpoints = [
             {
@@ -86,14 +92,13 @@ class EndpointConfig(MutableTyped):
                 "region": "us-east-1",
                 "role_arn": "arn:aws:iam::111111111111:role/BedrockAccess",
             },
-            {
-                "model": "bedrock/eu.anthropic.claude-sonnet-4-6",
-                "max_rpm": 125,
-                "account_id": "222222222222",
-                "region": "eu-west-2",
-                "role_arn": "arn:aws:iam::222222222222:role/BedrockAccess",
-            },
+            ...
         ]
+
+    Power users who construct :class:`SlowBurnLLM` directly via
+    ``SlowBurnLLM.options(...).init(...)`` (instead of through ``create_llm``)
+    can use :func:`build_endpoint_configs` to perform the same dict → typed
+    conversion themselves. See its docstring for an example.
     """
 
     # ``arbitrary_types_allowed`` is preserved because some fields (e.g.,
@@ -110,8 +115,12 @@ class EndpointConfig(MutableTyped):
             "litellm.acompletion."
         ),
     )
-    api_key: str = Field(
-        description="Per-endpoint API key (may be the empty string).",
+    api_key: Optional[str] = Field(
+        description=(
+            "Per-endpoint API key. ``None`` means 'no explicit key — let "
+            "litellm fall back to provider env vars (OPENAI_API_KEY, etc.) "
+            "or to the resolver-injected credentials in litellm_params'."
+        ),
     )
     api_base: Optional[str] = Field(
         description=(
@@ -122,8 +131,7 @@ class EndpointConfig(MutableTyped):
     )
     temperature: Optional[float] = Field(
         description=(
-            "Per-endpoint sampling temperature. ``None`` is valid and means "
-            "'let the provider decide'."
+            "Per-endpoint sampling temperature. ``None`` is valid and means 'let the provider decide'."
         ),
     )
     max_tokens: int = Field(
@@ -186,10 +194,7 @@ class EndpointConfig(MutableTyped):
 
     endpoint_id: Optional[str] = Field(
         default=None,
-        description=(
-            "Optional human-readable label used by CostReporter to attribute "
-            "cost per endpoint."
-        ),
+        description=("Optional human-readable label used by CostReporter to attribute cost per endpoint."),
     )
 
 
@@ -259,6 +264,48 @@ def cascade_field(
     if not is_no_arg(config_value):
         return config_value
     return worker_default
+
+
+def _build_endpoint_configs(
+    endpoints: List[Dict[str, Any]],
+    *,
+    defaults: Dict[str, Any],
+) -> Tuple[List["EndpointConfig"], List[frozenset]]:
+    """Internal: convert plain endpoint dicts into ``EndpointConfig`` instances.
+
+    For each endpoint dict, this:
+
+    1. Records which fields the dict explicitly set (the *override set* —
+       used by the limit-pool builder to decide whether the endpoint should
+       share a global Concurry ``Limit`` instance or get a private one).
+    2. Overlays ``defaults`` for any field the dict omits.
+    3. Validates the merged dict into an :class:`EndpointConfig`.
+
+    Args:
+        endpoints: List of plain endpoint dicts.
+        defaults: Dict mapping field name to the fallback value used when
+            the endpoint dict does not set that field. Must contain every
+            required ``EndpointConfig`` field; missing fields will cause
+            validation to fail.
+
+    Returns:
+        A two-tuple ``(configs, overrides)`` where both lists have the same
+        length as ``endpoints``:
+
+        - ``configs[i]``: the fully-resolved :class:`EndpointConfig`.
+        - ``overrides[i]``: a frozenset of field names the user explicitly
+          set on the input dict (before defaults were overlaid). Two
+          endpoints carrying the same numeric value are still distinguished
+          by whether the value was inherited or explicitly set.
+    """
+    configs: List[EndpointConfig] = []
+    overrides_list: List[frozenset] = []
+    for ep_dict in endpoints:
+        overrides: frozenset = frozenset(k for k in ep_dict.keys() if k in defaults)
+        merged: Dict[str, Any] = {**defaults, **ep_dict}
+        configs.append(EndpointConfig(**merged))
+        overrides_list.append(overrides)
+    return configs, overrides_list
 
 
 __all__ = [

@@ -88,9 +88,9 @@ class SlowBurnDefaults(MutableTyped):
     budget_usd: confloat(gt=0.0) = float("inf")
     window: WindowAlias = "daily"
     window_seconds: confloat(gt=0.0) = 86400.0
-    max_rpm: conint(ge=1) = 1_000
-    max_input_tpm: conint(ge=1) = 10_000_000
-    max_output_tpm: conint(ge=1) = 1_000_000
+    max_rpm: conint(ge=1) = 100_000
+    max_input_tpm: conint(ge=1) = 1_000_000_000
+    max_output_tpm: conint(ge=1) = 100_000_000
     # Maximum number of in-flight calls per endpoint (ResourceLimit capacity).
     # Defaults to a generous value so existing callers (who never set this)
     # are effectively unconstrained on concurrency and continue to be paced

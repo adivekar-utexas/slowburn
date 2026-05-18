@@ -228,7 +228,14 @@ class SlowBurnLLM(Typed):
 
     name: str = Field(..., description="Worker name (for logging)")
     model_name: str = Field(..., description="litellm model identifier")
-    api_key: str = Field(default="", description="API key (or set via env var)")
+    api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "API key. ``None`` (default) means 'fall back to provider "
+            "env vars (e.g. OPENAI_API_KEY) or to credentials injected by "
+            "the endpoint_resolver via litellm_params'."
+        ),
+    )
     api_base: Optional[str] = Field(
         default=None,
         description=(
@@ -587,7 +594,7 @@ class SlowBurnLLM(Typed):
         call_t0: float,
         verbosity: int,
         model: str,
-        api_key: str,
+        api_key: Optional[str],
         api_base: Optional[str],
         temperature: Optional[float],
         max_tokens: int,
@@ -609,7 +616,7 @@ class SlowBurnLLM(Typed):
         named_kwargs: Dict[str, Any] = dict(
             model=model,
             messages=messages,
-            api_key=api_key if len(api_key) > 0 else None,
+            api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
         )
@@ -697,7 +704,7 @@ class SlowBurnLLM(Typed):
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
         model: Union[str, _NO_ARG_TYPE] = _NO_ARG,
-        api_key: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_key: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
         api_base: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
         temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
         max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
@@ -956,7 +963,7 @@ class SlowBurnLLM(Typed):
                 config_value=endpoint_config.model,
                 worker_default=self.model_name,
             )
-            resolved_api_key: str = cascade_field(
+            resolved_api_key: Optional[str] = cascade_field(
                 field="api_key",
                 call_value=api_key,
                 config_value=endpoint_config.api_key,
@@ -1186,7 +1193,7 @@ class SlowBurnLLM(Typed):
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
         model: Union[str, _NO_ARG_TYPE] = _NO_ARG,
-        api_key: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_key: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
         api_base: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
         temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
         max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
