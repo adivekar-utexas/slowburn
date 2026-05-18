@@ -15,11 +15,11 @@ for LLM parameters (e.g., ``temperature=None`` means "let the model decide").
 from contextlib import contextmanager
 from typing import Any, Generator, Optional
 
-from concurry import RateLimitAlgorithm, RetryAlgorithm
+from concurry import RateLimitAlgorithm, RateWindow, RetryAlgorithm
 from morphic import MutableTyped
 from pydantic import ConfigDict, Field, confloat, conint
 
-from .constants import BackpressureNotify, BudgetOverflowAction, ImageDetailLevel, WindowAlias
+from .constants import BackpressureNotify, BudgetOverflowAction, ImageDetailLevel
 
 
 class _NoArgType:
@@ -84,18 +84,28 @@ class SlowBurnDefaults(MutableTyped):
     image_tokens_high_detail: conint(ge=1) = 1000
     image_detail: ImageDetailLevel = "auto"
 
-    # Budget defaults
+    # Cost / budget defaults
     budget_usd: confloat(gt=0.0) = float("inf")
-    window: WindowAlias = "daily"
-    window_seconds: confloat(gt=0.0) = 86400.0
-    max_rpm: conint(ge=1) = 100_000
-    max_input_tpm: conint(ge=1) = 1_000_000_000
-    max_output_tpm: conint(ge=1) = 100_000_000
-    # Maximum number of in-flight calls per endpoint (ResourceLimit capacity).
-    # Defaults to a generous value so existing callers (who never set this)
-    # are effectively unconstrained on concurrency and continue to be paced
-    # by max_rpm and the cost budget.
-    max_concurrent_calls: conint(ge=1) = 1_000_000
+    budget_usd_window: RateWindow = RateWindow.Daily
+
+    # Default rate limits + their windows. Each rate dimension has a separate
+    # default *capacity* and *window* — so a user passing
+    # ``max_request_rate=300`` to ``create_llm`` gets 300 requests per
+    # ``max_request_rate_window`` (``"minutely"`` by default), not per the
+    # cost-budget window. Rate limits and the cost budget are independent
+    # temporal scales.
+    max_request_rate: conint(ge=1) = 100_000
+    max_request_rate_window: RateWindow = RateWindow.Minutely
+    max_input_token_rate: conint(ge=1) = 1_000_000_000
+    max_input_token_rate_window: RateWindow = RateWindow.Minutely
+    max_output_token_rate: conint(ge=1) = 100_000_000
+    max_output_token_rate_window: RateWindow = RateWindow.Minutely
+    # Maximum number of in-flight requests per endpoint (ResourceLimit
+    # capacity). Defaults to a generous value so existing callers (who
+    # never set this) are effectively unconstrained on concurrency and
+    # continue to be paced by ``max_request_rate`` and the cost budget.
+    # Field name parallels ``max_request_rate`` (both control "requests").
+    max_concurrent_requests: conint(ge=1) = 1_000_000
     num_retries: conint(ge=0) = 5
 
     # Generic transient-error retry backoff. This is intentionally short because
@@ -106,12 +116,12 @@ class SlowBurnDefaults(MutableTyped):
     retry_algorithm: RetryAlgorithm = RetryAlgorithm.Exponential
     retry_jitter: confloat(ge=0.0, le=1.0) = 0.3
 
-    # Rate-limit algorithm for the per-minute CallLimit and token RateLimits
-    # GCRA enforces a steady emission interval (Theoretical Arrival Time)
-    # so request *starts* are spaced ~60/max_rpm apart. This is robust to
-    # heterogeneous call durations because GCRA tracks start times only and
-    # avoids the bursty edge cases of SlidingWindow when providers count
-    # failed (429) requests against the same window.
+    # Rate-limit algorithm for the per-window CallLimit and token RateLimits.
+    # GCRA enforces a steady emission interval (Theoretical Arrival Time) so
+    # request *starts* are spaced ~ window_seconds / capacity apart. This is
+    # robust to heterogeneous call durations because GCRA tracks start times
+    # only and avoids the bursty edge cases of SlidingWindow when providers
+    # count failed (429) requests against the same window.
     rate_limit_algorithm: RateLimitAlgorithm = RateLimitAlgorithm.GCRA
 
     # Backpressure

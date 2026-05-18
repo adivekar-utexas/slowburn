@@ -140,19 +140,19 @@ class TestAsyncAcquireDeadlockPrevention:
 class TestCreateLLMBatchCapacity:
     """Test that create_llm's default limits don't deadlock on real batch sizes.
 
-    create_llm uses max_rpm=500 by default (CallLimit capacity=500,
-    window=60s). Batches <= 500 should complete in one wave.
+    create_llm uses max_request_rate=100_000 by default (RateLimit capacity,
+    1-minute window). Batches <= max_request_rate should complete in one wave.
     """
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)
     def test_create_llm_batch_within_rpm(self, mock_acompletion) -> None:
-        """A batch within the default max_rpm should complete without delay."""
+        """A batch within the default max_request_rate should complete without delay."""
         mock_acompletion.return_value = _make_response()
         llm = create_llm(
             model=MOCK_MODEL_NAME,
             budget_usd=100.0,
-            window="hourly",
-            max_rpm=500,
+            budget_usd_window="hourly",
+            max_request_rate=500,
         )
         try:
             results = llm.call_llm_batch(prompts=["Hi"] * 20).result(timeout=30.0)

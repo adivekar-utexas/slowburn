@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Self, TypeVar, Union
 
 import litellm
-from concurry import async_gather, worker
+from concurry import RateLimit, async_gather, worker
 from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
 from morphic import Typed, validate
 from morphic.string import format_exception_msg
@@ -497,23 +497,72 @@ class SlowBurnLLM(Typed):
             cost_microdollars=cost_microdollars,
         )
 
+    def _pre_acquire_rate_keys(self) -> Dict[str, List[str]]:
+        """Union of per-dimension rate-limit keys across every LimitSet in the pool.
+
+        Cached on first read. We need this BEFORE the LimitPool selects an
+        endpoint at acquire time because the worker has to specify amounts for
+        each ``RateLimit`` key the eventually-selected LimitSet might carry.
+        Concurry skips unknown keys silently, so it's safe to overspecify.
+        """
+        cached = getattr(self, "_pre_acquire_rate_keys_cache", None)
+        if cached is not None:
+            return cached
+        union: Dict[str, set] = {"call_count": set(), "input_tokens": set(), "output_tokens": set()}
+        # ``self.limits`` is the LimitPool; each LimitSet's config carries
+        # ``_rate_keys`` from build_limit_pool.
+        limit_sets = getattr(self.limits, "limit_sets", None)
+        if limit_sets is not None:
+            for ls in limit_sets:
+                cfg = getattr(ls, "config", None) or {}
+                rate_keys_for_ls = cfg.get("_rate_keys", {})
+                for base, keys in rate_keys_for_ls.items():
+                    union.setdefault(base, set()).update(keys)
+        # Fall back: when the worker is built directly with a hand-rolled
+        # LimitSet (no ``_rate_keys`` config), assume the legacy hardcoded
+        # base keys are present so the existing test fixtures keep working.
+        for base in ("call_count", "input_tokens", "output_tokens"):
+            if not union[base]:
+                union[base].add(base)
+        result = {base: sorted(keys) for base, keys in union.items()}
+        # Stash on the instance via object.__setattr__ since SlowBurnLLM is
+        # a Typed model and direct attribute assignment is restricted.
+        object.__setattr__(self, "_pre_acquire_rate_keys_cache", result)
+        return result
+
     def _build_limit_usage(
         self,
         *,
         usage: Usage,
         should_track_cost: bool,
+        rate_keys: Optional[Dict[str, List[str]]] = None,
     ) -> Dict[str, int]:
-        """Build the usage dict for acquisition.update().
+        """Build the usage dict for acquire / acquisition.update().
 
-        The Concurry limit layer needs a dict keyed by limit names. Usage owns
-        token and cost quantities; should_track_cost is separate runtime
-        accounting state that controls whether the CostLimit key is included.
+        The dict is keyed by Concurry limit-set keys. For the three rate
+        dimensions, the worker emits the same numeric value (input tokens /
+        output tokens / call count) under every actual key the relevant
+        LimitSet exposes for that dimension.
+
+        Args:
+            usage: Tokens and cost to record.
+            should_track_cost: Whether to include the cost-limit key.
+            rate_keys: Per-dimension key mapping to use. If ``None``, the
+                worker's pool-level union (across every LimitSet) is used —
+                appropriate for pre-acquire, when we don't yet know which
+                LimitSet the pool will pick. When the post-acquisition
+                ``acquisition.config["_rate_keys"]`` is available, pass it
+                here so ``update()`` charges only the keys actually present
+                on the selected LimitSet.
         """
-        limit_usage: Dict[str, int] = {
-            "input_tokens": usage.input_tokens,
-            "output_tokens": usage.output_tokens,
-            "call_count": 1,
-        }
+        keys = rate_keys if rate_keys is not None else self._pre_acquire_rate_keys()
+        limit_usage: Dict[str, int] = {}
+        for k in keys.get("input_tokens", ["input_tokens"]):
+            limit_usage[k] = usage.input_tokens
+        for k in keys.get("output_tokens", ["output_tokens"]):
+            limit_usage[k] = usage.output_tokens
+        for k in keys.get("call_count", ["call_count"]):
+            limit_usage[k] = 1
         if should_track_cost:
             limit_usage[DEFAULT_COST_LIMIT_KEY] = usage.cost_microdollars
         return limit_usage
@@ -568,10 +617,13 @@ class SlowBurnLLM(Typed):
                 (e.g., "111111111111/us-east-1"). None for single-endpoint
                 deployments.
         """
+        acquisition_config = getattr(acquisition, "config", None) or {}
+        acquisition_rate_keys = acquisition_config.get("_rate_keys")
         acquisition.update(
             usage=self._build_limit_usage(
                 usage=usage,
                 should_track_cost=should_track_cost,
+                rate_keys=acquisition_rate_keys,
             )
         )
         self._reporter.log_call(
@@ -892,12 +944,15 @@ class SlowBurnLLM(Typed):
             # ---------------------------------------------------------------
             # Concurry stores whatever dict was passed to LimitSet(config=...)
             # on the acquisition. When SlowBurn built the pool via create_llm,
-            # this is a fully-populated EndpointConfig.model_dump(); when the
-            # user constructed a LimitSet manually with no config, it is an
-            # empty dict. EndpointConfig is strict (all known fields required)
-            # so we backfill any missing fields from the worker's own
-            # attributes before validating.
+            # this is a fully-populated EndpointConfig.model_dump() (with
+            # ``_rate_keys`` extra). When the user constructed a LimitSet
+            # manually with no config, it is an empty dict. EndpointConfig is
+            # strict (all known fields required) so we backfill any missing
+            # fields from the worker's own attributes before validating.
             raw_config: Dict[str, Any] = dict(getattr(acquisition, "config", None) or {})
+            # ``_rate_keys`` is metadata for the worker, not an EndpointConfig
+            # field — strip before validation.
+            raw_config.pop("_rate_keys", None)
             cfg = slowburn_config.defaults
             _resolved_max_tokens_default: int = (
                 self.max_tokens if not is_no_arg(self.max_tokens) else cfg.max_tokens
@@ -908,6 +963,24 @@ class SlowBurnLLM(Typed):
             _resolved_temperature_default: Optional[float] = (
                 self.temperature if not is_no_arg(self.temperature) else cfg.temperature
             )
+            # For each rate dimension, build a synthetic single-RateLimit list
+            # from the slowburn defaults if the field is missing. This keeps
+            # manually-built LimitSets (no config dict) working.
+            _synthetic_request_rate = RateLimit(
+                key="call_count",
+                window=cfg.max_request_rate_window,
+                capacity=cfg.max_request_rate,
+            )
+            _synthetic_input_rate = RateLimit(
+                key="input_tokens",
+                window=cfg.max_input_token_rate_window,
+                capacity=cfg.max_input_token_rate,
+            )
+            _synthetic_output_rate = RateLimit(
+                key="output_tokens",
+                window=cfg.max_output_token_rate_window,
+                capacity=cfg.max_output_token_rate,
+            )
             _worker_endpoint_defaults: Dict[str, Any] = {
                 "model": self.model_name,
                 "api_key": self.api_key,
@@ -915,15 +988,12 @@ class SlowBurnLLM(Typed):
                 "temperature": _resolved_temperature_default,
                 "max_tokens": _resolved_max_tokens_default,
                 "timeout": _resolved_timeout_default,
-                "max_rpm": cfg.max_rpm,
-                "max_input_tpm": cfg.max_input_tpm,
-                "max_output_tpm": cfg.max_output_tpm,
-                "max_concurrent_calls": cfg.max_concurrent_calls,
+                "max_request_rate": [_synthetic_request_rate],
+                "max_input_token_rate": [_synthetic_input_rate],
+                "max_output_token_rate": [_synthetic_output_rate],
+                "max_concurrent_requests": cfg.max_concurrent_requests,
                 "budget_usd": cfg.budget_usd,
-                "window": cfg.window,
-                "rate_limit_algorithm": cfg.rate_limit_algorithm.value
-                if hasattr(cfg.rate_limit_algorithm, "value")
-                else cfg.rate_limit_algorithm,
+                "budget_usd_window": cfg.budget_usd_window,
             }
             for _field, _default in _worker_endpoint_defaults.items():
                 raw_config.setdefault(_field, _default)

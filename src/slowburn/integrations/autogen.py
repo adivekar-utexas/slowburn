@@ -14,7 +14,7 @@ Usage::
     from slowburn.integrations.autogen import SlowBurnModelClient
 
     limit_set = LimitSet(
-        limits=[CostLimit(budget_usd=5.0, window_seconds=86400)],
+        limits=[CostLimit(budget_usd=5.0, window="daily")],
         mode="Threads", shared=True,
     )
     reporter = CostReporter()

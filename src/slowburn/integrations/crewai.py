@@ -61,7 +61,9 @@ class SlowBurnCrewAI:
         reporter: Optional[CostReporter] = None,
     ):
         if window_seconds is None:
-            window_seconds = slowburn_config.defaults.window_seconds
+            from concurry.core.constants import RATE_WINDOW_SECONDS
+
+            window_seconds = RATE_WINDOW_SECONDS[slowburn_config.defaults.budget_usd_window]
         if limit_set is not None:
             self.limit_set = limit_set
         else:
@@ -70,7 +72,7 @@ class SlowBurnCrewAI:
                     "SlowBurnCrewAI requires either a positive budget_usd or a pre-created limit_set."
                 )
             self.limit_set = LimitSet(
-                limits=[CostLimit(budget_usd=budget_usd, window_seconds=window_seconds)],
+                limits=[CostLimit(budget_usd=budget_usd, window=window_seconds)],
                 mode="Threads",
                 shared=True,
             )

@@ -67,16 +67,23 @@ class TestSlowBurnDefaults:
         assert slowburn_config.defaults.budget_usd == float("inf")
 
     def test_default_window_seconds(self) -> None:
-        assert slowburn_config.defaults.window_seconds == 86400.0
+        # The cost-budget window is now ``budget_usd_window``, defaulting to
+        # ``RateWindow.Daily`` (86400 seconds when resolved).
+        from concurry import RateWindow
+
+        assert slowburn_config.defaults.budget_usd_window == RateWindow.Daily
 
     def test_default_max_rpm(self) -> None:
-        assert slowburn_config.defaults.max_rpm == 1_000
+        # ``max_rpm`` was renamed to ``max_request_rate`` (with a separate
+        # ``max_request_rate_window``, defaulting to Minutely so that the
+        # numeric capacity is requests/min, matching the old behavior).
+        assert slowburn_config.defaults.max_request_rate == 100_000
 
     def test_default_max_input_tpm(self) -> None:
-        assert slowburn_config.defaults.max_input_tpm == 10_000_000
+        assert slowburn_config.defaults.max_input_token_rate == 1_000_000_000
 
     def test_default_max_output_tpm(self) -> None:
-        assert slowburn_config.defaults.max_output_tpm == 1_000_000
+        assert slowburn_config.defaults.max_output_token_rate == 100_000_000
 
     def test_default_num_retries(self) -> None:
         assert slowburn_config.defaults.num_retries == 5
@@ -320,22 +327,26 @@ class TestConfigAffectsComponents:
         assert result_tuned > result_default
 
     def test_config_affects_cost_limit_window(self) -> None:
-        """CostLimit with no explicit window_seconds reads from config."""
+        """CostLimit with no explicit window reads ``budget_usd_window`` from config."""
+        from concurry import RateWindow
+
         from slowburn.limits import CostLimit
 
         default_limit = CostLimit(budget_usd=1.0)
         assert default_limit.window_seconds == 86400.0
 
-        with temp_config(window_seconds=3600.0):
+        with temp_config(budget_usd_window=RateWindow.Hourly):
             hourly_limit = CostLimit(budget_usd=1.0)
             assert hourly_limit.window_seconds == 3600.0
 
     def test_explicit_arg_overrides_config(self) -> None:
-        """Explicit window_seconds overrides the config default."""
+        """Explicit window overrides the config default."""
+        from concurry import RateWindow
+
         from slowburn.limits import CostLimit
 
-        with temp_config(window_seconds=3600.0):
-            explicit_limit = CostLimit(budget_usd=1.0, window_seconds=7200.0)
+        with temp_config(budget_usd_window=RateWindow.Hourly):
+            explicit_limit = CostLimit(budget_usd=1.0, window=7200.0)
             assert explicit_limit.window_seconds == 7200.0
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)

@@ -19,7 +19,7 @@ Quick start::
 
 import asyncio
 import math
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import litellm
 from concurry import (
@@ -29,9 +29,11 @@ from concurry import (
     LoadBalancingAlgorithm,
     RateLimit,
     RateLimitAlgorithm,
+    RateWindow,
     ResourceLimit,
     RetryAlgorithm,
 )
+from concurry.core.constants import RATE_WINDOW_SECONDS
 from morphic import validate
 
 from .config import (
@@ -44,18 +46,17 @@ from .config import (
     temp_config,
 )
 from .constants import (
-    WINDOW_ALIAS_SECONDS,
     BackpressureNotify,
     BudgetOverflowAction,
     ExecutionBackend,
     PricingUnavailableAction,
     ToolChoiceOption,
-    WindowAlias,
 )
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
 from .endpoints import (
     EndpointConfig,
     EndpointResolver,
+    RateLike,
     _build_endpoint_configs,
     passthrough_resolver,
 )
@@ -116,13 +117,6 @@ _DEFAULT_RETRY_ON: List[Type[BaseException]] = [
 ]
 
 
-def _window_to_seconds(window: Union[WindowAlias, int, float]) -> float:
-    """Resolve a window value (alias or seconds) to a float seconds value."""
-    if isinstance(window, str):
-        return float(WINDOW_ALIAS_SECONDS[window.lower()])
-    return float(window)
-
-
 def build_limit_pool(
     *,
     endpoints: Optional[List[Dict[str, Any]]] = None,
@@ -132,14 +126,12 @@ def build_limit_pool(
     temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
     max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
-    max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_concurrent_calls: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_request_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_input_token_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_output_token_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_concurrent_requests: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     budget_usd: Union[float, _NO_ARG_TYPE] = _NO_ARG,
-    window: Union[WindowAlias, int, float, _NO_ARG_TYPE] = _NO_ARG,
-    rate_limit_algorithm: Union[str, RateLimitAlgorithm, _NO_ARG_TYPE] = _NO_ARG,
-    extra_limits: Optional[List[Any]] = None,
+    budget_usd_window: Union[RateWindow, str, int, float, _NO_ARG_TYPE] = _NO_ARG,
     backend: ExecutionBackend = "Asyncio",
     load_balancing: Union[LoadBalancingAlgorithm, str] = LoadBalancingAlgorithm.RoundRobin,
     worker_index: int = 0,
@@ -153,20 +145,27 @@ def build_limit_pool(
     internally — and returns the resulting ``LimitPool`` so the caller can
     pass it to ``SlowBurnLLM.options(limits=...)``.
 
-    Shared global limits (CRITICAL):
-        For each limit-shaping field (``max_rpm``, ``max_input_tpm``,
-        ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``):
+    Rate-field input shapes:
+        Each rate dimension (``max_request_rate``, ``max_input_token_rate``,
+        ``max_output_token_rate``) accepts:
 
-        - Endpoints that did NOT explicitly set the field (i.e., they
-          inherited the global default) all share a *single* Concurry
-          ``Limit`` instance for that field across the pool.
-        - Endpoints that DID set the field get their own private ``Limit``
-          instance with the endpoint-specific capacity.
+        - ``int`` — uses the dimension's default window from
+          ``slowburn_config.defaults`` (``"minutely"`` for all three).
+        - :class:`concurry.RateLimit` — used as-is.
+        - ``dict`` — validated into a ``RateLimit``.
+        - ``List`` of any of the above — multiple rates on the same dimension
+          (e.g. 300/min AND 50000/day).
 
-        Example: ``build_limit_pool(max_rpm=300, endpoints=[56 endpoints,
-        none overriding])`` creates one shared ``CallLimit(capacity=300)``
-        across all 56 ``LimitSet``s, so total RPM across the pool is 300
-        (not 300 per endpoint).
+    Shared global limits:
+        For each rate-shaping field and ``max_concurrent_requests`` /
+        ``budget_usd``: endpoints that did NOT explicitly set the field
+        share a single ``Limit`` instance per ``(dimension, window_seconds)``
+        across the pool; endpoints that DID set the field get their own
+        private ``Limit`` instance(s).
+
+        Example: ``build_limit_pool(max_request_rate=300, endpoints=[56
+        endpoints, none overriding])`` creates one shared
+        ``CallLimit(window=Minutely, capacity=300)`` across all 56 LimitSets.
 
     Args:
         endpoints: List of plain endpoint dicts. Each may set any
@@ -180,17 +179,21 @@ def build_limit_pool(
         temperature: Default sampling temperature.
         max_tokens: Default max output tokens.
         timeout: Default per-call timeout in seconds.
-        max_rpm: Default requests-per-minute cap.
-        max_input_tpm: Default input-tokens-per-minute cap.
-        max_output_tpm: Default output-tokens-per-minute cap.
-        max_concurrent_calls: Default in-flight call cap (ResourceLimit).
-        budget_usd: Default dollar budget per window. ``float('inf')``
-            disables cost limiting.
-        window: Default budget window (alias or seconds).
-        rate_limit_algorithm: Default rate-limit algorithm. Accepts the
-            Concurry ``RateLimitAlgorithm`` enum or its string form.
-        extra_limits: Default ``extra_limits`` list applied to endpoints
-            whose ``extra_limits`` is empty.
+        max_request_rate: Default request-rate limit. See "Rate-field input
+            shapes" above. When passed as an ``int``, the window is
+            ``slowburn_config.defaults.max_request_rate_window`` (default
+            ``RateWindow.Minutely``).
+        max_input_token_rate: Default input-token rate. Same input shapes.
+            Default window: ``max_input_token_rate_window`` (Minutely).
+        max_output_token_rate: Default output-token rate. Same input shapes.
+            Default window: ``max_output_token_rate_window`` (Minutely).
+        max_concurrent_requests: Default in-flight request cap (ResourceLimit).
+        budget_usd: Default dollar budget per ``budget_usd_window``.
+            ``float('inf')`` disables cost limiting.
+        budget_usd_window: Default cost-budget window. Accepts a
+            :class:`concurry.RateWindow` member, a string alias (e.g.
+            ``"daily"``), or a positive number of seconds. Defaults to
+            ``slowburn_config.defaults.budget_usd_window`` (``Daily``).
         backend: Concurry execution backend ("Asyncio" or "Ray").
         load_balancing: Pool load-balancing algorithm. Accepts the Concurry
             ``LoadBalancingAlgorithm`` enum or its string form (defaults to
@@ -199,26 +202,6 @@ def build_limit_pool(
 
     Returns:
         A :class:`LimitPool` ready to pass to ``SlowBurnLLM.options(limits=...)``.
-
-    Example::
-
-        from slowburn import SlowBurnLLM, build_limit_pool
-
-        limit_pool = build_limit_pool(
-            model="bedrock/us.anthropic.claude-sonnet-4-6",
-            max_rpm=300,
-            budget_usd=10.0,
-            endpoints=[
-                {"endpoint_id": f"acct{i}/{region}", "account_id": str(i),
-                 "region": region, "max_concurrent_calls": 3}
-                for i, region in enumerate(["us-east-1", "us-west-2"])
-            ],
-        )
-        llm = SlowBurnLLM.options(limits=limit_pool).init(
-            name="my-llm",
-            model_name="bedrock/us.anthropic.claude-sonnet-4-6",
-            endpoint_resolver=my_sts_resolver,
-        )
     """
     defaults = slowburn_config.defaults
     if is_no_arg(temperature):
@@ -227,32 +210,24 @@ def build_limit_pool(
         max_tokens = defaults.max_tokens
     if is_no_arg(timeout):
         timeout = defaults.timeout
-    if is_no_arg(max_rpm):
-        max_rpm = defaults.max_rpm
-    if is_no_arg(max_input_tpm):
-        max_input_tpm = defaults.max_input_tpm
-    if is_no_arg(max_output_tpm):
-        max_output_tpm = defaults.max_output_tpm
-    if is_no_arg(max_concurrent_calls):
-        max_concurrent_calls = defaults.max_concurrent_calls
+    if is_no_arg(max_request_rate):
+        max_request_rate = defaults.max_request_rate
+    if is_no_arg(max_input_token_rate):
+        max_input_token_rate = defaults.max_input_token_rate
+    if is_no_arg(max_output_token_rate):
+        max_output_token_rate = defaults.max_output_token_rate
+    if is_no_arg(max_concurrent_requests):
+        max_concurrent_requests = defaults.max_concurrent_requests
     if is_no_arg(budget_usd):
         budget_usd = defaults.budget_usd
-    if is_no_arg(window):
-        window = defaults.window
-    if is_no_arg(rate_limit_algorithm):
-        rate_limit_algorithm = defaults.rate_limit_algorithm
-    rate_limit_algorithm_enum: RateLimitAlgorithm = (
-        rate_limit_algorithm
-        if isinstance(rate_limit_algorithm, RateLimitAlgorithm)
-        else RateLimitAlgorithm(rate_limit_algorithm)
-    )
+    if is_no_arg(budget_usd_window):
+        budget_usd_window = defaults.budget_usd_window
     load_balancing_enum: LoadBalancingAlgorithm = (
         load_balancing
         if isinstance(load_balancing, LoadBalancingAlgorithm)
         else LoadBalancingAlgorithm(load_balancing)
     )
 
-    worker_extra_limits: List[Any] = list(extra_limits) if extra_limits is not None else []
     worker_defaults: Dict[str, Any] = {
         "model": model,
         "api_key": api_key,
@@ -260,14 +235,18 @@ def build_limit_pool(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "timeout": timeout,
-        "max_rpm": max_rpm,
-        "max_input_tpm": max_input_tpm,
-        "max_output_tpm": max_output_tpm,
-        "max_concurrent_calls": max_concurrent_calls,
+        "max_request_rate": max_request_rate,
+        "max_input_token_rate": max_input_token_rate,
+        "max_output_token_rate": max_output_token_rate,
+        "max_concurrent_requests": max_concurrent_requests,
         "budget_usd": budget_usd,
-        "window": window,
-        "rate_limit_algorithm": rate_limit_algorithm_enum.value,
-        "extra_limits": worker_extra_limits,
+        "budget_usd_window": budget_usd_window,
+        # Per-dimension default-window keys consumed by _build_endpoint_configs's
+        # _normalize_rate calls; they are stripped from `merged` before the
+        # ``EndpointConfig`` is constructed.
+        "max_request_rate_window": defaults.max_request_rate_window,
+        "max_input_token_rate_window": defaults.max_input_token_rate_window,
+        "max_output_token_rate_window": defaults.max_output_token_rate_window,
     }
 
     # Validate endpoints argument up front for clear errors.
@@ -297,13 +276,9 @@ def build_limit_pool(
         backend=backend,
         load_balancing=load_balancing_enum,
         worker_index=worker_index,
-        global_max_rpm=max_rpm,
-        global_max_input_tpm=max_input_tpm,
-        global_max_output_tpm=max_output_tpm,
-        global_max_concurrent_calls=max_concurrent_calls,
+        global_max_concurrent_requests=max_concurrent_requests,
         global_budget_usd=budget_usd,
-        global_window_seconds=_window_to_seconds(window),
-        global_rate_limit_algorithm=rate_limit_algorithm_enum,
+        global_budget_usd_window=budget_usd_window,
     )
 
 
@@ -314,66 +289,52 @@ def _build_limit_pool_from_configs(
     backend: ExecutionBackend,
     load_balancing: LoadBalancingAlgorithm,
     worker_index: int,
-    global_max_rpm: int,
-    global_max_input_tpm: int,
-    global_max_output_tpm: int,
-    global_max_concurrent_calls: int,
+    global_max_concurrent_requests: int,
     global_budget_usd: float,
-    global_window_seconds: float,
-    global_rate_limit_algorithm: RateLimitAlgorithm,
+    global_budget_usd_window: Union[RateWindow, str, int, float],
 ) -> LimitPool:
     """Internal: build the ``LimitPool`` from already-resolved EndpointConfigs.
 
     Implements the shared-vs-private routing using the ``endpoint_overrides``
     sets; see :func:`build_limit_pool` for the user-facing entry point.
+
+    For each rate dimension (``max_request_rate``, ``max_input_token_rate``,
+    ``max_output_token_rate``), endpoints that did NOT explicitly override
+    the field share their ``RateLimit`` instances with every other endpoint
+    that also did not override the field. Sharing is per
+    ``(dimension, key, window_seconds)`` tuple so multiple windows on the
+    same dimension stay distinct.
+
+    Each ``LimitSet`` carries a ``_rate_keys`` mapping in its ``config`` so
+    the worker can populate the per-call ``requested`` / ``update`` dict
+    under the right keys (e.g. when an endpoint has both
+    ``input_tokens@60s`` and ``input_tokens@86400s``, both must be charged
+    on every call).
     """
-    # Build a single shared instance for each global limit that endpoints
-    # might inherit. These are constructed lazily — we only allocate the ones
-    # at least one endpoint actually needs.
-    shared_call_limit: Optional[CallLimit] = None
-    shared_input_rate_limit: Optional[RateLimit] = None
-    shared_output_rate_limit: Optional[RateLimit] = None
+    # Shared limit caches keyed by the unique signature of each global limit.
+    shared_rate_cache: Dict[Tuple[str, float], RateLimit] = {}
     shared_resource_limit: Optional[ResourceLimit] = None
     shared_cost_limit: Optional[CostLimit] = None
 
-    def _global_call_limit() -> CallLimit:
-        nonlocal shared_call_limit
-        if shared_call_limit is None:
-            shared_call_limit = CallLimit(
-                window_seconds=60,
-                capacity=global_max_rpm,
-                algorithm=global_rate_limit_algorithm,
-            )
-        return shared_call_limit
+    def _share_rate(rate: RateLimit) -> RateLimit:
+        """Return the shared instance for ``(rate.key, rate.window_seconds)``.
 
-    def _global_input_rate_limit() -> RateLimit:
-        nonlocal shared_input_rate_limit
-        if shared_input_rate_limit is None:
-            shared_input_rate_limit = RateLimit(
-                key="input_tokens",
-                window_seconds=60,
-                capacity=global_max_input_tpm,
-                algorithm=global_rate_limit_algorithm,
-            )
-        return shared_input_rate_limit
-
-    def _global_output_rate_limit() -> RateLimit:
-        nonlocal shared_output_rate_limit
-        if shared_output_rate_limit is None:
-            shared_output_rate_limit = RateLimit(
-                key="output_tokens",
-                window_seconds=60,
-                capacity=global_max_output_tpm,
-                algorithm=global_rate_limit_algorithm,
-            )
-        return shared_output_rate_limit
+        If we've seen this signature before, return the cached instance so
+        all endpoints inheriting the global rate share state. Otherwise
+        cache and return ``rate`` itself.
+        """
+        sig = (rate.key, float(rate.window_seconds))
+        if sig in shared_rate_cache:
+            return shared_rate_cache[sig]
+        shared_rate_cache[sig] = rate
+        return rate
 
     def _global_resource_limit() -> ResourceLimit:
         nonlocal shared_resource_limit
         if shared_resource_limit is None:
             shared_resource_limit = ResourceLimit(
-                key="concurrent_calls",
-                capacity=global_max_concurrent_calls,
+                key="concurrent_requests",
+                capacity=global_max_concurrent_requests,
             )
         return shared_resource_limit
 
@@ -384,66 +345,97 @@ def _build_limit_pool_from_configs(
         if shared_cost_limit is None:
             shared_cost_limit = CostLimit(
                 budget_usd=global_budget_usd,
-                window_seconds=global_window_seconds,
+                window=global_budget_usd_window,
             )
         return shared_cost_limit
 
+    rate_dimensions = (
+        ("max_request_rate", "call_count"),
+        ("max_input_token_rate", "input_tokens"),
+        ("max_output_token_rate", "output_tokens"),
+    )
+
     limit_sets: List[LimitSet] = []
     for endpoint, overrides in zip(endpoints, endpoint_overrides):
-        endpoint_algo = RateLimitAlgorithm(endpoint.rate_limit_algorithm)
-        algorithm_overridden: bool = "rate_limit_algorithm" in overrides
+        endpoint_rate_limits: List[RateLimit] = []
+        # _rate_keys is a mapping ``{base_key: [actual_key_in_LimitSet, ...]}``
+        # consumed by SlowBurnLLM._build_limit_usage at call time so the
+        # worker knows under which keys to charge token / call usage.
+        rate_keys: Dict[str, List[str]] = {}
 
-        # CallLimit (max_rpm)
-        if "max_rpm" in overrides or algorithm_overridden:
-            call_limit_obj: CallLimit = CallLimit(
-                window_seconds=60,
-                capacity=endpoint.max_rpm,
-                algorithm=endpoint_algo,
-            )
-        else:
-            call_limit_obj = _global_call_limit()
+        for field, base_key in rate_dimensions:
+            field_overridden = field in overrides
+            limits_for_field: List[RateLimit] = list(getattr(endpoint, field))
 
-        # Input tokens RateLimit (max_input_tpm)
-        if "max_input_tpm" in overrides or algorithm_overridden:
-            input_rate_obj: RateLimit = RateLimit(
-                key="input_tokens",
-                window_seconds=60,
-                capacity=endpoint.max_input_tpm,
-                algorithm=endpoint_algo,
-            )
-        else:
-            input_rate_obj = _global_input_rate_limit()
+            if len(limits_for_field) == 1:
+                # Single rate: use the base key (back-compat for the worker's
+                # legacy hardcoded usage map and consumers reading
+                # ``LimitSet.config["_rate_keys"][base_key]``).
+                rl = limits_for_field[0]
+                if rl.key != base_key:
+                    limits_for_field = [_rekeyed(rl, base_key)]
+            elif len(limits_for_field) > 1:
+                # Multi-rate dimension: keys must be unique within the
+                # LimitSet (Concurry forbids duplicates). Strategy:
+                #   1. If every user-supplied key is already distinct AND
+                #      not the default ``base_key``, respect the user's
+                #      naming verbatim.
+                #   2. Otherwise, regenerate every key as
+                #      ``f"{base_key}_{rate.params_signature()}"`` —
+                #      deterministic from the rate's distinguishing params.
+                user_keys = [rl.key for rl in limits_for_field]
+                user_supplied_unique = (
+                    len(set(user_keys)) == len(user_keys)
+                    and base_key not in user_keys
+                )
+                if user_supplied_unique:
+                    pass  # leave as-is
+                else:
+                    limits_for_field = [
+                        _rekeyed(rl, f"{base_key}_{rl.params_signature()}")
+                        for rl in limits_for_field
+                    ]
+                    # Defense in depth: even params_signature() can collide if
+                    # the user passes literal duplicates. Reject loudly.
+                    new_keys = [rl.key for rl in limits_for_field]
+                    if len(set(new_keys)) != len(new_keys):
+                        raise ValueError(
+                            f"Multiple rate limits on dimension {field!r} have identical "
+                            f"(capacity, window, algorithm); deduplicate the input or assign "
+                            f"distinct ``key`` values. Generated keys: {new_keys}"
+                        )
 
-        # Output tokens RateLimit (max_output_tpm)
-        if "max_output_tpm" in overrides or algorithm_overridden:
-            output_rate_obj: RateLimit = RateLimit(
-                key="output_tokens",
-                window_seconds=60,
-                capacity=endpoint.max_output_tpm,
-                algorithm=endpoint_algo,
-            )
-        else:
-            output_rate_obj = _global_output_rate_limit()
+            # Decide shared-vs-private. Only share when the endpoint did not
+            # override the dimension at all.
+            if field_overridden:
+                # Private: use the user-provided RateLimit instances as-is.
+                pass
+            else:
+                limits_for_field = [_share_rate(rl) for rl in limits_for_field]
 
-        # ResourceLimit (max_concurrent_calls)
-        if "max_concurrent_calls" in overrides:
+            endpoint_rate_limits.extend(limits_for_field)
+            rate_keys[base_key] = [rl.key for rl in limits_for_field]
+
+        # ResourceLimit (max_concurrent_requests): single value per endpoint,
+        # so the simple shared-or-private toggle from before applies.
+        if "max_concurrent_requests" in overrides:
             resource_limit_obj: ResourceLimit = ResourceLimit(
-                key="concurrent_calls",
-                capacity=endpoint.max_concurrent_calls,
+                key="concurrent_requests",
+                capacity=endpoint.max_concurrent_requests,
             )
         else:
             resource_limit_obj = _global_resource_limit()
 
-        # CostLimit (budget_usd / window) — both must be inheritable together
-        # because they're a (capacity, window) pair on the same Limit object.
-        cost_overridden: bool = "budget_usd" in overrides or "window" in overrides
+        # CostLimit (budget_usd / budget_usd_window): tied together because
+        # they're both properties of one (capacity, window) Limit object.
+        cost_overridden: bool = "budget_usd" in overrides or "budget_usd_window" in overrides
         if cost_overridden:
             if math.isinf(endpoint.budget_usd):
                 cost_limit_obj: Optional[CostLimit] = None
             else:
                 cost_limit_obj = CostLimit(
                     budget_usd=endpoint.budget_usd,
-                    window_seconds=_window_to_seconds(endpoint.window),
+                    window=endpoint.budget_usd_window,
                 )
         else:
             cost_limit_obj = _global_cost_limit()
@@ -451,19 +443,21 @@ def _build_limit_pool_from_configs(
         limits_list: List[Any] = []
         if cost_limit_obj is not None:
             limits_list.append(cost_limit_obj)
-        limits_list.append(input_rate_obj)
-        limits_list.append(output_rate_obj)
-        limits_list.append(call_limit_obj)
+        limits_list.extend(endpoint_rate_limits)
         limits_list.append(resource_limit_obj)
-        if endpoint.extra_limits:
-            limits_list.extend(endpoint.extra_limits)
+
+        # Stash _rate_keys on the LimitSet config so the worker can read it
+        # at acquisition time. Other code that introspects the config still
+        # sees the EndpointConfig dump verbatim under the same keys.
+        config_dump = endpoint.model_dump()
+        config_dump["_rate_keys"] = rate_keys
 
         limit_sets.append(
             LimitSet(
                 limits=limits_list,
                 mode=backend,
                 shared=True,
-                config=endpoint.model_dump(),
+                config=config_dump,
             )
         )
 
@@ -474,16 +468,31 @@ def _build_limit_pool_from_configs(
     )
 
 
+def _rekeyed(rate: RateLimit, new_key: str) -> RateLimit:
+    """Return a new ``RateLimit`` identical to ``rate`` but with ``key=new_key``.
+
+    Used when we need unique keys for multiple windows on the same dimension
+    (Concurry forbids duplicate keys in a single LimitSet).
+    """
+    if rate.key == new_key:
+        return rate
+    return RateLimit(
+        key=new_key,
+        window=rate.window,
+        capacity=rate.capacity,
+        algorithm=rate.algorithm,
+    )
+
+
 @validate
 def create_llm(
     model: str,
     budget_usd: Union[float, _NO_ARG_TYPE] = _NO_ARG,
-    window: Union[WindowAlias, int, float, _NO_ARG_TYPE] = _NO_ARG,
-    max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    max_concurrent_calls: Union[int, _NO_ARG_TYPE] = _NO_ARG,
-    rate_limit_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+    budget_usd_window: Union[RateWindow, str, int, float, _NO_ARG_TYPE] = _NO_ARG,
+    max_request_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_input_token_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_output_token_rate: Union[RateLike, _NO_ARG_TYPE] = _NO_ARG,
+    max_concurrent_requests: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     api_key: Optional[str] = None,
     api_base: Optional[str] = None,
     backend: ExecutionBackend = "Asyncio",
@@ -498,7 +507,6 @@ def create_llm(
     retry_jitter: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     tools: Optional[List[Dict[str, object]]] = None,
     tool_choice: Optional[ToolChoiceOption] = None,
-    extra_limits: Optional[List[object]] = None,
     litellm_params: Optional[Dict[str, object]] = None,
     backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = _NO_ARG,
     on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = _NO_ARG,
@@ -525,9 +533,9 @@ def create_llm(
     many endpoints it contains.
 
     - **Single endpoint** (``endpoints`` is ``None``): the bare kwargs
-      (``model``, ``api_key``, ``api_base``, ``max_rpm``, ``budget_usd``,
-      ``window``, ``temperature``, ``max_tokens``, ``timeout``,
-      ``litellm_params``, ``extra_limits``) define one synthetic
+      (``model``, ``api_key``, ``api_base``, ``max_request_rate``,
+      ``budget_usd``, ``budget_usd_window``, ``temperature``, ``max_tokens``,
+      ``timeout``, ``litellm_params``) define one synthetic
       :class:`EndpointConfig`. The pool has exactly one ``LimitSet``.
     - **Multi-endpoint** (``endpoints=[...]``): the user provides a plain
       dict per endpoint. Each is overlaid against the bare kwargs: any field
@@ -542,7 +550,7 @@ def create_llm(
 
     For every field that exists at multiple layers (``model``, ``api_key``,
     ``api_base``, ``temperature``, ``max_tokens``, ``timeout``, plus the
-    limit-shaping fields), the value used at call time is resolved as:
+    rate-shaping fields), the value used at call time is resolved as:
 
         ``call_llm(field=...)``
           > resolver-augmented endpoint dict field
@@ -553,38 +561,47 @@ def create_llm(
     Shared global limits
     --------------------
 
-    For the limit-shaping fields (``max_rpm``, ``max_input_tpm``,
-    ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``),
-    endpoints that DO NOT explicitly override the field share a single
-    ``Limit`` instance with every other endpoint that also did not override.
-    This means ``create_llm(max_rpm=300, endpoints=[...])`` enforces a
-    global 300 rpm across the pool (not 300 rpm per endpoint), unless an
-    endpoint sets its own ``max_rpm``, in which case that endpoint gets a
-    private limit at the override capacity.
+    For each rate-shaping dimension (``max_request_rate``,
+    ``max_input_token_rate``, ``max_output_token_rate``,
+    ``max_concurrent_requests``, ``budget_usd``), endpoints that DO NOT
+    explicitly override the field share a single ``Limit`` instance with
+    every other endpoint that also did not override. This means
+    ``create_llm(max_request_rate=300, endpoints=[...])`` enforces a global
+    300 requests/min across the pool (not 300 per endpoint), unless an
+    endpoint sets its own ``max_request_rate``, in which case that endpoint
+    gets a private limit at the override capacity.
+
+    Rate-field input shapes
+    -----------------------
+
+    The three rate dimensions accept any of:
+
+    - ``int`` — uses the dimension's default window
+      (``slowburn_config.defaults.max_*_rate_window``, ``"minutely"`` by
+      default).
+    - :class:`concurry.RateLimit` — used as-is.
+    - ``dict`` — validated into a ``RateLimit``.
+    - ``List`` of any of the above — multiple rates on the same dimension
+      (e.g. 300/min AND 50_000/day).
 
     Args:
         model: litellm model identifier (e.g. "gpt-4o-mini",
-            "bedrock/us.anthropic.claude-sonnet-4-6"). When ``endpoints``
-            contains entries with their own ``model``, this becomes the
-            default for any endpoint whose model is unset.
-        budget_usd: Maximum dollar spend per window. Treated as the default
-            for any endpoint whose ``budget_usd`` is unset. Set to
-            ``float('inf')`` (the default) to disable cost limiting.
-        window: Budget window — "daily", "hourly", "minutely", or seconds
-            (int/float). Default for any endpoint whose ``window`` is unset.
-        max_rpm: Default requests-per-minute cap for any endpoint whose
-            ``max_rpm`` is unset.
-        max_input_tpm: Default input-tokens-per-minute cap for any endpoint
-            whose ``max_input_tpm`` is unset.
-        max_output_tpm: Default output-tokens-per-minute cap for any
-            endpoint whose ``max_output_tpm`` is unset.
-        max_concurrent_calls: Default cap on in-flight calls per endpoint
-            (Concurry ``ResourceLimit`` capacity). Endpoints that don't
-            override this share a single global ResourceLimit at this
+            "bedrock/us.anthropic.claude-sonnet-4-6").
+        budget_usd: Maximum dollar spend per ``budget_usd_window``. Defaults
+            to ``float('inf')`` (no cost limit).
+        budget_usd_window: Cost-budget window. Accepts a
+            :class:`concurry.RateWindow`, string alias, or seconds.
+            Defaults to ``slowburn_config.defaults.budget_usd_window``
+            (``Daily``).
+        max_request_rate: Default request-rate limit. See "Rate-field input
+            shapes" above. ``int`` uses the
+            ``max_request_rate_window`` default (Minutely).
+        max_input_token_rate: Default input-token rate. Same input shapes.
+        max_output_token_rate: Default output-token rate. Same input shapes.
+        max_concurrent_requests: Default cap on in-flight requests per
+            endpoint (Concurry ``ResourceLimit`` capacity). Endpoints that
+            don't override this share a single global ResourceLimit at this
             capacity; endpoints that override get their own.
-        rate_limit_algorithm: Concurry rate-limit algorithm for the
-            per-minute call and token limits. "GCRA" (default), "SlidingWindow",
-            or "TokenBucket".
         api_key: Default API key for any endpoint whose ``api_key`` is unset.
         api_base: Default API base URL (litellm ``api_base``) for any
             endpoint whose ``api_base`` is unset. Useful for OpenAI-compatible
@@ -604,9 +621,6 @@ def create_llm(
         tools: Default tool schemas (OpenAI format) for all calls.
             Overridable per-call via ``call_llm(tools=...)``.
         tool_choice: Default tool_choice for all calls.
-        extra_limits: Default ``extra_limits`` list applied to any endpoint
-            whose ``extra_limits`` is empty. (When ``endpoints=[...]``, each
-            endpoint may have its own ``extra_limits``.)
         litellm_params: Worker-level kwargs forwarded to every
             ``litellm.acompletion`` call. Per-endpoint and per-call
             ``litellm_params`` merge ON TOP of these.
@@ -652,7 +666,7 @@ def create_llm(
 
         from slowburn import create_llm
 
-        llm = create_llm(model="gpt-4o-mini", budget_usd=5.0, window="daily")
+        llm = create_llm(model="gpt-4o-mini", budget_usd=5.0)
         result = llm.call_llm(prompt="Summarize this paper...").result()
         print(f"Cost so far: ${llm.get_reporter().result().total_cost():.4f}")
         llm.stop()
@@ -664,7 +678,7 @@ def create_llm(
         endpoints = [
             {
                 "model": "bedrock/us.anthropic.claude-sonnet-4-6",
-                "max_rpm": 250,
+                "max_request_rate": 250,
                 # Fields not known to EndpointConfig — preserved for resolver:
                 "account_id": "111111111111",
                 "region": "us-east-1",
@@ -672,7 +686,7 @@ def create_llm(
             },
             {
                 "model": "bedrock/eu.anthropic.claude-sonnet-4-6",
-                "max_rpm": 125,
+                "max_request_rate": 125,
                 "account_id": "222222222222",
                 "region": "eu-west-2",
                 "role_arn": "arn:aws:iam::222222222222:role/BedrockAccess",
@@ -738,14 +752,12 @@ def create_llm(
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
-        max_rpm=max_rpm,
-        max_input_tpm=max_input_tpm,
-        max_output_tpm=max_output_tpm,
-        max_concurrent_calls=max_concurrent_calls,
+        max_request_rate=max_request_rate,
+        max_input_token_rate=max_input_token_rate,
+        max_output_token_rate=max_output_token_rate,
+        max_concurrent_requests=max_concurrent_requests,
         budget_usd=budget_usd,
-        window=window,
-        rate_limit_algorithm=rate_limit_algorithm,
-        extra_limits=extra_limits,
+        budget_usd_window=budget_usd_window,
         backend=backend,
         load_balancing=load_balancing,
         worker_index=worker_index,
