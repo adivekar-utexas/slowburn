@@ -884,13 +884,42 @@ class SlowBurnLLM(Typed):
             # Step 1: rebuild the typed EndpointConfig from the acquisition.
             # ---------------------------------------------------------------
             # Concurry stores whatever dict was passed to LimitSet(config=...)
-            # on the acquisition. SlowBurn always stored a fully-resolved
-            # EndpointConfig.model_dump() there at create_llm() time, so we
-            # round-trip back to a typed object. For pools or limit sets that
-            # were not built by SlowBurn (e.g., user constructed manually),
-            # acquisition.config may be empty / None — we handle that by
-            # falling through to the worker defaults via cascade_field below.
+            # on the acquisition. When SlowBurn built the pool via create_llm,
+            # this is a fully-populated EndpointConfig.model_dump(); when the
+            # user constructed a LimitSet manually with no config, it is an
+            # empty dict. EndpointConfig is strict (all known fields required)
+            # so we backfill any missing fields from the worker's own
+            # attributes before validating.
             raw_config: Dict[str, Any] = dict(getattr(acquisition, "config", None) or {})
+            cfg = slowburn_config.defaults
+            _resolved_max_tokens_default: int = (
+                self.max_tokens if not is_no_arg(self.max_tokens) else cfg.max_tokens
+            )
+            _resolved_timeout_default: float = (
+                self.timeout if not is_no_arg(self.timeout) else cfg.timeout
+            )
+            _resolved_temperature_default: Optional[float] = (
+                self.temperature if not is_no_arg(self.temperature) else cfg.temperature
+            )
+            _worker_endpoint_defaults: Dict[str, Any] = {
+                "model": self.model_name,
+                "api_key": self.api_key,
+                "api_base": self.api_base,
+                "temperature": _resolved_temperature_default,
+                "max_tokens": _resolved_max_tokens_default,
+                "timeout": _resolved_timeout_default,
+                "max_rpm": cfg.max_rpm,
+                "max_input_tpm": cfg.max_input_tpm,
+                "max_output_tpm": cfg.max_output_tpm,
+                "max_concurrent_calls": cfg.max_concurrent_calls,
+                "budget_usd": cfg.budget_usd,
+                "window": cfg.window,
+                "rate_limit_algorithm": cfg.rate_limit_algorithm.value
+                if hasattr(cfg.rate_limit_algorithm, "value")
+                else cfg.rate_limit_algorithm,
+            }
+            for _field, _default in _worker_endpoint_defaults.items():
+                raw_config.setdefault(_field, _default)
             endpoint_config: EndpointConfig = EndpointConfig(**raw_config)
 
             # ---------------------------------------------------------------

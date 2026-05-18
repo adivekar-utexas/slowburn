@@ -28,6 +28,7 @@ from concurry import (
     LimitSet,
     RateLimit,
     RateLimitAlgorithm,
+    ResourceLimit,
     RetryAlgorithm,
 )
 from morphic import validate
@@ -54,9 +55,7 @@ from .cost_accounting import CostCallContext, cost_controlled_call, estimate_inp
 from .endpoints import (
     EndpointConfig,
     EndpointResolver,
-    coerce_to_endpoint_config,
     passthrough_resolver,
-    resolve_concrete_endpoint_config,
 )
 from .exceptions import (
     BatchInputMismatchError,
@@ -89,7 +88,6 @@ __all__: List[str] = [
     "PricingCache",
     "ModelNotFoundError",
     "CostReporter",
-    "EndpointConfig",
     "EndpointResolver",
     "passthrough_resolver",
     "dollars_to_microdollars",
@@ -122,65 +120,191 @@ def _window_to_seconds(window: Union[WindowAlias, int, float]) -> float:
     return float(window)
 
 
-def _build_limit_set_for_endpoint(
+def _build_limit_pool(
     *,
-    endpoint: EndpointConfig,
+    endpoints: List[EndpointConfig],
+    endpoint_overrides: List[set],
     backend: ExecutionBackend,
-    rate_limit_algorithm: RateLimitAlgorithm,
-) -> LimitSet:
-    """Construct one ``LimitSet`` from a fully-resolved ``EndpointConfig``.
+    load_balancing: str,
+    worker_index: int,
+    global_max_rpm: int,
+    global_max_input_tpm: int,
+    global_max_output_tpm: int,
+    global_max_concurrent_calls: int,
+    global_budget_usd: float,
+    global_window_seconds: float,
+    global_rate_limit_algorithm: RateLimitAlgorithm,
+) -> LimitPool:
+    """Build a ``LimitPool`` with shared global limits + per-endpoint overrides.
 
-    The returned ``LimitSet`` has:
+    For each limit-shaping field (``max_rpm``, ``max_input_tpm``,
+    ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``):
 
-    - A ``CostLimit`` if ``budget_usd`` is finite (otherwise no cost dimension).
-    - ``RateLimit``\\s for input/output tokens (per-minute windows).
-    - A ``CallLimit`` for requests-per-minute.
-    - Any user-supplied ``extra_limits`` appended.
-    - The endpoint's full ``model_dump()`` stored as ``LimitSet.config`` so the
-      worker can rebuild the typed ``EndpointConfig`` at acquisition time.
+    - If an endpoint did NOT explicitly set that field (i.e., it inherited
+      the ``create_llm`` default), this LimitSet receives a reference to a
+      single SHARED ``Limit`` instance that is also shared by every other
+      endpoint that did not set it. Concurry's ``InMemorySharedLimitSet``
+      accesses the limit's internal state directly, so two LimitSets holding
+      the same limit instance share its capacity.
+    - If an endpoint DID set that field, this LimitSet gets its own private
+      ``Limit`` instance with the endpoint-specific capacity.
 
-    The caller must pre-resolve every ``_NO_ARG`` field before calling this.
+    This means:
+
+    - With ``max_rpm=300`` at create_llm and 56 endpoints (none overriding),
+      total RPM across the pool is **300** (one shared CallLimit).
+    - With ``max_rpm=300`` at create_llm and one endpoint overriding to 1000,
+      the 55 unset endpoints share a 300-rpm CallLimit and the one explicit
+      endpoint has its own 1000-rpm CallLimit.
+
+    The token RateLimits and CallLimit always use a 60-second window (industry
+    convention for "rpm" / "tpm"). The CostLimit uses the configured cost
+    window.
     """
-    limits_list: List[Any] = []
-    if not math.isinf(endpoint.budget_usd):
-        limits_list.append(
-            CostLimit(
-                budget_usd=endpoint.budget_usd,
-                window_seconds=_window_to_seconds(endpoint.window),
-            ),
-        )
-    # Token RateLimits and the CallLimit always use a 60-second window: "rpm"
-    # and "tpm" are per-minute by industry convention regardless of the
-    # cost-budget window.
-    limits_list.extend(
-        [
-            RateLimit(
+    # Build a single shared instance for each global limit that endpoints
+    # might inherit. These are constructed lazily — we only allocate the ones
+    # at least one endpoint actually needs.
+    shared_call_limit: Optional[CallLimit] = None
+    shared_input_rate_limit: Optional[RateLimit] = None
+    shared_output_rate_limit: Optional[RateLimit] = None
+    shared_resource_limit: Optional[ResourceLimit] = None
+    shared_cost_limit: Optional[CostLimit] = None
+
+    def _global_call_limit() -> CallLimit:
+        nonlocal shared_call_limit
+        if shared_call_limit is None:
+            shared_call_limit = CallLimit(
+                window_seconds=60,
+                capacity=global_max_rpm,
+                algorithm=global_rate_limit_algorithm,
+            )
+        return shared_call_limit
+
+    def _global_input_rate_limit() -> RateLimit:
+        nonlocal shared_input_rate_limit
+        if shared_input_rate_limit is None:
+            shared_input_rate_limit = RateLimit(
+                key="input_tokens",
+                window_seconds=60,
+                capacity=global_max_input_tpm,
+                algorithm=global_rate_limit_algorithm,
+            )
+        return shared_input_rate_limit
+
+    def _global_output_rate_limit() -> RateLimit:
+        nonlocal shared_output_rate_limit
+        if shared_output_rate_limit is None:
+            shared_output_rate_limit = RateLimit(
+                key="output_tokens",
+                window_seconds=60,
+                capacity=global_max_output_tpm,
+                algorithm=global_rate_limit_algorithm,
+            )
+        return shared_output_rate_limit
+
+    def _global_resource_limit() -> ResourceLimit:
+        nonlocal shared_resource_limit
+        if shared_resource_limit is None:
+            shared_resource_limit = ResourceLimit(
+                key="concurrent_calls",
+                capacity=global_max_concurrent_calls,
+            )
+        return shared_resource_limit
+
+    def _global_cost_limit() -> Optional[CostLimit]:
+        nonlocal shared_cost_limit
+        if math.isinf(global_budget_usd):
+            return None
+        if shared_cost_limit is None:
+            shared_cost_limit = CostLimit(
+                budget_usd=global_budget_usd,
+                window_seconds=global_window_seconds,
+            )
+        return shared_cost_limit
+
+    limit_sets: List[LimitSet] = []
+    for endpoint, overrides in zip(endpoints, endpoint_overrides):
+        endpoint_algo = RateLimitAlgorithm(endpoint.rate_limit_algorithm)
+        algorithm_overridden: bool = "rate_limit_algorithm" in overrides
+
+        # CallLimit (max_rpm)
+        if "max_rpm" in overrides or algorithm_overridden:
+            call_limit_obj: CallLimit = CallLimit(
+                window_seconds=60,
+                capacity=endpoint.max_rpm,
+                algorithm=endpoint_algo,
+            )
+        else:
+            call_limit_obj = _global_call_limit()
+
+        # Input tokens RateLimit (max_input_tpm)
+        if "max_input_tpm" in overrides or algorithm_overridden:
+            input_rate_obj: RateLimit = RateLimit(
                 key="input_tokens",
                 window_seconds=60,
                 capacity=endpoint.max_input_tpm,
-                algorithm=rate_limit_algorithm,
-            ),
-            RateLimit(
+                algorithm=endpoint_algo,
+            )
+        else:
+            input_rate_obj = _global_input_rate_limit()
+
+        # Output tokens RateLimit (max_output_tpm)
+        if "max_output_tpm" in overrides or algorithm_overridden:
+            output_rate_obj: RateLimit = RateLimit(
                 key="output_tokens",
                 window_seconds=60,
                 capacity=endpoint.max_output_tpm,
-                algorithm=rate_limit_algorithm,
-            ),
-            CallLimit(
-                window_seconds=60,
-                capacity=endpoint.max_rpm,
-                algorithm=rate_limit_algorithm,
-            ),
-        ]
-    )
-    if endpoint.extra_limits:
-        limits_list.extend(endpoint.extra_limits)
+                algorithm=endpoint_algo,
+            )
+        else:
+            output_rate_obj = _global_output_rate_limit()
 
-    return LimitSet(
-        limits=limits_list,
-        mode=backend,
-        shared=True,
-        config=endpoint.model_dump(),
+        # ResourceLimit (max_concurrent_calls)
+        if "max_concurrent_calls" in overrides:
+            resource_limit_obj: ResourceLimit = ResourceLimit(
+                key="concurrent_calls",
+                capacity=endpoint.max_concurrent_calls,
+            )
+        else:
+            resource_limit_obj = _global_resource_limit()
+
+        # CostLimit (budget_usd / window) — both must be inheritable together
+        # because they're a (capacity, window) pair on the same Limit object.
+        cost_overridden: bool = "budget_usd" in overrides or "window" in overrides
+        if cost_overridden:
+            if math.isinf(endpoint.budget_usd):
+                cost_limit_obj: Optional[CostLimit] = None
+            else:
+                cost_limit_obj = CostLimit(
+                    budget_usd=endpoint.budget_usd,
+                    window_seconds=_window_to_seconds(endpoint.window),
+                )
+        else:
+            cost_limit_obj = _global_cost_limit()
+
+        limits_list: List[Any] = []
+        if cost_limit_obj is not None:
+            limits_list.append(cost_limit_obj)
+        limits_list.append(input_rate_obj)
+        limits_list.append(output_rate_obj)
+        limits_list.append(call_limit_obj)
+        limits_list.append(resource_limit_obj)
+        if endpoint.extra_limits:
+            limits_list.extend(endpoint.extra_limits)
+
+        limit_sets.append(
+            LimitSet(
+                limits=limits_list,
+                mode=backend,
+                shared=True,
+                config=endpoint.model_dump(),
+            )
+        )
+
+    return LimitPool(
+        limit_sets=limit_sets,
+        load_balancing=load_balancing,
+        worker_index=worker_index,
     )
 
 
@@ -192,6 +316,7 @@ def create_llm(
     max_rpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_input_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    max_concurrent_calls: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     rate_limit_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
     api_key: str = "",
     api_base: Optional[str] = None,
@@ -212,7 +337,7 @@ def create_llm(
     backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = _NO_ARG,
     on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = _NO_ARG,
     on_pricing_unavailable: PricingUnavailableAction = "error",
-    endpoints: Optional[List[Union[EndpointConfig, Dict[str, Any]]]] = None,
+    endpoints: Optional[List[Dict[str, Any]]] = None,
     endpoint_resolver: Optional[EndpointResolver] = None,
     load_balancing: str = "round_robin",
     worker_index: int = 0,
@@ -238,10 +363,9 @@ def create_llm(
       ``window``, ``temperature``, ``max_tokens``, ``timeout``,
       ``litellm_params``, ``extra_limits``) define one synthetic
       :class:`EndpointConfig`. The pool has exactly one ``LimitSet``.
-    - **Multi-endpoint** (``endpoints=[...]``): the user provides one
-      :class:`EndpointConfig` (or a plain dict) per endpoint. Each is
-      cascaded against the bare kwargs: any field set to ``_NO_ARG`` on the
-      ``EndpointConfig`` falls back to the corresponding bare kwarg, which
+    - **Multi-endpoint** (``endpoints=[...]``): the user provides a plain
+      dict per endpoint. Each is overlaid against the bare kwargs: any field
+      omitted from the dict falls back to the corresponding bare kwarg, which
       itself falls back to ``slowburn_config.defaults``. The pool has N
       ``LimitSet``\\s, one per endpoint, and the user supplies an
       ``endpoint_resolver`` if request-time data injection is needed
@@ -255,9 +379,22 @@ def create_llm(
     limit-shaping fields), the value used at call time is resolved as:
 
         ``call_llm(field=...)``
-          > resolver-augmented :class:`EndpointConfig` field
-            > ``create_llm(field=...)``
-              > ``slowburn_config.defaults.field``
+          > resolver-augmented endpoint dict field
+            > endpoint dict field (set in ``endpoints=[...]``)
+              > ``create_llm(field=...)``
+                > ``slowburn_config.defaults.field``
+
+    Shared global limits
+    --------------------
+
+    For the limit-shaping fields (``max_rpm``, ``max_input_tpm``,
+    ``max_output_tpm``, ``max_concurrent_calls``, ``budget_usd``),
+    endpoints that DO NOT explicitly override the field share a single
+    ``Limit`` instance with every other endpoint that also did not override.
+    This means ``create_llm(max_rpm=300, endpoints=[...])`` enforces a
+    global 300 rpm across the pool (not 300 rpm per endpoint), unless an
+    endpoint sets its own ``max_rpm``, in which case that endpoint gets a
+    private limit at the override capacity.
 
     Args:
         model: litellm model identifier (e.g. "gpt-4o-mini",
@@ -275,6 +412,10 @@ def create_llm(
             whose ``max_input_tpm`` is unset.
         max_output_tpm: Default output-tokens-per-minute cap for any
             endpoint whose ``max_output_tpm`` is unset.
+        max_concurrent_calls: Default cap on in-flight calls per endpoint
+            (Concurry ``ResourceLimit`` capacity). Endpoints that don't
+            override this share a single global ResourceLimit at this
+            capacity; endpoints that override get their own.
         rate_limit_algorithm: Concurry rate-limit algorithm for the
             per-minute call and token limits. "GCRA" (default), "SlidingWindow",
             or "TokenBucket".
@@ -310,17 +451,18 @@ def create_llm(
             "error" (raise) / "ignore" (proceed silently).
         on_pricing_unavailable: Action when the model is not in litellm's
             pricing database. "error" / "warn" / "ignore".
-        endpoints: List of per-endpoint configurations. Each element may be
-            an :class:`EndpointConfig` or a plain dict (validated into one).
-            When provided, the worker becomes a multi-endpoint LimitPool
-            that load-balances across these endpoints. When ``None``
-            (default), a single synthetic endpoint is built from the bare
-            kwargs.
+        endpoints: List of per-endpoint configurations as plain dicts. Each
+            dict may set any of the ``EndpointConfig`` fields plus arbitrary
+            extras (``account_id``, ``role_arn``, etc.) for the resolver to
+            consume. Fields omitted from the dict fall back to the
+            ``create_llm`` kwargs, which themselves fall back to
+            ``slowburn_config.defaults``. When ``None`` (default), a single
+            synthetic endpoint is built from the bare kwargs.
         endpoint_resolver: Callable ``(config_dict) -> dict`` that runs once
             per call AFTER the LimitPool selects an endpoint, BEFORE the
             litellm call. The dict it receives is the selected endpoint's
-            ``EndpointConfig.model_dump()`` (including any unknown extras
-            the user attached). The dict it returns is validated into a new
+            full ``model_dump()`` (including any unknown extras the user
+            attached). The dict it returns is validated into a new
             ``EndpointConfig`` whose fields override the original. Use this
             to inject request-time data such as freshly-assumed AWS STS
             credentials — write a function that reads ``cfg["account_id"]``
@@ -348,24 +490,24 @@ def create_llm(
 
     Example (multi-account AWS Bedrock with two-hop role chaining)::
 
-        from slowburn import create_llm, EndpointConfig
+        from slowburn import create_llm
 
         endpoints = [
-            EndpointConfig(
-                model="bedrock/us.anthropic.claude-sonnet-4-6",
-                max_rpm=250,
+            {
+                "model": "bedrock/us.anthropic.claude-sonnet-4-6",
+                "max_rpm": 250,
                 # Fields not known to EndpointConfig — preserved for resolver:
-                account_id="111111111111",
-                region="us-east-1",
-                role_arn="arn:aws:iam::111111111111:role/BedrockAccess",
-            ),
-            EndpointConfig(
-                model="bedrock/eu.anthropic.claude-sonnet-4-6",
-                max_rpm=125,
-                account_id="222222222222",
-                region="eu-west-2",
-                role_arn="arn:aws:iam::222222222222:role/BedrockAccess",
-            ),
+                "account_id": "111111111111",
+                "region": "us-east-1",
+                "role_arn": "arn:aws:iam::111111111111:role/BedrockAccess",
+            },
+            {
+                "model": "bedrock/eu.anthropic.claude-sonnet-4-6",
+                "max_rpm": 125,
+                "account_id": "222222222222",
+                "region": "eu-west-2",
+                "role_arn": "arn:aws:iam::222222222222:role/BedrockAccess",
+            },
         ]
 
         def my_resolver(cfg: dict) -> dict:
@@ -394,8 +536,7 @@ def create_llm(
         )
     """
     defaults = slowburn_config.defaults
-    # Resolve every _NO_ARG bare kwarg through slowburn_config.defaults so the
-    # value we feed each EndpointConfig's cascade is fully concrete.
+    # ----- 1. Resolve every _NO_ARG bare kwarg through slowburn_config.defaults
     if is_no_arg(budget_usd):
         budget_usd = defaults.budget_usd
     if is_no_arg(window):
@@ -406,6 +547,8 @@ def create_llm(
         max_input_tpm = defaults.max_input_tpm
     if is_no_arg(max_output_tpm):
         max_output_tpm = defaults.max_output_tpm
+    if is_no_arg(max_concurrent_calls):
+        max_concurrent_calls = defaults.max_concurrent_calls
     if is_no_arg(rate_limit_algorithm):
         rate_limit_algorithm = defaults.rate_limit_algorithm
     rate_limit_algorithm: RateLimitAlgorithm = RateLimitAlgorithm(rate_limit_algorithm)
@@ -430,9 +573,8 @@ def create_llm(
     if name is None:
         name = model
 
-    # The worker_defaults dict is what each EndpointConfig's _NO_ARG fields
-    # cascade into. It contains exactly the EndpointConfig fields that are
-    # also set at the create_llm/worker layer.
+    # ----- 2. Concrete create_llm-level values (fall-back layer for endpoints)
+    worker_extra_limits: List[Any] = list(extra_limits) if extra_limits is not None else []
     worker_defaults: Dict[str, Any] = {
         "model": model,
         "api_key": api_key,
@@ -443,55 +585,62 @@ def create_llm(
         "max_rpm": max_rpm,
         "max_input_tpm": max_input_tpm,
         "max_output_tpm": max_output_tpm,
+        "max_concurrent_calls": max_concurrent_calls,
         "budget_usd": budget_usd,
         "window": window,
-        "rate_limit_algorithm": rate_limit_algorithm.value
-        if isinstance(rate_limit_algorithm, RateLimitAlgorithm)
-        else rate_limit_algorithm,
-        "extra_limits": list(extra_limits) if extra_limits is not None else [],
+        "rate_limit_algorithm": rate_limit_algorithm,
+        "extra_limits": worker_extra_limits,
     }
 
-    # Build the list of fully-resolved EndpointConfigs.
+    # ----- 3. Normalize endpoint dicts. Each entry must be a plain dict; we
+    # build the fully-resolved EndpointConfig later, after recording which
+    # fields were explicitly overridden (for the shared-limit-object logic).
     if endpoints is None:
-        # Single-endpoint path: synthesize one EndpointConfig that is purely
-        # the worker defaults. This still goes through the LimitPool
-        # machinery so a single-endpoint pool and a multi-endpoint pool
-        # share the same code paths.
-        resolved_endpoints: List[EndpointConfig] = [
-            resolve_concrete_endpoint_config(
-                config=EndpointConfig(),
-                worker_defaults=worker_defaults,
-            )
-        ]
+        endpoint_dicts: List[Dict[str, Any]] = [{}]
     else:
         if len(endpoints) == 0:
             raise ValueError(
-                "create_llm(endpoints=[]) is not allowed. Pass at least one EndpointConfig "
+                "create_llm(endpoints=[]) is not allowed. Pass at least one endpoint dict "
                 "or omit `endpoints` for a single-endpoint setup."
             )
-        resolved_endpoints = [
-            resolve_concrete_endpoint_config(
-                config=coerce_to_endpoint_config(ep),
-                worker_defaults=worker_defaults,
-            )
-            for ep in endpoints
-        ]
+        endpoint_dicts = []
+        for i, ep in enumerate(endpoints):
+            if not isinstance(ep, dict):
+                raise TypeError(
+                    f"create_llm(endpoints=[...]) entry {i} must be a plain dict, "
+                    f"got {type(ep).__name__}. EndpointConfig is an internal type "
+                    "that SlowBurn constructs from your dicts."
+                )
+            endpoint_dicts.append(dict(ep))
 
-    # Build one LimitSet per endpoint. Each LimitSet stores its endpoint's
-    # full model_dump() in its `config` field so the worker can rebuild a
-    # typed EndpointConfig at acquisition time.
-    limit_sets: List[LimitSet] = [
-        _build_limit_set_for_endpoint(
-            endpoint=ep,
-            backend=backend,
-            rate_limit_algorithm=RateLimitAlgorithm(ep.rate_limit_algorithm),
-        )
-        for ep in resolved_endpoints
-    ]
-    limit_pool = LimitPool(
-        limit_sets=limit_sets,
+    # ----- 4. For each endpoint dict, record which fields it explicitly set
+    # (before overlaying defaults), then overlay create_llm-level values for
+    # everything else, and finally validate into an EndpointConfig.
+    resolved_endpoints: List[EndpointConfig] = []
+    endpoint_overrides: List[set] = []
+    for ep_dict in endpoint_dicts:
+        overrides: set = {k for k in ep_dict.keys() if k in worker_defaults}
+        for field, default_value in worker_defaults.items():
+            if field not in ep_dict:
+                ep_dict[field] = default_value
+        resolved_endpoints.append(EndpointConfig(**ep_dict))
+        endpoint_overrides.append(overrides)
+
+    # ----- 5. Build the LimitPool with shared global limits + per-endpoint
+    # overrides where the endpoint set its own value.
+    limit_pool: LimitPool = _build_limit_pool(
+        endpoints=resolved_endpoints,
+        endpoint_overrides=endpoint_overrides,
+        backend=backend,
         load_balancing=load_balancing,
         worker_index=worker_index,
+        global_max_rpm=max_rpm,
+        global_max_input_tpm=max_input_tpm,
+        global_max_output_tpm=max_output_tpm,
+        global_max_concurrent_calls=max_concurrent_calls,
+        global_budget_usd=budget_usd,
+        global_window_seconds=_window_to_seconds(window),
+        global_rate_limit_algorithm=rate_limit_algorithm,
     )
 
     llm = SlowBurnLLM.options(

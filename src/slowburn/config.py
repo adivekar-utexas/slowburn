@@ -91,6 +91,11 @@ class SlowBurnDefaults(MutableTyped):
     max_rpm: conint(ge=1) = 1_000
     max_input_tpm: conint(ge=1) = 10_000_000
     max_output_tpm: conint(ge=1) = 1_000_000
+    # Maximum number of in-flight calls per endpoint (ResourceLimit capacity).
+    # Defaults to a generous value so existing callers (who never set this)
+    # are effectively unconstrained on concurrency and continue to be paced
+    # by max_rpm and the cost budget.
+    max_concurrent_calls: conint(ge=1) = 1_000_000
     num_retries: conint(ge=0) = 5
 
     # Generic transient-error retry backoff. This is intentionally short because
