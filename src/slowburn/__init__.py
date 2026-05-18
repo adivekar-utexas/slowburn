@@ -22,7 +22,14 @@ import math
 from typing import Any, Dict, List, Optional, Type, Union
 
 import litellm
-from concurry import CallLimit, LimitSet, RateLimit, RateLimitAlgorithm, RetryAlgorithm
+from concurry import (
+    CallLimit,
+    LimitPool,
+    LimitSet,
+    RateLimit,
+    RateLimitAlgorithm,
+    RetryAlgorithm,
+)
 from morphic import validate
 
 from .config import (
@@ -44,6 +51,13 @@ from .constants import (
     WindowAlias,
 )
 from .cost_accounting import CostCallContext, cost_controlled_call, estimate_input_tokens
+from .endpoints import (
+    EndpointConfig,
+    EndpointResolver,
+    coerce_to_endpoint_config,
+    passthrough_resolver,
+    resolve_concrete_endpoint_config,
+)
 from .exceptions import (
     BatchInputMismatchError,
     BudgetOverflowError,
@@ -75,6 +89,9 @@ __all__: List[str] = [
     "PricingCache",
     "ModelNotFoundError",
     "CostReporter",
+    "EndpointConfig",
+    "EndpointResolver",
+    "passthrough_resolver",
     "dollars_to_microdollars",
     "microdollars_to_dollars",
     "DEFAULT_COST_LIMIT_KEY",
@@ -98,6 +115,75 @@ _DEFAULT_RETRY_ON: List[Type[BaseException]] = [
 ]
 
 
+def _window_to_seconds(window: Union[WindowAlias, int, float]) -> float:
+    """Resolve a window value (alias or seconds) to a float seconds value."""
+    if isinstance(window, str):
+        return float(WINDOW_ALIAS_SECONDS[window.lower()])
+    return float(window)
+
+
+def _build_limit_set_for_endpoint(
+    *,
+    endpoint: EndpointConfig,
+    backend: ExecutionBackend,
+    rate_limit_algorithm: RateLimitAlgorithm,
+) -> LimitSet:
+    """Construct one ``LimitSet`` from a fully-resolved ``EndpointConfig``.
+
+    The returned ``LimitSet`` has:
+
+    - A ``CostLimit`` if ``budget_usd`` is finite (otherwise no cost dimension).
+    - ``RateLimit``\\s for input/output tokens (per-minute windows).
+    - A ``CallLimit`` for requests-per-minute.
+    - Any user-supplied ``extra_limits`` appended.
+    - The endpoint's full ``model_dump()`` stored as ``LimitSet.config`` so the
+      worker can rebuild the typed ``EndpointConfig`` at acquisition time.
+
+    The caller must pre-resolve every ``_NO_ARG`` field before calling this.
+    """
+    limits_list: List[Any] = []
+    if not math.isinf(endpoint.budget_usd):
+        limits_list.append(
+            CostLimit(
+                budget_usd=endpoint.budget_usd,
+                window_seconds=_window_to_seconds(endpoint.window),
+            ),
+        )
+    # Token RateLimits and the CallLimit always use a 60-second window: "rpm"
+    # and "tpm" are per-minute by industry convention regardless of the
+    # cost-budget window.
+    limits_list.extend(
+        [
+            RateLimit(
+                key="input_tokens",
+                window_seconds=60,
+                capacity=endpoint.max_input_tpm,
+                algorithm=rate_limit_algorithm,
+            ),
+            RateLimit(
+                key="output_tokens",
+                window_seconds=60,
+                capacity=endpoint.max_output_tpm,
+                algorithm=rate_limit_algorithm,
+            ),
+            CallLimit(
+                window_seconds=60,
+                capacity=endpoint.max_rpm,
+                algorithm=rate_limit_algorithm,
+            ),
+        ]
+    )
+    if endpoint.extra_limits:
+        limits_list.extend(endpoint.extra_limits)
+
+    return LimitSet(
+        limits=limits_list,
+        mode=backend,
+        shared=True,
+        config=endpoint.model_dump(),
+    )
+
+
 @validate
 def create_llm(
     model: str,
@@ -108,6 +194,7 @@ def create_llm(
     max_output_tpm: Union[int, _NO_ARG_TYPE] = _NO_ARG,
     rate_limit_algorithm: Union[str, _NO_ARG_TYPE] = _NO_ARG,
     api_key: str = "",
+    api_base: Optional[str] = None,
     backend: ExecutionBackend = "Asyncio",
     name: Optional[str] = None,
     temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
@@ -125,87 +212,190 @@ def create_llm(
     backpressure_notify: Union[BackpressureNotify, _NO_ARG_TYPE] = _NO_ARG,
     on_budget_overflow: Union[BudgetOverflowAction, _NO_ARG_TYPE] = _NO_ARG,
     on_pricing_unavailable: PricingUnavailableAction = "error",
+    endpoints: Optional[List[Union[EndpointConfig, Dict[str, Any]]]] = None,
+    endpoint_resolver: Optional[EndpointResolver] = None,
+    load_balancing: str = "round_robin",
+    worker_index: int = 0,
 ) -> SlowBurnLLM:
     """Create a cost-controlled LLM worker with sensible defaults.
 
-    This is the "two-line setup" entry point. It assembles a CostLimit,
-    token rate limits, a call limit, and an asyncio SlowBurnLLM worker
-    in one function call.
+    This is the "two-line setup" entry point. It assembles a Concurry
+    ``LimitPool`` of one or more endpoints, a cost-tracking asyncio
+    ``SlowBurnLLM`` worker, and per-endpoint accounting in one call.
 
     All defaults are read from ``slowburn_config.defaults`` at call time,
     so they can be tuned globally via ``temp_config()`` or by mutating
     ``slowburn_config.defaults`` directly.
 
+    Single-endpoint vs multi-endpoint
+    ---------------------------------
+
+    SlowBurn always uses a ``LimitPool`` internally; the difference is how
+    many endpoints it contains.
+
+    - **Single endpoint** (``endpoints`` is ``None``): the bare kwargs
+      (``model``, ``api_key``, ``api_base``, ``max_rpm``, ``budget_usd``,
+      ``window``, ``temperature``, ``max_tokens``, ``timeout``,
+      ``litellm_params``, ``extra_limits``) define one synthetic
+      :class:`EndpointConfig`. The pool has exactly one ``LimitSet``.
+    - **Multi-endpoint** (``endpoints=[...]``): the user provides one
+      :class:`EndpointConfig` (or a plain dict) per endpoint. Each is
+      cascaded against the bare kwargs: any field set to ``_NO_ARG`` on the
+      ``EndpointConfig`` falls back to the corresponding bare kwarg, which
+      itself falls back to ``slowburn_config.defaults``. The pool has N
+      ``LimitSet``\\s, one per endpoint, and the user supplies an
+      ``endpoint_resolver`` if request-time data injection is needed
+      (e.g., freshly-assumed AWS STS credentials).
+
+    Cascade order for any overridable field
+    ---------------------------------------
+
+    For every field that exists at multiple layers (``model``, ``api_key``,
+    ``api_base``, ``temperature``, ``max_tokens``, ``timeout``, plus the
+    limit-shaping fields), the value used at call time is resolved as:
+
+        ``call_llm(field=...)``
+          > resolver-augmented :class:`EndpointConfig` field
+            > ``create_llm(field=...)``
+              > ``slowburn_config.defaults.field``
+
     Args:
-        model: litellm model identifier (e.g. "gpt-4o-mini", "claude-3-5-haiku-20241022").
-        budget_usd: Maximum dollar spend per window.
-            Defaults to slowburn_config.defaults.budget_usd.
-        window: Budget window — "daily", "hourly", "minutely", or seconds (int/float).
-            Defaults to slowburn_config.defaults.window.
-        max_rpm: Maximum requests per minute (CallLimit capacity).
-            Defaults to slowburn_config.defaults.max_rpm.
-        max_input_tpm: Maximum input tokens per minute.
-            Defaults to slowburn_config.defaults.max_input_tpm.
-        max_output_tpm: Maximum output tokens per minute.
-            Defaults to slowburn_config.defaults.max_output_tpm.
-        rate_limit_algorithm: Concurry rate-limit algorithm for per-minute call and token limits.
-            Defaults to slowburn_config.defaults.rate_limit_algorithm ("GCRA").
-        api_key: API key string (or set via environment variable for the provider).
+        model: litellm model identifier (e.g. "gpt-4o-mini",
+            "bedrock/us.anthropic.claude-sonnet-4-6"). When ``endpoints``
+            contains entries with their own ``model``, this becomes the
+            default for any endpoint whose model is unset.
+        budget_usd: Maximum dollar spend per window. Treated as the default
+            for any endpoint whose ``budget_usd`` is unset. Set to
+            ``float('inf')`` (the default) to disable cost limiting.
+        window: Budget window — "daily", "hourly", "minutely", or seconds
+            (int/float). Default for any endpoint whose ``window`` is unset.
+        max_rpm: Default requests-per-minute cap for any endpoint whose
+            ``max_rpm`` is unset.
+        max_input_tpm: Default input-tokens-per-minute cap for any endpoint
+            whose ``max_input_tpm`` is unset.
+        max_output_tpm: Default output-tokens-per-minute cap for any
+            endpoint whose ``max_output_tpm`` is unset.
+        rate_limit_algorithm: Concurry rate-limit algorithm for the
+            per-minute call and token limits. "GCRA" (default), "SlidingWindow",
+            or "TokenBucket".
+        api_key: Default API key for any endpoint whose ``api_key`` is unset.
+        api_base: Default API base URL (litellm ``api_base``) for any
+            endpoint whose ``api_base`` is unset. Useful for OpenAI-compatible
+            self-hosted endpoints, OpenRouter overrides, etc.
         backend: Execution backend — "Asyncio" (default) or "Ray".
         name: Worker name for logging. Defaults to the model name.
-        temperature: LLM sampling temperature.
-            Defaults to slowburn_config.defaults.temperature.
-        max_tokens: Maximum output tokens per call.
-            Defaults to slowburn_config.defaults.max_tokens.
-        timeout: Per-call timeout in seconds.
-            Defaults to slowburn_config.defaults.timeout.
+        temperature: Default sampling temperature for any endpoint whose
+            ``temperature`` is unset.
+        max_tokens: Default max-output-tokens for any endpoint whose
+            ``max_tokens`` is unset.
+        timeout: Default per-call timeout in seconds.
         num_retries: Number of retries on transient errors.
-            Defaults to slowburn_config.defaults.num_retries.
         retry_on: Exception types that trigger a retry on ``call_llm``.
-            Defaults to a comprehensive list of litellm transient errors:
-            ``litellm.APIError``, ``litellm.APIConnectionError``,
-            ``litellm.Timeout``, ``litellm.RateLimitError``,
-            ``litellm.InternalServerError``, ``litellm.ServiceUnavailableError``,
-            ``litellm.BadRequestError``, ``asyncio.TimeoutError``, ``ValueError``.
-            Pass an explicit list to restrict or extend this set.
-        retry_wait: Base wait time in seconds for generic transient-error retries.
-            Defaults to slowburn_config.defaults.retry_wait (1.0s). Request-rate
-            pacing is handled separately by ``rate_limit_algorithm``.
-        retry_algorithm: Backoff strategy — "Exponential", "Linear", or "Fibonacci".
-            Defaults to slowburn_config.defaults.retry_algorithm (Exponential).
+        retry_wait: Base wait time in seconds for transient-error retries.
+        retry_algorithm: Backoff strategy ("Exponential" / "Linear" / "Fibonacci").
         retry_jitter: Jitter factor in [0, 1] added to each retry wait.
-            Defaults to slowburn_config.defaults.retry_jitter (0.3).
         tools: Default tool schemas (OpenAI format) for all calls.
-            Pass a list of tool dicts. Overridable per-call via
-            ``call_llm(tools=...)``.
-        tool_choice: Default tool_choice for all calls ("auto", "required",
-            "none"). Overridable per-call via ``call_llm(tool_choice=...)``.
-        extra_limits: Additional Limit objects to include in the LimitSet.
-        litellm_params: Additional parameters passed to every litellm.acompletion()
-            call (e.g. response_format, seed, top_p, stop).
-        backpressure_notify: When "warn", logs a warning if acquire() blocks
-            longer than backpressure_threshold_seconds waiting for budget/rate
-            capacity. When "ignore", silent.
-            Defaults to slowburn_config.defaults.backpressure_notify.
-        on_budget_overflow: Action when a single call's estimated cost exceeds
-            the budget capacity. "warn" (default): proceed with the call but
-            log a warning. "error": raise BudgetOverflowError. "ignore": proceed silently.
-            Defaults to slowburn_config.defaults.on_budget_overflow.
+            Overridable per-call via ``call_llm(tools=...)``.
+        tool_choice: Default tool_choice for all calls.
+        extra_limits: Default ``extra_limits`` list applied to any endpoint
+            whose ``extra_limits`` is empty. (When ``endpoints=[...]``, each
+            endpoint may have its own ``extra_limits``.)
+        litellm_params: Worker-level kwargs forwarded to every
+            ``litellm.acompletion`` call. Per-endpoint and per-call
+            ``litellm_params`` merge ON TOP of these.
+        backpressure_notify: When "warn", logs a warning if acquire blocks
+            longer than backpressure_threshold_seconds.
+        on_budget_overflow: Action when a single call's estimated cost
+            exceeds the budget capacity. "warn" (proceed but log) /
+            "error" (raise) / "ignore" (proceed silently).
+        on_pricing_unavailable: Action when the model is not in litellm's
+            pricing database. "error" / "warn" / "ignore".
+        endpoints: List of per-endpoint configurations. Each element may be
+            an :class:`EndpointConfig` or a plain dict (validated into one).
+            When provided, the worker becomes a multi-endpoint LimitPool
+            that load-balances across these endpoints. When ``None``
+            (default), a single synthetic endpoint is built from the bare
+            kwargs.
+        endpoint_resolver: Callable ``(config_dict) -> dict`` that runs once
+            per call AFTER the LimitPool selects an endpoint, BEFORE the
+            litellm call. The dict it receives is the selected endpoint's
+            ``EndpointConfig.model_dump()`` (including any unknown extras
+            the user attached). The dict it returns is validated into a new
+            ``EndpointConfig`` whose fields override the original. Use this
+            to inject request-time data such as freshly-assumed AWS STS
+            credentials — write a function that reads ``cfg["account_id"]``
+            / ``cfg["role_arn"]`` (or whatever you stored on the endpoint)
+            and returns them merged with fresh credentials.
+        load_balancing: Pool load-balancing algorithm — "round_robin"
+            (default) or "random". Only meaningful when ``endpoints`` has
+            more than one entry.
+        worker_index: Round-robin offset for the load-balancer. Only
+            meaningful when ``endpoints`` has more than one entry; lets you
+            stagger multiple workers so they pick different starting
+            endpoints.
 
     Returns:
-        A live SlowBurnLLM worker, ready to accept ``call_llm()`` calls.
+        A live :class:`SlowBurnLLM` worker, ready to accept ``call_llm()`` calls.
 
-    Example::
+    Example (single endpoint)::
 
         from slowburn import create_llm
 
         llm = create_llm(model="gpt-4o-mini", budget_usd=5.0, window="daily")
         result = llm.call_llm(prompt="Summarize this paper...").result()
-        reporter = llm.get_reporter().result()
-        print(f"Cost so far: ${reporter.total_cost():.4f}")
+        print(f"Cost so far: ${llm.get_reporter().result().total_cost():.4f}")
         llm.stop()
+
+    Example (multi-account AWS Bedrock with two-hop role chaining)::
+
+        from slowburn import create_llm, EndpointConfig
+
+        endpoints = [
+            EndpointConfig(
+                model="bedrock/us.anthropic.claude-sonnet-4-6",
+                max_rpm=250,
+                # Fields not known to EndpointConfig — preserved for resolver:
+                account_id="111111111111",
+                region="us-east-1",
+                role_arn="arn:aws:iam::111111111111:role/BedrockAccess",
+            ),
+            EndpointConfig(
+                model="bedrock/eu.anthropic.claude-sonnet-4-6",
+                max_rpm=125,
+                account_id="222222222222",
+                region="eu-west-2",
+                role_arn="arn:aws:iam::222222222222:role/BedrockAccess",
+            ),
+        ]
+
+        def my_resolver(cfg: dict) -> dict:
+            # User-supplied two-hop role chain, with caching inside.
+            creds = assume_role_chain(
+                base_role_arn="arn:aws:iam::000:role/Hop1",
+                target_role_arn=cfg["role_arn"],
+                region=cfg["region"],
+            )
+            return {
+                **cfg,
+                "litellm_params": {
+                    **cfg.get("litellm_params", {}),
+                    "aws_access_key_id": creds["AccessKeyId"],
+                    "aws_secret_access_key": creds["SecretAccessKey"],
+                    "aws_session_token": creds["SessionToken"],
+                    "aws_region_name": cfg["region"],
+                },
+            }
+
+        llm = create_llm(
+            model="bedrock/us.anthropic.claude-sonnet-4-6",
+            endpoints=endpoints,
+            endpoint_resolver=my_resolver,
+            budget_usd=10.0,
+        )
     """
     defaults = slowburn_config.defaults
+    # Resolve every _NO_ARG bare kwarg through slowburn_config.defaults so the
+    # value we feed each EndpointConfig's cascade is fully concrete.
     if is_no_arg(budget_usd):
         budget_usd = defaults.budget_usd
     if is_no_arg(window):
@@ -237,54 +427,76 @@ def create_llm(
     if is_no_arg(retry_jitter):
         retry_jitter = defaults.retry_jitter
 
-    if isinstance(window, str):
-        window_seconds = WINDOW_ALIAS_SECONDS[window.lower()]
-    else:
-        window_seconds = float(window)
-
     if name is None:
         name = model
 
-    limits_list: List[Any] = []
-    if not math.isinf(budget_usd):
-        limits_list.append(
-            CostLimit(budget_usd=budget_usd, window_seconds=window_seconds),
-        )
-    # Rate limits use 60s windows (per-minute) regardless of the cost budget
-    # window. "rpm" = requests per minute, "tpm" = tokens per minute.
-    limits_list.extend(
-        [
-            RateLimit(
-                key="input_tokens",
-                window_seconds=60,
-                capacity=max_input_tpm,
-                algorithm=rate_limit_algorithm,
-            ),
-            RateLimit(
-                key="output_tokens",
-                window_seconds=60,
-                capacity=max_output_tpm,
-                algorithm=rate_limit_algorithm,
-            ),
-            CallLimit(
-                window_seconds=60,
-                capacity=max_rpm,
-                algorithm=rate_limit_algorithm,
-            ),
-        ]
-    )
-    if extra_limits is not None:
-        limits_list.extend(extra_limits)
+    # The worker_defaults dict is what each EndpointConfig's _NO_ARG fields
+    # cascade into. It contains exactly the EndpointConfig fields that are
+    # also set at the create_llm/worker layer.
+    worker_defaults: Dict[str, Any] = {
+        "model": model,
+        "api_key": api_key,
+        "api_base": api_base,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "timeout": timeout,
+        "max_rpm": max_rpm,
+        "max_input_tpm": max_input_tpm,
+        "max_output_tpm": max_output_tpm,
+        "budget_usd": budget_usd,
+        "window": window,
+        "rate_limit_algorithm": rate_limit_algorithm.value
+        if isinstance(rate_limit_algorithm, RateLimitAlgorithm)
+        else rate_limit_algorithm,
+        "extra_limits": list(extra_limits) if extra_limits is not None else [],
+    }
 
-    limit_set = LimitSet(
-        limits=limits_list,
-        mode=backend,
-        shared=True,
+    # Build the list of fully-resolved EndpointConfigs.
+    if endpoints is None:
+        # Single-endpoint path: synthesize one EndpointConfig that is purely
+        # the worker defaults. This still goes through the LimitPool
+        # machinery so a single-endpoint pool and a multi-endpoint pool
+        # share the same code paths.
+        resolved_endpoints: List[EndpointConfig] = [
+            resolve_concrete_endpoint_config(
+                config=EndpointConfig(),
+                worker_defaults=worker_defaults,
+            )
+        ]
+    else:
+        if len(endpoints) == 0:
+            raise ValueError(
+                "create_llm(endpoints=[]) is not allowed. Pass at least one EndpointConfig "
+                "or omit `endpoints` for a single-endpoint setup."
+            )
+        resolved_endpoints = [
+            resolve_concrete_endpoint_config(
+                config=coerce_to_endpoint_config(ep),
+                worker_defaults=worker_defaults,
+            )
+            for ep in endpoints
+        ]
+
+    # Build one LimitSet per endpoint. Each LimitSet stores its endpoint's
+    # full model_dump() in its `config` field so the worker can rebuild a
+    # typed EndpointConfig at acquisition time.
+    limit_sets: List[LimitSet] = [
+        _build_limit_set_for_endpoint(
+            endpoint=ep,
+            backend=backend,
+            rate_limit_algorithm=RateLimitAlgorithm(ep.rate_limit_algorithm),
+        )
+        for ep in resolved_endpoints
+    ]
+    limit_pool = LimitPool(
+        limit_sets=limit_sets,
+        load_balancing=load_balancing,
+        worker_index=worker_index,
     )
 
     llm = SlowBurnLLM.options(
         mode=backend,
-        limits=limit_set,
+        limits=limit_pool,
         num_retries={"call_llm": num_retries, "*": 0},
         retry_on={"call_llm": retry_on, "*": []},
         retry_wait={"call_llm": retry_wait, "*": 1},
@@ -294,6 +506,7 @@ def create_llm(
         name=name,
         model_name=model,
         api_key=api_key,
+        api_base=api_base,
         temperature=temperature,
         max_tokens=max_tokens,
         timeout=timeout,
@@ -303,5 +516,6 @@ def create_llm(
         backpressure_notify=backpressure_notify,
         on_budget_overflow=on_budget_overflow,
         on_pricing_unavailable=on_pricing_unavailable,
+        endpoint_resolver=endpoint_resolver,
     )
     return llm

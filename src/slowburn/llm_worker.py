@@ -35,6 +35,12 @@ from .constants import (
     PricingUnavailableAction,
     ToolChoiceOption,
 )
+from .endpoints import (
+    EndpointConfig,
+    EndpointResolver,
+    cascade_field,
+    passthrough_resolver,
+)
 from .exceptions import (
     BatchInputMismatchError,
     BudgetOverflowError,
@@ -223,6 +229,15 @@ class SlowBurnLLM(Typed):
     name: str = Field(..., description="Worker name (for logging)")
     model_name: str = Field(..., description="litellm model identifier")
     api_key: str = Field(default="", description="API key (or set via env var)")
+    api_base: Optional[str] = Field(
+        default=None,
+        description=(
+            "Worker-level API base URL (litellm api_base) for OpenAI-compatible "
+            "self-hosted endpoints, OpenRouter overrides, etc. Falls through the "
+            "cascade like every other overridable field: per-call > endpoint config > "
+            "this worker default."
+        ),
+    )
     temperature: Union[Optional[float], _NO_ARG_TYPE] = Field(
         default=_NO_ARG,
         description="LLM sampling temperature. Defaults to slowburn_config.defaults.temperature.",
@@ -276,6 +291,19 @@ class SlowBurnLLM(Typed):
             '"warn": log a warning and skip cost tracking (set cost to 0). '
             '"ignore": silently skip cost tracking. '
             "This only matters when a CostLimit is active (finite budget)."
+        ),
+    )
+    endpoint_resolver: Optional[EndpointResolver] = Field(
+        default=None,
+        description=(
+            "Optional callable run on every call to inject request-time data "
+            "(e.g., freshly-assumed AWS STS credentials) into the selected "
+            "endpoint's config. Signature: ``(config_dict) -> dict``. The dict "
+            "passed in is the selected endpoint's ``EndpointConfig.model_dump()`` "
+            "including any unknown extras the user attached. The dict returned "
+            "is re-validated into an ``EndpointConfig`` whose fields then "
+            "override the original. Default ``None`` means a passthrough is "
+            "used (the original config is used unchanged)."
         ),
     )
 
@@ -401,29 +429,6 @@ class SlowBurnLLM(Typed):
                     "Must be 'error', 'warn', or 'ignore'."
                 ) from model_not_found_error
 
-    def _build_litellm_params(
-        self,
-        *,
-        worker_params: Dict[str, Any],
-        call_params: Optional[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]],
-        tool_choice: Optional[ToolChoiceOption],
-    ) -> Dict[str, Any]:
-        """Merge worker-level and call-level LiteLLM parameters.
-
-        Call-level values intentionally override worker defaults so that
-        per-call reasoning controls, response_format, etc. do not mutate
-        the worker's persistent configuration.
-        """
-        merged: Dict[str, Any] = {**worker_params}
-        if call_params is not None:
-            merged.update(call_params)
-        if tools is not None:
-            merged["tools"] = tools
-        if tool_choice is not None:
-            merged["tool_choice"] = tool_choice
-        return merged
-
     def _estimate_usage(
         self,
         *,
@@ -431,6 +436,8 @@ class SlowBurnLLM(Typed):
         tools: Optional[List[Dict[str, Any]]],
         tool_choice: Optional[ToolChoiceOption],
         should_track_cost: bool,
+        model: Optional[str] = None,
+        max_tokens: Optional[int] = None,
     ) -> Usage:
         """Estimate token and cost quantities for a pre-call reservation.
 
@@ -440,10 +447,23 @@ class SlowBurnLLM(Typed):
 
         Cost is only estimated when cost tracking is active. Token/call-only
         limit sets do not require pricing data and receive cost_microdollars=0.
+
+        Args:
+            messages: Messages list passed to ``litellm.token_counter``.
+            tools, tool_choice: Tool schemas (also fed to the token counter).
+            should_track_cost: Whether to compute the cost dimension.
+            model: Per-call model used for tokenization and pricing. Falls
+                back to ``self.model_name``. Pass a per-call override (already
+                cascaded) so reservations match what will actually be billed.
+            max_tokens: Per-call max output tokens. Falls back to
+                ``self.max_tokens``. Drives the output-token portion of the
+                reservation.
         """
         defaults = slowburn_config.defaults
+        used_model: str = model if model is not None else self.model_name
+        used_max_tokens: int = max_tokens if max_tokens is not None else self.max_tokens
         base_input_tokens: int = litellm.token_counter(
-            model=self.model_name,
+            model=used_model,
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
@@ -454,13 +474,13 @@ class SlowBurnLLM(Typed):
             + defaults.input_token_estimate_overhead
         )
         output_tokens: int = (
-            int(self.max_tokens * defaults.output_token_estimate_multiplier)
+            int(used_max_tokens * defaults.output_token_estimate_multiplier)
             + defaults.output_token_estimate_overhead
         )
         cost_microdollars: int = 0
         if should_track_cost:
             cost_microdollars = PricingCache.estimate_cost_microdollars(
-                self.model_name,
+                used_model,
                 input_tokens,
                 output_tokens,
             )
@@ -491,15 +511,25 @@ class SlowBurnLLM(Typed):
             limit_usage[DEFAULT_COST_LIMIT_KEY] = usage.cost_microdollars
         return limit_usage
 
-    def _extract_actual_cost(self, response: Any) -> int:
+    def _extract_actual_cost(self, response: Any, model: Optional[str] = None) -> int:
         """Extract actual cost from a litellm response, falling back to 0.
 
         Pricing failures here are deliberately swallowed: the response was
         already produced and accounted in tokens; an unknown price should
         not propagate as a retryable error after a successful call.
+
+        Args:
+            response: The litellm response object.
+            model: The per-call model used to make this request (after the
+                cascade has resolved per-call > endpoint > worker default).
+                Falls back to ``self.model_name`` when ``None``. Threading
+                this through is what makes per-endpoint pricing accurate
+                when different endpoints serve different models.
         """
         try:
-            return PricingCache.actual_cost_microdollars(response, model=self.model_name)
+            return PricingCache.actual_cost_microdollars(
+                response, model=model if model is not None else self.model_name
+            )
         except (ModelNotFoundError, ValueError, TypeError, KeyError, AttributeError):
             return 0
 
@@ -509,6 +539,8 @@ class SlowBurnLLM(Typed):
         acquisition: Any,
         usage: Usage,
         should_track_cost: bool,
+        model: Optional[str] = None,
+        endpoint_id: Optional[str] = None,
     ) -> None:
         """Update both the Concurry acquisition and the CostReporter.
 
@@ -517,6 +549,17 @@ class SlowBurnLLM(Typed):
         must call this exactly once before re-raising. Otherwise the
         acquisition leaks reserved capacity, or the CostReporter under-reports
         the budget consumed by a failed attempt.
+
+        Args:
+            acquisition: The Concurry acquisition handle.
+            usage: Tokens and cost to record.
+            should_track_cost: Whether to include the cost dimension in the
+                limit-set update.
+            model: Per-call resolved model (after cascade). Falls back to
+                ``self.model_name`` for the reporter row when None.
+            endpoint_id: Per-call endpoint label for reporter attribution
+                (e.g., "111111111111/us-east-1"). None for single-endpoint
+                deployments.
         """
         acquisition.update(
             usage=self._build_limit_usage(
@@ -525,10 +568,11 @@ class SlowBurnLLM(Typed):
             )
         )
         self._reporter.log_call(
-            model=self.model_name,
+            model=model if model is not None else self.model_name,
             cost_usd=microdollars_to_dollars(usage.cost_microdollars),
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
+            endpoint_id=endpoint_id,
         )
 
     async def _call_with_timeout(
@@ -542,6 +586,13 @@ class SlowBurnLLM(Typed):
         prompt_hash: str,
         call_t0: float,
         verbosity: int,
+        model: str,
+        api_key: str,
+        api_base: Optional[str],
+        temperature: Optional[float],
+        max_tokens: int,
+        timeout: float,
+        endpoint_id: Optional[str],
     ) -> Any:
         """Execute the litellm call with timeout and account on timeout failure.
 
@@ -551,30 +602,72 @@ class SlowBurnLLM(Typed):
         Both the acquisition and the reporter are updated before re-raising.
         """
         api_t0: float = time.monotonic()
+        # Build the explicit-named-kwarg portion of the litellm call. Any
+        # value resolved via the cascade is passed here; arbitrary
+        # passthroughs (aws_access_key_id, extra_body, response_format,
+        # etc.) live in merged_params and are spread via **.
+        named_kwargs: Dict[str, Any] = dict(
+            model=model,
+            messages=messages,
+            api_key=api_key if len(api_key) > 0 else None,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if api_base is not None:
+            named_kwargs["api_base"] = api_base
+
+        if verbosity >= 3:
+            # Log the FULL kwargs that go to litellm.acompletion, with
+            # credentials redacted. This is the source of truth for what
+            # the LLM provider actually receives.
+            _SECRET_KEYS = {
+                "api_key",
+                "aws_access_key_id",
+                "aws_secret_access_key",
+                "aws_session_token",
+                "aws_web_identity_token",
+            }
+            redacted: Dict[str, Any] = {}
+            for k, v in {**named_kwargs, **merged_params}.items():
+                if k == "messages":
+                    # Messages can be huge; show only the role+length per turn.
+                    redacted[k] = [
+                        {"role": m.get("role"), "content_len": len(str(m.get("content", "")))}
+                        for m in v
+                    ]
+                elif k in _SECRET_KEYS:
+                    if v is None or v == "":
+                        redacted[k] = "<empty>"
+                    else:
+                        # Show prefix only; never log the secret itself.
+                        s = str(v)
+                        redacted[k] = f"<set len={len(s)} prefix={s[:6]}...>"
+                else:
+                    redacted[k] = v
+            logger.info(
+                f"[{model}] [Prompt={prompt_hash}] LITELLM_CALL | "
+                f"endpoint={endpoint_id} | kwargs={redacted}"
+            )
+
         try:
             litellm.drop_params = True
             response = await asyncio.wait_for(
-                litellm.acompletion(
-                    model=self.model_name,
-                    messages=messages,
-                    api_key=self.api_key if len(self.api_key) > 0 else None,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    **merged_params,
-                ),
-                timeout=self.timeout,
+                litellm.acompletion(**named_kwargs, **merged_params),
+                timeout=timeout,
             )
         except asyncio.TimeoutError as timeout_error:
             self._account_call(
                 acquisition=acquisition,
                 usage=estimated_usage.with_output_tokens(output_tokens=0),
                 should_track_cost=should_track_cost,
+                model=model,
+                endpoint_id=endpoint_id,
             )
             if verbosity >= 2:
                 logger.warning(
-                    f"[{self.name}] [Prompt={prompt_hash}] TIMEOUT | "
+                    f"[{model}] [Prompt={prompt_hash}] TIMEOUT | "
                     f"after {time.monotonic() - call_t0:.2f}s "
-                    f"(timeout={self.timeout}s)"
+                    f"(timeout={timeout}s)"
                 )
             raise timeout_error
 
@@ -582,7 +675,7 @@ class SlowBurnLLM(Typed):
             actual_input: int = response.usage.prompt_tokens
             actual_output: int = response.usage.completion_tokens
             logger.info(
-                f"[{self.name}] [Prompt={prompt_hash}] RESPONSE | "
+                f"[{model}] [Prompt={prompt_hash}] RESPONSE | "
                 f"api={time.monotonic() - api_t0:.2f}s total={time.monotonic() - call_t0:.2f}s | "
                 f"in={actual_input} out={actual_output}"
             )
@@ -603,6 +696,12 @@ class SlowBurnLLM(Typed):
         image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
+        model: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_key: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_base: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
+        temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
+        max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+        timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     ) -> Union[str, T, List[Dict[str, Any]]]:
         """Execute a single LLM call with cost-aware backpressure.
 
@@ -637,7 +736,17 @@ class SlowBurnLLM(Typed):
                 2=warnings+progress, 3=full debug with per-event logging).
             litellm_params: Per-call parameters passed through to
                 ``litellm.acompletion()``. Merged on top of the worker-level
-                ``self.litellm_params``.
+                ``self.litellm_params`` and the selected endpoint's
+                ``litellm_params``.
+            model: Per-call model override. Cascade: per-call > endpoint
+                config > worker default. Useful when one call needs a
+                different model than the endpoint's usual one.
+            api_key: Per-call API key override.
+            api_base: Per-call API base URL override (litellm ``api_base``).
+            temperature: Per-call sampling temperature.
+            max_tokens: Per-call max output tokens. Affects pre-acquire
+                reservation: a higher value reserves more output capacity.
+            timeout: Per-call timeout in seconds.
 
         Returns:
             When *return_messages* resolves to False: the raw response text,
@@ -680,19 +789,22 @@ class SlowBurnLLM(Typed):
             image_detail=image_detail,
         )
 
-        merged_params: Dict[str, Any] = self._build_litellm_params(
-            worker_params=self.litellm_params,
-            call_params=litellm_params,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-
+        # Pre-acquire reservation runs BEFORE the LimitPool selects an
+        # endpoint, so we cannot yet know which model the resolver/cascade
+        # will pick. We use the worker default model (self.model_name) for
+        # tokenization and pricing here. The per-call max_tokens override IS
+        # known, so we honor it for the output-token portion of the
+        # reservation. After acquisition, the actual cost is re-extracted
+        # using the resolved per-call model and any over-reservation flows
+        # back to the bucket via Concurry's context-exit refund.
+        pre_max_tokens: int = max_tokens if not is_no_arg(max_tokens) else self.max_tokens
         should_track_cost: bool = self._should_track_cost()
         estimated_usage: Usage = self._estimate_usage(
             messages=messages,
             tools=tools,
             tool_choice=tool_choice,
             should_track_cost=should_track_cost,
+            max_tokens=pre_max_tokens,
         )
         estimated_limit_usage: Dict[str, int] = self._build_limit_usage(
             usage=estimated_usage,
@@ -726,7 +838,7 @@ class SlowBurnLLM(Typed):
                 f"(~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens), "
                 f"which exceeds your budget_usd per window. "
                 f"Fix by: (1) increasing the budget while creating the LLM, "
-                f"(2) reducing max_tokens (currently {self.max_tokens}), "
+                f"(2) reducing max_tokens (currently {pre_max_tokens}), "
                 f"or (3) using a more budget-friendly model."
             )
 
@@ -768,12 +880,112 @@ class SlowBurnLLM(Typed):
         # reporter exactly once with either actual usage (after a response exists) or
         # estimated usage (before a response exists).
         async with context_manager as acquisition:
+            # ---------------------------------------------------------------
+            # Step 1: rebuild the typed EndpointConfig from the acquisition.
+            # ---------------------------------------------------------------
+            # Concurry stores whatever dict was passed to LimitSet(config=...)
+            # on the acquisition. SlowBurn always stored a fully-resolved
+            # EndpointConfig.model_dump() there at create_llm() time, so we
+            # round-trip back to a typed object. For pools or limit sets that
+            # were not built by SlowBurn (e.g., user constructed manually),
+            # acquisition.config may be empty / None — we handle that by
+            # falling through to the worker defaults via cascade_field below.
+            raw_config: Dict[str, Any] = dict(getattr(acquisition, "config", None) or {})
+            endpoint_config: EndpointConfig = EndpointConfig(**raw_config)
+
+            # ---------------------------------------------------------------
+            # Step 2: run the user's resolver (default = passthrough). The
+            # resolver receives a serialized dict (so the user can write
+            # dict-style code without depending on EndpointConfig's typing).
+            # The dict it returns is re-validated into a new EndpointConfig.
+            # ---------------------------------------------------------------
+            resolver = self.endpoint_resolver if self.endpoint_resolver is not None else passthrough_resolver
+            try:
+                augmented_dict: Dict[str, Any] = resolver(endpoint_config.model_dump())
+            except Exception as resolver_error:
+                # Resolver failures are deterministic configuration errors —
+                # retrying does not change the resolver. Account the
+                # reservation back to the bucket before re-raising so we do
+                # not leak capacity.
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=estimated_usage.with_output_tokens(output_tokens=0),
+                    should_track_cost=should_track_cost,
+                    model=self.model_name,
+                    endpoint_id=endpoint_config.endpoint_id,
+                )
+                raise resolver_error
+            endpoint_config = EndpointConfig(**augmented_dict)
+
+            # ---------------------------------------------------------------
+            # Step 3: cascade per-call > endpoint > worker default for every
+            # field that flows into litellm.acompletion as a named kwarg.
+            # ---------------------------------------------------------------
+            resolved_model: str = cascade_field(
+                field="model",
+                call_value=model,
+                config_value=endpoint_config.model,
+                worker_default=self.model_name,
+            )
+            resolved_api_key: str = cascade_field(
+                field="api_key",
+                call_value=api_key,
+                config_value=endpoint_config.api_key,
+                worker_default=self.api_key,
+            )
+            resolved_api_base: Optional[str] = cascade_field(
+                field="api_base",
+                call_value=api_base,
+                config_value=endpoint_config.api_base,
+                worker_default=self.api_base,
+            )
+            resolved_temperature: Optional[float] = cascade_field(
+                field="temperature",
+                call_value=temperature,
+                config_value=endpoint_config.temperature,
+                worker_default=self.temperature,
+            )
+            resolved_max_tokens: int = cascade_field(
+                field="max_tokens",
+                call_value=max_tokens,
+                config_value=endpoint_config.max_tokens,
+                worker_default=self.max_tokens,
+            )
+            resolved_timeout: float = cascade_field(
+                field="timeout",
+                call_value=timeout,
+                config_value=endpoint_config.timeout,
+                worker_default=self.timeout,
+            )
+
+            # ---------------------------------------------------------------
+            # Step 4: build the merged litellm_params dict. Order (lowest to
+            # highest priority): worker defaults, endpoint, per-call.
+            # tools/tool_choice are appended last and bypass the cascade.
+            # ---------------------------------------------------------------
+            merged_params: Dict[str, Any] = {}
+            merged_params.update(self.litellm_params)
+            merged_params.update(endpoint_config.litellm_params)
+            if litellm_params is not None:
+                merged_params.update(litellm_params)
+            if tools is not None:
+                merged_params["tools"] = tools
+            if tool_choice is not None:
+                merged_params["tool_choice"] = tool_choice
+
+            endpoint_id: Optional[str] = endpoint_config.endpoint_id
+
             if verbosity >= 3:
                 logger.info(
-                    f"[{self.name}] [Prompt={prompt_hash}] ACQUIRED | "
-                    f"wait={time.monotonic() - call_t0:.2f}s | sending request..."
+                    f"[{resolved_model}] [Prompt={prompt_hash}] ACQUIRED | "
+                    f"wait={time.monotonic() - call_t0:.2f}s | "
+                    f"endpoint={endpoint_id} | "
+                    f"sending request..."
                 )
 
+            # ---------------------------------------------------------------
+            # Step 5: execute the litellm call.
+            # ---------------------------------------------------------------
             try:
                 response: Any = await self._call_with_timeout(
                     acquisition=acquisition,
@@ -784,6 +996,13 @@ class SlowBurnLLM(Typed):
                     prompt_hash=prompt_hash,
                     call_t0=call_t0,
                     verbosity=verbosity,
+                    model=resolved_model,
+                    api_key=resolved_api_key,
+                    api_base=resolved_api_base,
+                    temperature=resolved_temperature,
+                    max_tokens=resolved_max_tokens,
+                    timeout=resolved_timeout,
+                    endpoint_id=endpoint_id,
                 )
             except asyncio.TimeoutError:
                 raise
@@ -792,20 +1011,26 @@ class SlowBurnLLM(Typed):
                     acquisition=acquisition,
                     usage=estimated_usage.with_output_tokens(output_tokens=0),
                     should_track_cost=should_track_cost,
+                    model=resolved_model,
+                    endpoint_id=endpoint_id,
                 )
                 if verbosity >= 3:
                     logger.warning(
-                        f"[{self.name}] [Prompt={prompt_hash}] ERROR | "
+                        f"[{resolved_model}] [Prompt={prompt_hash}] ERROR | "
                         f"{type(base_exception).__name__} at "
                         f"{time.monotonic() - call_t0:.2f}s (will retry if configured): "
                         f"{format_exception_msg(base_exception)}"
                     )
                 raise base_exception
 
+            # ---------------------------------------------------------------
+            # Step 6: extract actuals using the per-call resolved model so
+            # cost extraction reflects what was actually billed.
+            # ---------------------------------------------------------------
             actual_usage: Usage = Usage(
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=response.usage.completion_tokens,
-                cost_microdollars=self._extract_actual_cost(response),
+                cost_microdollars=self._extract_actual_cost(response, model=resolved_model),
             )
 
             try:
@@ -822,7 +1047,7 @@ class SlowBurnLLM(Typed):
                 if response_text is None and tool_calls is None:
                     raise ValueError(
                         f"LLM returned null content with no tool calls "
-                        f"(model={self.model_name}). "
+                        f"(model={resolved_model}). "
                         f"This may indicate a refusal or content filter."
                     )
 
@@ -871,11 +1096,14 @@ class SlowBurnLLM(Typed):
                     acquisition=acquisition,
                     usage=actual_usage,
                     should_track_cost=should_track_cost,
+                    model=resolved_model,
+                    endpoint_id=endpoint_id,
                 )
 
                 if verbosity >= 2:
+                    endpoint_suffix: str = f" via {endpoint_id}" if endpoint_id is not None else ""
                     logger.info(
-                        f"[{self.name}] {self.model_name}: "
+                        f"[{resolved_model}]{endpoint_suffix}: "
                         f"{actual_usage.input_tokens}+{actual_usage.output_tokens} tokens, "
                         f"${microdollars_to_dollars(actual_usage.cost_microdollars):.6f}"
                     )
@@ -886,10 +1114,12 @@ class SlowBurnLLM(Typed):
                     acquisition=acquisition,
                     usage=actual_usage,
                     should_track_cost=should_track_cost,
+                    model=resolved_model,
+                    endpoint_id=endpoint_id,
                 )
                 if verbosity >= 2:
                     logger.warning(
-                        f"[{self.name}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
+                        f"[{resolved_model}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
                         f"{type(post_response_error).__name__} at {time.monotonic() - call_t0:.2f}s: "
                         f"{format_exception_msg(post_response_error)}"
                     )
@@ -899,10 +1129,12 @@ class SlowBurnLLM(Typed):
                     acquisition=acquisition,
                     usage=estimated_usage.with_output_tokens(output_tokens=0),
                     should_track_cost=should_track_cost,
+                    model=resolved_model,
+                    endpoint_id=endpoint_id,
                 )
                 if verbosity >= 2:
                     logger.warning(
-                        f"[{self.name}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
+                        f"[{resolved_model}] [Prompt={prompt_hash}] POST_RESPONSE_ERROR | "
                         f"{type(base_exception).__name__} at "
                         f"{time.monotonic() - call_t0:.2f}s: "
                         f"{format_exception_msg(base_exception)}"
@@ -924,6 +1156,12 @@ class SlowBurnLLM(Typed):
         image_detail: Union[ImageDetailLevel, _NO_ARG_TYPE] = _NO_ARG,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         litellm_params: Optional[Dict[str, Any]] = None,
+        model: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_key: Union[str, _NO_ARG_TYPE] = _NO_ARG,
+        api_base: Union[Optional[str], _NO_ARG_TYPE] = _NO_ARG,
+        temperature: Union[Optional[float], _NO_ARG_TYPE] = _NO_ARG,
+        max_tokens: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+        timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
     ) -> List[Union[str, T, List[Dict[str, Any]]]]:
         """Execute multiple LLM calls concurrently with shared backpressure.
 
@@ -979,6 +1217,12 @@ class SlowBurnLLM(Typed):
                 image_detail=image_detail,
                 verbosity=verbosity,
                 litellm_params=litellm_params,
+                model=model,
+                api_key=api_key,
+                api_base=api_base,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
             )
             for prompt_item, images_item, history_item in zip(
                 prompts,
@@ -991,7 +1235,7 @@ class SlowBurnLLM(Typed):
             tasks,
             progress=dict(
                 disable=verbosity < 2,
-                desc=f"{self.model_name}",
+                desc=f"{self.name}",
                 miniters=max(len(prompts) // 2, 1),
             ),
         )

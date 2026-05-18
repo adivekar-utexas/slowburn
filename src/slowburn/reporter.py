@@ -44,6 +44,7 @@ class CostReporter:
         input_tokens: int,
         output_tokens: int,
         metadata: Optional[Dict[str, Any]] = None,
+        endpoint_id: Optional[str] = None,
     ) -> None:
         """Record a single LLM call.
 
@@ -53,6 +54,11 @@ class CostReporter:
             input_tokens: Number of input (prompt) tokens.
             output_tokens: Number of output (completion) tokens.
             metadata: Arbitrary extra fields (agent name, task id, etc.).
+            endpoint_id: Optional label identifying which endpoint handled
+                the call (e.g., ``"111111111111/us-east-1"`` for AWS
+                Bedrock). Populated by ``SlowBurnLLM`` when a multi-endpoint
+                ``LimitPool`` routes the call. ``None`` for single-endpoint
+                deployments.
         """
         record: Dict[str, Any] = {
             "model": model,
@@ -62,6 +68,8 @@ class CostReporter:
             "total_tokens": input_tokens + output_tokens,
             "timestamp": time.time(),
         }
+        if endpoint_id is not None:
+            record["endpoint_id"] = endpoint_id
         if metadata is not None:
             record["metadata"] = metadata
         with self._lock:
@@ -99,6 +107,35 @@ class CostReporter:
         )
         for c in snapshot:
             m = agg[c["model"]]
+            m["calls"] += 1
+            m["input_tokens"] += c["input_tokens"]
+            m["output_tokens"] += c["output_tokens"]
+            m["total_tokens"] += c["total_tokens"]
+            m["cost_usd"] += c["cost_usd"]
+        return dict(agg)
+
+    def summary_by_endpoint(self) -> Dict[str, Dict[str, Any]]:
+        """Per-endpoint breakdown across calls that recorded an ``endpoint_id``.
+
+        Calls without an ``endpoint_id`` (single-endpoint deployments or
+        records older than the multi-endpoint feature) are bucketed under
+        the key ``"-"``. Returned values match the shape of :meth:`summary`.
+        """
+        with self._lock:
+            snapshot = list(self.calls)
+
+        agg: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {
+                "calls": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cost_usd": 0.0,
+            }
+        )
+        for c in snapshot:
+            key = c.get("endpoint_id", "-") or "-"
+            m = agg[key]
             m["calls"] += 1
             m["input_tokens"] += c["input_tokens"]
             m["output_tokens"] += c["output_tokens"]
