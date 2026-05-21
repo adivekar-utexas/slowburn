@@ -7,7 +7,7 @@ Five slots:
 - ``requests`` — a list of :class:`concurry.RateLimit`, keyed ``"requests"``.
 - ``input_tokens`` — a list of :class:`concurry.RateLimit`, keyed ``"input_tokens"``.
 - ``output_tokens`` — a list of :class:`concurry.RateLimit`, keyed ``"output_tokens"``.
-- ``budget`` — a list of :class:`slowburn.CostLimit`, keyed ``"cost_microdollars"``.
+- ``budget`` — a list of :class:`slowburn.CostLimit`, keyed ``"cost_usd"``.
 - ``concurrency`` — a single ``int`` (the capacity of a :class:`concurry.ResourceLimit`).
 
 Each slot is *optional*. ``None`` means "inherit" — at the global level, ``None``
@@ -71,7 +71,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from concurry import RateLimit, RateWindow
+from concurry import RateLimit, RateLimitAlgorithm, RateWindow
 from morphic import Typed
 from pydantic import ConfigDict
 
@@ -91,7 +91,7 @@ SLOT_TO_LIMIT_KEY: Dict[str, str] = {
     "requests": "requests",
     "input_tokens": "input_tokens",
     "output_tokens": "output_tokens",
-    "budget": "cost_microdollars",  # matches CostLimit's DEFAULT_COST_LIMIT_KEY
+    "budget": "cost_usd",  # matches CostLimit's DEFAULT_COST_LIMIT_KEY
 }
 
 # Maps single-letter window suffix → RateWindow.
@@ -376,7 +376,17 @@ def default_slowburn_limits() -> SlowBurnLimits:
                 window=RateWindow.Minutely,
             )
         ],
-        budget=[CostLimit(budget_usd=float("inf"), window=RateWindow.Daily)],
+        budget=[
+            CostLimit(
+                budget_usd=float("inf"),
+                window=RateWindow.Daily,
+                # Cost is dollar-denominated; we need a continuous-accumulator
+                # algorithm (GCRA, TokenBucket) that admits fractional acquires.
+                # SlidingWindow / FixedWindow / LeakyBucket count discrete
+                # records and would reject fractional cost values.
+                algorithm=RateLimitAlgorithm.GCRA,
+            )
+        ],
         concurrency=1_000_000,
     )
 

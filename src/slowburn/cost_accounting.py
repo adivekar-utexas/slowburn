@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from typing import Any, Generator, Tuple
 
 from .config import slowburn_config
-from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
+from .limits import DEFAULT_COST_LIMIT_KEY
 from .pricing import PricingCache
 from .reporter import CostReporter
 
@@ -72,9 +72,9 @@ class CostCallContext:
         "updated",
     )
 
-    def __init__(self, estimated_cost: int) -> None:
-        self.estimated_cost: int = estimated_cost
-        self.actual_cost: int = 0
+    def __init__(self, estimated_cost: float) -> None:
+        self.estimated_cost: float = estimated_cost
+        self.actual_cost: float = 0.0
         self.actual_input: int = 0
         self.actual_output: int = 0
         self.updated: bool = False
@@ -82,7 +82,7 @@ class CostCallContext:
     def set_actual(
         self,
         *,
-        cost: int,
+        cost: float,
         input_tokens: int,
         output_tokens: int,
     ) -> None:
@@ -121,7 +121,7 @@ def cost_controlled_call(
         est_in, est_out = estimate_input_tokens(text, max_tokens)
         with cost_controlled_call(limit_set, reporter, model, est_in, est_out) as ctx:
             response = litellm.completion(...)
-            actual_cost = PricingCache.actual_cost_microdollars(response, model=model)
+            actual_cost = PricingCache.actual_cost_usd(response, model=model)
             ctx.set_actual(
                 cost=actual_cost,
                 input_tokens=response.usage.prompt_tokens,
@@ -136,13 +136,13 @@ def cost_controlled_call(
         estimated_input: Estimated input tokens (from ``estimate_input_tokens``).
         estimated_output: Estimated output tokens (typically max_tokens).
     """
-    estimated_cost = PricingCache.estimate_cost_microdollars(
+    estimated_cost = PricingCache.estimate_cost_usd(
         model,
         estimated_input,
         estimated_output,
     )
 
-    with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
+    with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: estimated_cost}) as acq:
         ctx = CostCallContext(estimated_cost=estimated_cost)
         try:
             yield ctx
@@ -156,7 +156,7 @@ def cost_controlled_call(
             acq.update(usage={DEFAULT_COST_LIMIT_KEY: ctx.actual_cost})
             reporter.log_call(
                 model=model,
-                cost_usd=microdollars_to_dollars(ctx.actual_cost),
+                cost_usd=ctx.actual_cost,
                 input_tokens=ctx.actual_input,
                 output_tokens=ctx.actual_output,
             )

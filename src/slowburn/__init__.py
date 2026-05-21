@@ -63,7 +63,7 @@ from .exceptions import (
     SlowBurnNonRetryableError,
     ToolCallContractError,
 )
-from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit, dollars_to_microdollars, microdollars_to_dollars
+from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from .limits_spec import SLOT_TO_LIMIT_KEY, SlowBurnLimits, default_slowburn_limits
 from .llm_worker import ImageInput, SlowBurnLLM
 from .pricing import ModelNotFoundError, PricingCache
@@ -90,8 +90,6 @@ __all__: List[str] = [
     "EndpointResolver",
     "build_limit_pool",
     "passthrough_resolver",
-    "dollars_to_microdollars",
-    "microdollars_to_dollars",
     "DEFAULT_COST_LIMIT_KEY",
     "slowburn_config",
     "temp_config",

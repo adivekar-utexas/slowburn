@@ -169,13 +169,13 @@ class TestSharedBudgetBackpressure:
             shared=True,
         )
 
-        with shared.acquire(requested={DEFAULT_COST_LIMIT_KEY: 5_000}) as acq:
-            acq.update(usage={DEFAULT_COST_LIMIT_KEY: 5_000})
+        with shared.acquire(requested={DEFAULT_COST_LIMIT_KEY: 0.005}) as acq:
+            acq.update(usage={DEFAULT_COST_LIMIT_KEY: 0.005})
 
-        with shared.acquire(requested={DEFAULT_COST_LIMIT_KEY: 5_000}) as acq:
-            acq.update(usage={DEFAULT_COST_LIMIT_KEY: 5_000})
+        with shared.acquire(requested={DEFAULT_COST_LIMIT_KEY: 0.005}) as acq:
+            acq.update(usage={DEFAULT_COST_LIMIT_KEY: 0.005})
 
-        result = shared.try_acquire(requested={DEFAULT_COST_LIMIT_KEY: 5_000})
+        result = shared.try_acquire(requested={DEFAULT_COST_LIMIT_KEY: 0.005})
         assert not result.successful
 
 

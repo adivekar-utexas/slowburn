@@ -264,7 +264,7 @@ def build_endpoint_limit_set(
 def _make_unique_budget_keys(budgets: List[CostLimit]) -> List[CostLimit]:
     """Same idea as ``_make_unique_keys`` but for ``CostLimit``s.
 
-    Single-element list: keep the default key (``"cost_microdollars"``).
+    Single-element list: keep the default key (``"cost_usd"``).
     Multi-element list: ensure unique keys via ``params_signature()``.
     """
     if len(budgets) <= 1:

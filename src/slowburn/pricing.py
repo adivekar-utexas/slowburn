@@ -9,8 +9,8 @@ fallback chain to handle litellm's known failure modes:
     Tier 3: Manual calc from response.usage token counts + cost_per_token rates
     Tier 4: Estimate from response text length + cost_per_token rates
 
-All costs are returned in MICRODOLLARS (int) for CostLimit compatibility.
-1 microdollar = $0.000001.  $1.00 = 1,000,000 microdollars.
+All costs are returned in DOLLARS (float). ``CostLimit.capacity`` is also
+dollar-denominated, so no conversion is needed at the boundary.
 """
 
 import json
@@ -21,7 +21,6 @@ from typing import Any, Dict, Optional, Tuple
 import litellm
 
 from .config import slowburn_config
-from .limits import MICRODOLLARS_PER_DOLLAR
 
 logger = logging.getLogger(__name__)
 
@@ -143,12 +142,12 @@ class PricingCache:
         )
 
     @staticmethod
-    def estimate_cost_microdollars(
+    def estimate_cost_usd(
         model: str,
         estimated_input_tokens: int,
         estimated_output_tokens: int,
-    ) -> int:
-        """Pre-call cost estimation in microdollars.
+    ) -> float:
+        """Pre-call cost estimation in dollars.
 
         Args:
             model: litellm model name (e.g. "gpt-4o-mini", "openrouter/z-ai/glm-4.5").
@@ -156,18 +155,19 @@ class PricingCache:
             estimated_output_tokens: Estimated output token count (typically max_tokens).
 
         Returns:
-            Estimated cost in microdollars (int). Minimum 1 microdollar.
+            Estimated cost in dollars (float). May be ``0.0`` for free
+            models; the caller is responsible for any per-call minimum
+            enforcement.
 
         Raises:
             ModelNotFoundError: If the model is not in any pricing source.
         """
         input_rate, output_rate = PricingCache.get_token_costs(model)
-        total_usd = (input_rate * estimated_input_tokens) + (output_rate * estimated_output_tokens)
-        return max(int(total_usd * MICRODOLLARS_PER_DOLLAR), 1)
+        return (input_rate * estimated_input_tokens) + (output_rate * estimated_output_tokens)
 
     @staticmethod
-    def actual_cost_microdollars(response: Any, model: Optional[str] = None) -> int:
-        """Post-call actual cost extraction with tiered fallback.
+    def actual_cost_usd(response: Any, model: Optional[str] = None) -> float:
+        """Post-call actual cost extraction with tiered fallback, in dollars.
 
         Tier 1: response._hidden_params["response_cost"]
         Tier 2: litellm.completion_cost(completion_response=response)
@@ -184,7 +184,8 @@ class PricingCache:
                 to read ``response.model``.
 
         Returns:
-            Actual cost in microdollars (int). Minimum 1 microdollar.
+            Actual cost in dollars (float). May be ``0.0`` if the model
+            is free or pricing extraction returned a non-positive value.
 
         Raises:
             ModelNotFoundError: If Tiers 1-2 fail and the model is not in
@@ -203,7 +204,7 @@ class PricingCache:
         try:
             cost_usd = response._hidden_params.get("response_cost")
             if cost_usd is not None and cost_usd > 0:
-                return max(int(cost_usd * MICRODOLLARS_PER_DOLLAR), 1)
+                return float(cost_usd)
         except (AttributeError, TypeError):
             pass
 
@@ -211,7 +212,7 @@ class PricingCache:
         try:
             cost_usd = litellm.completion_cost(completion_response=response)
             if cost_usd is not None and cost_usd > 0:
-                return max(int(cost_usd * MICRODOLLARS_PER_DOLLAR), 1)
+                return float(cost_usd)
         except Exception:
             pass
 
@@ -222,7 +223,7 @@ class PricingCache:
                 input_rate, output_rate = PricingCache.get_token_costs(model)
                 cost_usd = input_rate * usage.prompt_tokens + output_rate * usage.completion_tokens
                 if cost_usd > 0:
-                    return max(int(cost_usd * MICRODOLLARS_PER_DOLLAR), 1)
+                    return float(cost_usd)
         except ModelNotFoundError:
             raise
         except (AttributeError, TypeError):
@@ -235,7 +236,7 @@ class PricingCache:
             if model is not None:
                 _, output_rate = PricingCache.get_token_costs(model)
                 cost_usd = output_rate * est_output_tokens
-                return max(int(cost_usd * MICRODOLLARS_PER_DOLLAR), 1)
+                return float(cost_usd)
         except ModelNotFoundError:
             raise
         except (AttributeError, TypeError, IndexError):

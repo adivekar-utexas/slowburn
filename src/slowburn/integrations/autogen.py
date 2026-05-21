@@ -126,9 +126,9 @@ class SlowBurnModelClient:
                 **litellm_params,
             )
 
-            actual_cost_micro = PricingCache.actual_cost_microdollars(response, model=model)
+            actual_cost = PricingCache.actual_cost_usd(response, model=model)
             ctx.set_actual(
-                cost=actual_cost_micro,
+                cost=actual_cost,
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=response.usage.completion_tokens,
             )

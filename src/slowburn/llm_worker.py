@@ -50,7 +50,7 @@ from .exceptions import (
     SlowBurnNonRetryableError,
     ToolCallContractError,
 )
-from .limits import DEFAULT_COST_LIMIT_KEY, microdollars_to_dollars
+from .limits import DEFAULT_COST_LIMIT_KEY
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
@@ -170,7 +170,7 @@ class Usage(Typed):
 
     input_tokens: int
     output_tokens: int
-    cost_microdollars: int
+    cost_usd: float
 
     @validate
     def with_output_tokens(self, *, output_tokens: int) -> Self:
@@ -182,7 +182,7 @@ class Usage(Typed):
         return Usage(
             input_tokens=self.input_tokens,
             output_tokens=output_tokens,
-            cost_microdollars=self.cost_microdollars,
+            cost_usd=self.cost_usd,
         )
 
 
@@ -462,7 +462,7 @@ class SlowBurnLLM(Typed):
         safety multiplier and overhead so reserved capacity is conservative.
 
         Cost is only estimated when cost tracking is active. Token/call-only
-        limit sets do not require pricing data and receive cost_microdollars=0.
+        limit sets do not require pricing data and receive cost_usd=0.0.
 
         Args:
             messages: Messages list passed to ``litellm.token_counter``.
@@ -493,9 +493,9 @@ class SlowBurnLLM(Typed):
             int(used_max_tokens * defaults.output_token_estimate_multiplier)
             + defaults.output_token_estimate_overhead
         )
-        cost_microdollars: int = 0
+        cost_usd: float = 0.0
         if should_track_cost:
-            cost_microdollars = PricingCache.estimate_cost_microdollars(
+            cost_usd = PricingCache.estimate_cost_usd(
                 used_model,
                 input_tokens,
                 output_tokens,
@@ -503,7 +503,7 @@ class SlowBurnLLM(Typed):
         return Usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            cost_microdollars=cost_microdollars,
+            cost_usd=cost_usd,
         )
 
     def _pre_acquire_rate_keys(self) -> Dict[str, List[str]]:
@@ -587,11 +587,11 @@ class SlowBurnLLM(Typed):
             limit_usage[k] = 1
         if should_track_cost:
             for k in keys.get("budget", [DEFAULT_COST_LIMIT_KEY]):
-                limit_usage[k] = usage.cost_microdollars
+                limit_usage[k] = usage.cost_usd
         return limit_usage
 
-    def _extract_actual_cost(self, response: Any, model: Optional[str] = None) -> int:
-        """Extract actual cost from a litellm response, falling back to 0.
+    def _extract_actual_cost(self, response: Any, model: Optional[str] = None) -> float:
+        """Extract actual cost from a litellm response, falling back to 0.0.
 
         Pricing failures here are deliberately swallowed: the response was
         already produced and accounted in tokens; an unknown price should
@@ -606,11 +606,11 @@ class SlowBurnLLM(Typed):
                 when different endpoints serve different models.
         """
         try:
-            return PricingCache.actual_cost_microdollars(
+            return PricingCache.actual_cost_usd(
                 response, model=model if model is not None else self.model_name
             )
         except (ModelNotFoundError, ValueError, TypeError, KeyError, AttributeError):
-            return 0
+            return 0.0
 
     def _account_call(
         self,
@@ -651,7 +651,7 @@ class SlowBurnLLM(Typed):
         )
         self._reporter.log_call(
             model=model if model is not None else self.model_name,
-            cost_usd=microdollars_to_dollars(usage.cost_microdollars),
+            cost_usd=usage.cost_usd,
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             endpoint_id=endpoint_id,
@@ -914,7 +914,7 @@ class SlowBurnLLM(Typed):
 
             overflow_message: str = (
                 f"A single call_llm() call to {self.model_name} is estimated to cost "
-                f"${microdollars_to_dollars(estimated_usage.cost_microdollars):.6f} "
+                f"${estimated_usage.cost_usd:.6f} "
                 f"(~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens), "
                 f"which exceeds your budget_usd per window. "
                 f"Fix by: (1) increasing the budget while creating the LLM, "
@@ -937,11 +937,11 @@ class SlowBurnLLM(Typed):
                 ) from acquire_error
 
             # In warn/ignore mode, acquire the non-cost limits normally but cap the
-            # cost request to the smallest positive amount so a single expensive call
-            # does not permanently block on a capacity it can never fit into.
-            capped_limit_usage: Dict[str, int] = dict(estimated_limit_usage)
+            # cost request to zero so a single expensive call does not permanently
+            # block on a capacity it can never fit into.
+            capped_limit_usage: Dict[str, Union[int, float]] = dict(estimated_limit_usage)
             if should_track_cost:
-                capped_limit_usage[DEFAULT_COST_LIMIT_KEY] = 1
+                capped_limit_usage[DEFAULT_COST_LIMIT_KEY] = 0.0
             acquire_start = time.monotonic()
             context_manager = await self.limits.async_acquire(requested=capped_limit_usage)
             acquire_elapsed = time.monotonic() - acquire_start
@@ -952,7 +952,7 @@ class SlowBurnLLM(Typed):
                 logger.warning(
                     f"[{self.name}] Backpressure: blocked {acquire_elapsed:.1f}s "
                     f"waiting for budget/rate capacity "
-                    f"(estimated ${microdollars_to_dollars(estimated_usage.cost_microdollars):.6f}, "
+                    f"(estimated ${estimated_usage.cost_usd:.6f}, "
                     f"~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens)"
                 )
 
@@ -1138,7 +1138,7 @@ class SlowBurnLLM(Typed):
             actual_usage: Usage = Usage(
                 input_tokens=response.usage.prompt_tokens,
                 output_tokens=response.usage.completion_tokens,
-                cost_microdollars=self._extract_actual_cost(response, model=resolved_model),
+                cost_usd=self._extract_actual_cost(response, model=resolved_model),
             )
 
             try:
@@ -1213,7 +1213,7 @@ class SlowBurnLLM(Typed):
                     logger.info(
                         f"[{resolved_model}]{endpoint_suffix}: "
                         f"{actual_usage.input_tokens}+{actual_usage.output_tokens} tokens, "
-                        f"${microdollars_to_dollars(actual_usage.cost_microdollars):.6f}"
+                        f"${actual_usage.cost_usd:.6f}"
                     )
 
                 return result

@@ -32,7 +32,7 @@ from concurry import LimitSet, RateWindow
 
 from ..config import slowburn_config
 from ..cost_accounting import estimate_input_tokens
-from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
+from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from ..pricing import PricingCache
 from ..reporter import CostReporter
 
@@ -129,14 +129,14 @@ class SlowBurnCrewAI:
             )
             estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
-            estimated_cost = PricingCache.estimate_cost_microdollars(
+            estimated_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 estimated_input,
                 estimated_output,
             )
 
-            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
+            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: estimated_cost}) as acq:
+                acq.update(usage={DEFAULT_COST_LIMIT_KEY: estimated_cost})
 
         @crewai_event_bus.on(LLMCallCompletedEvent)
         def _on_llm_end(source, event: LLMCallCompletedEvent):
@@ -146,14 +146,14 @@ class SlowBurnCrewAI:
                 response_text = str(response_text)
 
             est_output_tokens = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
-            estimated_cost = PricingCache.estimate_cost_microdollars(
+            estimated_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 0,
                 est_output_tokens,
             )
             reporter.log_call(
                 model=model_name,
-                cost_usd=microdollars_to_dollars(estimated_cost),
+                cost_usd=estimated_cost,
                 input_tokens=0,
                 output_tokens=est_output_tokens,
             )
@@ -191,14 +191,14 @@ class SlowBurnCrewAI:
                 )
             estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
 
-            estimated_cost = PricingCache.estimate_cost_microdollars(
+            estimated_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 estimated_input,
                 estimated_output,
             )
 
-            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)}) as acq:
-                acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
+            with limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: estimated_cost}) as acq:
+                acq.update(usage={DEFAULT_COST_LIMIT_KEY: estimated_cost})
 
             return None
 
@@ -209,14 +209,14 @@ class SlowBurnCrewAI:
 
             response_text = context.response or ""
             est_output_tokens = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
-            estimated_cost = PricingCache.estimate_cost_microdollars(
+            estimated_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 0,
                 est_output_tokens,
             )
             reporter.log_call(
                 model=model_name,
-                cost_usd=microdollars_to_dollars(estimated_cost),
+                cost_usd=estimated_cost,
                 input_tokens=0,
                 output_tokens=est_output_tokens,
             )

@@ -175,7 +175,7 @@ class SlowBurnMiddleware:
                 actual_input = est_input
                 actual_output = max(int(len(response_text) / slowburn_config.defaults.chars_per_token), 1)
 
-            actual_cost = PricingCache.estimate_cost_microdollars(
+            actual_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 actual_input,
                 actual_output,

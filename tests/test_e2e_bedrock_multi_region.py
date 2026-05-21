@@ -278,9 +278,7 @@ def _make_n_hop_resolver(cfg: Dict[str, Any]) -> Callable[[Dict[str, Any]], Dict
         )
 
     def _assume_with(prev_creds: Optional[Dict[str, Any]], role_arn: str, session: str) -> Dict[str, Any]:
-        return _sts_with(prev_creds).assume_role(RoleArn=role_arn, RoleSessionName=session)[
-            "Credentials"
-        ]
+        return _sts_with(prev_creds).assume_role(RoleArn=role_arn, RoleSessionName=session)["Credentials"]
 
     def _walk_hops_to_target(account_id: str) -> Dict[str, Any]:
         prev: Optional[Dict[str, Any]] = None
@@ -298,9 +296,7 @@ def _make_n_hop_resolver(cfg: Dict[str, Any]) -> Callable[[Dict[str, Any]], Dict
         captured_prev = prev
         return cache.get_or_assume(
             key=f"target:{account_id}",
-            assume_fn=lambda c=captured_prev: _assume_with(
-                c, target_arn, f"slowburn-target-{account_id}"
-            ),
+            assume_fn=lambda c=captured_prev: _assume_with(c, target_arn, f"slowburn-target-{account_id}"),
         )
 
     def resolver(ep_cfg: Dict[str, Any]) -> Dict[str, Any]:

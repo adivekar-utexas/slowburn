@@ -35,7 +35,7 @@ from concurry import LimitSet, RateWindow
 
 from ..config import slowburn_config
 from ..cost_accounting import estimate_input_tokens
-from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit, microdollars_to_dollars
+from ..limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from ..pricing import PricingCache
 from ..reporter import CostReporter
 
@@ -152,13 +152,13 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
 
         total_text = " ".join(prompts)
         estimated_input, estimated_output = estimate_input_tokens(total_text, max_tokens)
-        estimated_cost = PricingCache.estimate_cost_microdollars(
+        estimated_cost = PricingCache.estimate_cost_usd(
             model_name,
             estimated_input,
             estimated_output,
         )
 
-        acq = self.limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: max(estimated_cost, 1)})
+        acq = self.limit_set.acquire(requested={DEFAULT_COST_LIMIT_KEY: estimated_cost})
 
         run_key = str(run_id) if run_id is not None else "default"
         with self._lock:
@@ -200,7 +200,7 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
         completion_tokens = token_usage.get("completion_tokens")
 
         if prompt_tokens is not None and completion_tokens is not None:
-            actual_cost = PricingCache.estimate_cost_microdollars(
+            actual_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 prompt_tokens,
                 completion_tokens,
@@ -211,17 +211,17 @@ class SlowBurnCallbackHandler(_BaseCallbackHandler):
                 for gen in gen_list:
                     text += gen.text
             completion_tokens = max(int(len(text) / slowburn_config.defaults.chars_per_token), 1)
-            actual_cost = PricingCache.estimate_cost_microdollars(
+            actual_cost = PricingCache.estimate_cost_usd(
                 model_name,
                 estimated_input,
                 completion_tokens,
             )
 
-        acq.update(usage={DEFAULT_COST_LIMIT_KEY: max(actual_cost, 1)})
+        acq.update(usage={DEFAULT_COST_LIMIT_KEY: actual_cost})
 
         self.reporter.log_call(
             model=model_name,
-            cost_usd=microdollars_to_dollars(actual_cost),
+            cost_usd=actual_cost,
             input_tokens=prompt_tokens if prompt_tokens is not None else estimated_input,
             output_tokens=completion_tokens if completion_tokens is not None else 0,
         )
