@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import List
 
 import pytest
-from concurry import RateLimit, RateWindow
+from concurry import RateLimit
 
 from slowburn import CostLimit
 from slowburn.limits_spec import (
@@ -18,7 +18,6 @@ from slowburn.limits_spec import (
     SlowBurnLimits,
     default_slowburn_limits,
 )
-
 
 # ----------------------------------------------------------------------------
 # Helpers
@@ -113,6 +112,107 @@ class TestVerboseRequestShorthands:
         sl = SlowBurnLimits(**{kwarg: 100})
         assert sl.requests is not None
         assert _windows(sl.requests) == [expected_seconds]
+
+
+# ----------------------------------------------------------------------------
+# Window-alias coverage: pluralized and abbreviated suffixes
+# ----------------------------------------------------------------------------
+
+
+class TestWindowAliasResolution:
+    """The verbose forms (``budget_per_<window>``, ``requests_per_<window>``,
+    ``input_tokens_per_<window>``, ``output_tokens_per_<window>``) accept a
+    permissive set of suffixes:
+
+    - canonical singular: ``second`` / ``minute`` / ``hour`` / ``day`` / ``week``
+    - canonical plural:   ``seconds`` / ``minutes`` / ``hours`` / ``days`` / ``weeks``
+    - short abbrev:       ``sec`` / ``min`` / ``hr`` / (none) / ``wk``
+    - short plural:       ``secs`` / ``mins`` / ``hrs`` / (none) / ``wks``
+
+    All forms must resolve to the same ``RateWindow`` and the same number
+    of seconds. Each is exercised on every verbose-form slot."""
+
+    # Each tuple is (alias, expected_seconds).
+    _ALIAS_CASES = [
+        # Secondly
+        ("second", 1.0),
+        ("seconds", 1.0),
+        ("sec", 1.0),
+        ("secs", 1.0),
+        # Minutely
+        ("minute", 60.0),
+        ("minutes", 60.0),
+        ("min", 60.0),
+        ("mins", 60.0),
+        # Hourly
+        ("hour", 3600.0),
+        ("hours", 3600.0),
+        ("hr", 3600.0),
+        ("hrs", 3600.0),
+        # Daily
+        ("day", 86400.0),
+        ("days", 86400.0),
+        # Weekly
+        ("week", 604800.0),
+        ("weeks", 604800.0),
+        ("wk", 604800.0),
+        ("wks", 604800.0),
+    ]
+
+    @pytest.mark.parametrize("alias,expected_seconds", _ALIAS_CASES)
+    def test_budget_per_alias(self, alias: str, expected_seconds: float) -> None:
+        sl = SlowBurnLimits(**{f"budget_per_{alias}": 5.0})
+        assert sl.budget is not None
+        assert len(sl.budget) == 1
+        assert isinstance(sl.budget[0], CostLimit)
+        assert float(sl.budget[0].window) == expected_seconds
+
+    @pytest.mark.parametrize("alias,expected_seconds", _ALIAS_CASES)
+    def test_requests_per_alias(self, alias: str, expected_seconds: float) -> None:
+        sl = SlowBurnLimits(**{f"requests_per_{alias}": 100})
+        assert sl.requests is not None
+        assert _windows(sl.requests) == [expected_seconds]
+
+    @pytest.mark.parametrize("alias,expected_seconds", _ALIAS_CASES)
+    def test_input_tokens_per_alias(self, alias: str, expected_seconds: float) -> None:
+        sl = SlowBurnLimits(**{f"input_tokens_per_{alias}": 10_000})
+        assert sl.input_tokens is not None
+        assert _windows(sl.input_tokens) == [expected_seconds]
+
+    @pytest.mark.parametrize("alias,expected_seconds", _ALIAS_CASES)
+    def test_output_tokens_per_alias(self, alias: str, expected_seconds: float) -> None:
+        sl = SlowBurnLimits(**{f"output_tokens_per_{alias}": 5_000})
+        assert sl.output_tokens is not None
+        assert _windows(sl.output_tokens) == [expected_seconds]
+
+    def test_two_aliases_for_same_window_collide(self) -> None:
+        """Two different alias spellings of the same window for the same slot
+        is contradictory user input — it should raise, not silently merge."""
+        with pytest.raises(ValueError, match="duplicate"):
+            SlowBurnLimits(budget_per_day=5.0, budget_per_days=10.0)
+
+    def test_max_prefix_works_with_alias(self) -> None:
+        """The ``max_`` prefix is stripped before alias resolution, so
+        ``max_budget_per_hr`` should resolve like ``budget_per_hr``."""
+        sl = SlowBurnLimits(max_budget_per_hr=2.0)
+        assert sl.budget is not None
+        assert float(sl.budget[0].window) == 3600.0
+
+    def test_unknown_alias_rejected(self) -> None:
+        """A suffix that isn't in the alias map (e.g. ``fortnight``) should
+        not match any shorthand; pydantic's ``extra='forbid'`` then raises."""
+        with pytest.raises((ValueError, Exception)):
+            SlowBurnLimits(budget_per_fortnight=5.0)
+
+    def test_concurry_window_member_aliases_unaffected(self) -> None:
+        """Concurry's ``RateWindow`` itself accepts ``"min"``, ``"hr"``, etc.
+        as aliases for the ``window`` field on a ``RateLimit``. That's a
+        separate code path from the SlowBurn shorthand kwargs and must
+        still work after this change."""
+        rl = RateLimit(key="x", capacity=10, window="hr")
+        assert rl.window == 3600.0
+        rl2 = RateLimit(key="y", capacity=20, window="min")
+        assert rl2.window == 60.0
 
 
 # ----------------------------------------------------------------------------

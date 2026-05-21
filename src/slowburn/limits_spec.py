@@ -26,16 +26,30 @@ first.
 Pattern                                                                       Slot             Window
 ============================================================================  ===============  ====================
 ``rps`` / ``rpm`` / ``rph`` / ``rpd`` / ``rpw``                               ``requests``     second/minute/hour/day/week
-``requests_per_{second,minute,hour,day,week}``                                ``requests``     from suffix
+``requests_per_<window>``                                                     ``requests``     from suffix
 ``itps`` / ``itpm`` / ``itph`` / ``itpd`` / ``itpw``                          ``input_tokens`` second/minute/hour/day/week
 ``input_tps`` / ``input_tpm`` / ``input_tph`` / ``input_tpd`` / ``input_tpw`` ``input_tokens`` second/minute/hour/day/week
-``input_tokens_per_{second,minute,hour,day,week}``                            ``input_tokens`` from suffix
+``input_tokens_per_<window>``                                                 ``input_tokens`` from suffix
 ``otps`` / ``otpm`` / ``otph`` / ``otpd`` / ``otpw``                          ``output_tokens`` second/minute/hour/day/week
 ``output_tps`` / ``output_tpm`` / ``output_tph`` / ``output_tpd`` / ``output_tpw`` ``output_tokens`` second/minute/hour/day/week
-``output_tokens_per_{second,minute,hour,day,week}``                           ``output_tokens`` from suffix
-``budget_per_{second,minute,hour,day,week}``                                  ``budget``       from suffix
+``output_tokens_per_<window>``                                                ``output_tokens`` from suffix
+``budget_per_<window>``                                                       ``budget``       from suffix
 ``concurrency``                                                               ``concurrency``  —
 ============================================================================  ===============  ====================
+
+The ``<window>`` suffix accepts the canonical singular and plural forms as
+well as common abbreviations:
+
+- ``second`` / ``seconds`` / ``sec`` / ``secs``
+- ``minute`` / ``minutes`` / ``min`` / ``mins``
+- ``hour``   / ``hours``   / ``hr``  / ``hrs``
+- ``day``    / ``days``
+- ``week``   / ``weeks``   / ``wk``  / ``wks``
+
+So ``budget_per_min``, ``budget_per_minutes``, and ``budget_per_minute``
+all resolve to the same ``(budget, Minutely)`` slot. Two different alias
+spellings of the same window for the same slot is a duplicate and raises
+``ValueError``.
 
 Conflict rules:
 
@@ -103,14 +117,30 @@ _LETTER_TO_WINDOW: Dict[str, RateWindow] = {
     "w": RateWindow.Weekly,
 }
 
-# Maps verbose window suffix → RateWindow.
-_VERBOSE_TO_WINDOW: Dict[str, RateWindow] = {
-    "second": RateWindow.Secondly,
-    "minute": RateWindow.Minutely,
-    "hour": RateWindow.Hourly,
-    "day": RateWindow.Daily,
-    "week": RateWindow.Weekly,
+# Maps verbose / pluralized / abbreviated window suffix → RateWindow.
+#
+# The mapping is one-way (alias → canonical) and is built from
+# ``_WINDOW_ALIAS_GROUPS`` so the regex alternations below stay in sync
+# with the lookup. To add a new alias, append it to the corresponding
+# group; ``_VERBOSE_RE_GROUP`` and the regexes that use it pick it up
+# automatically.
+_WINDOW_ALIAS_GROUPS: Dict[RateWindow, Tuple[str, ...]] = {
+    RateWindow.Secondly: ("second", "seconds", "sec", "secs"),
+    RateWindow.Minutely: ("minute", "minutes", "min", "mins"),
+    RateWindow.Hourly: ("hour", "hours", "hr", "hrs"),
+    RateWindow.Daily: ("day", "days"),
+    RateWindow.Weekly: ("week", "weeks", "wk", "wks"),
 }
+
+_VERBOSE_TO_WINDOW: Dict[str, RateWindow] = {
+    alias: window for window, aliases in _WINDOW_ALIAS_GROUPS.items() for alias in aliases
+}
+
+# Pre-built regex alternation of every alias, longest-first so that
+# e.g. ``minutes`` is preferred over ``minute`` and ``mins`` over ``min``
+# during ``re.fullmatch``. Without longest-first, ``min`` would greedily
+# match the prefix of ``minute`` and mis-classify the suffix.
+_VERBOSE_RE_GROUP: str = "|".join(sorted(_VERBOSE_TO_WINDOW.keys(), key=len, reverse=True))
 
 
 def _resolve_shorthand(kwarg_name: str) -> Optional[Tuple[str, Optional[RateWindow]]]:
@@ -135,7 +165,8 @@ def _resolve_shorthand(kwarg_name: str) -> Optional[Tuple[str, Optional[RateWind
         return ("requests", _LETTER_TO_WINDOW[m.group(1)])
 
     # Verbose request form: requests_per_{second,minute,hour,day,week}
-    m = re.fullmatch(r"requests_per_(second|minute|hour|day|week)", name)
+    # plus pluralized / abbreviated forms (seconds/sec/secs/minutes/min/mins/...)
+    m = re.fullmatch(rf"requests_per_({_VERBOSE_RE_GROUP})", name)
     if m is not None:
         return ("requests", _VERBOSE_TO_WINDOW[m.group(1)])
 
@@ -146,8 +177,8 @@ def _resolve_shorthand(kwarg_name: str) -> Optional[Tuple[str, Optional[RateWind
     m = re.fullmatch(r"input_tp([smhdw])", name)
     if m is not None:
         return ("input_tokens", _LETTER_TO_WINDOW[m.group(1)])
-    # Verbose: input_tokens_per_{second,minute,hour,day,week}
-    m = re.fullmatch(r"input_tokens_per_(second|minute|hour|day|week)", name)
+    # Verbose: input_tokens_per_<verbose-window>
+    m = re.fullmatch(rf"input_tokens_per_({_VERBOSE_RE_GROUP})", name)
     if m is not None:
         return ("input_tokens", _VERBOSE_TO_WINDOW[m.group(1)])
 
@@ -158,13 +189,13 @@ def _resolve_shorthand(kwarg_name: str) -> Optional[Tuple[str, Optional[RateWind
     m = re.fullmatch(r"output_tp([smhdw])", name)
     if m is not None:
         return ("output_tokens", _LETTER_TO_WINDOW[m.group(1)])
-    # Verbose: output_tokens_per_{second,minute,hour,day,week}
-    m = re.fullmatch(r"output_tokens_per_(second|minute|hour|day|week)", name)
+    # Verbose: output_tokens_per_<verbose-window>
+    m = re.fullmatch(rf"output_tokens_per_({_VERBOSE_RE_GROUP})", name)
     if m is not None:
         return ("output_tokens", _VERBOSE_TO_WINDOW[m.group(1)])
 
-    # Budget: budget_per_{second,minute,hour,day,week}
-    m = re.fullmatch(r"budget_per_(second|minute|hour|day|week)", name)
+    # Budget: budget_per_<verbose-window>
+    m = re.fullmatch(rf"budget_per_({_VERBOSE_RE_GROUP})", name)
     if m is not None:
         return ("budget", _VERBOSE_TO_WINDOW[m.group(1)])
 

@@ -35,7 +35,7 @@ keywords = [
     "long-horizon",
 ]
 dependencies = [
-    "concurry>=0.13.0",
+    "concurry>=0.13.1",
     "litellm>=1.82.0",
     "morphic>=0.2.1",
     "pydantic>=2.0.0",
