@@ -8,9 +8,9 @@ from unittest.mock import patch
 
 import pytest
 
-from .conftest import MOCK_MODEL_NAME
-
 from slowburn.pricing import ModelNotFoundError, PricingCache
+
+from .conftest import MOCK_MODEL_NAME
 
 # ---------------------------------------------------------------------------
 # Helper: build fake litellm response objects

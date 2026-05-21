@@ -1,4 +1,3 @@
-import re
 
 def extract_emails(text):
     """Extract email addresses from text."""

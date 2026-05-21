@@ -202,7 +202,7 @@ def run_agent(
             context_history: List[Dict[str, Any]] = []
             if verbose:
                 print(f"\n    ── Step {step}/{max_steps} ──")
-                print(f"    [loop] Sending initial task to LLM")
+                print("    [loop] Sending initial task to LLM")
         else:
             last_turn_responses = _extract_last_turn_responses(all_messages)
             context_history = []
@@ -241,7 +241,7 @@ def run_agent(
                         f"If the report is complete, respond with a text summary (no tool calls)."
                     )
                     if verbose:
-                        print(f"    [loop] Instructing LLM: search for new information")
+                        print("    [loop] Instructing LLM: search for new information")
                 else:
                     prompt_parts.append(
                         f"INSTRUCTIONS FOR THIS STEP:\n"
@@ -260,7 +260,7 @@ def run_agent(
             prompt = "\n\n".join(prompt_parts)
 
             if verbose:
-                print(f"    [loop] Calling LLM...")
+                print("    [loop] Calling LLM...")
 
         if step_dir is not None:
             input_messages = llm.build_messages(
@@ -395,7 +395,7 @@ def run_agent(
                 current_cost = reporter.total_cost()
                 step_cost = current_cost - previous_cost
 
-                print(f"    [llm]  DONE — final text response:")
+                print("    [llm]  DONE — final text response:")
                 print(f"    [llm]  {final_text}")
                 print(
                     f"    [cost] step ${step_cost:.6f} | "

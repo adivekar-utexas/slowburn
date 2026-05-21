@@ -25,7 +25,6 @@ from slowburn.limits import DEFAULT_COST_LIMIT_KEY
 
 from .conftest import MOCK_MODEL_NAME
 
-
 # ---------------------------------------------------------------------------
 # Mock helpers
 # ---------------------------------------------------------------------------

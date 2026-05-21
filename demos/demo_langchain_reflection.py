@@ -152,7 +152,7 @@ def main():
             f"Available sources:\n{sources_text}"
         )
 
-        print(f"    [Crit] Evaluating draft...")
+        print("    [Crit] Evaluating draft...")
         crit_response = llm.invoke(critique_prompt)
         critique_text = crit_response.content
 
@@ -165,12 +165,12 @@ def main():
         print(f"          Cost so far: ${cost_so_far:.6f} / ${BUDGET_USD:.2f}")
 
         if len(scores) >= 3 and all(s >= 4 for s in scores.values()):
-            print(f"    All criteria >= 4/5. Quality threshold met!")
+            print("    All criteria >= 4/5. Quality threshold met!")
             break
 
         if round_num < MAX_ROUNDS:
             # Additional search to address gaps
-            print(f"    [Search] Searching for additional info to address gaps...")
+            print("    [Search] Searching for additional info to address gaps...")
             gap_query = f"{TOPIC} " + " ".join(k for k, v in scores.items() if v < 4)
             extra_results = search_web(gap_query, max_results=3)
             extra_data = json.loads(extra_results)
@@ -195,7 +195,7 @@ def main():
     print()
     print(reporter.to_markdown())
 
-    print(f"\n  Files in workspace:")
+    print("\n  Files in workspace:")
     for f in sorted(runs_dir.rglob("*")):
         if f.is_file():
             print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")

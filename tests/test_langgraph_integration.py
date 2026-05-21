@@ -4,13 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from .conftest import MOCK_MODEL_NAME
-
 from slowburn.integrations.langgraph import (
     SlowBurnMiddleware,
     _extract_text_from_messages,
     _get_model_name,
 )
+
+from .conftest import MOCK_MODEL_NAME
 
 # ---------------------------------------------------------------------------
 # Helpers: build fake LangGraph-style objects

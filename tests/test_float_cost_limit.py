@@ -16,7 +16,7 @@ import math
 import pytest
 from concurry import LimitSet, RateLimitAlgorithm, RateWindow
 
-from slowburn import CostLimit, DEFAULT_COST_LIMIT_KEY
+from slowburn import DEFAULT_COST_LIMIT_KEY, CostLimit
 
 
 class TestCostLimitConstruction:

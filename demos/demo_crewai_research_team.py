@@ -18,7 +18,6 @@ Usage:
     python demos/demo_crewai_research_team.py
 """
 
-import json
 import os
 import sys
 import time
@@ -42,7 +41,7 @@ TOPIC = "cost optimization strategies for LLM agents in production"
 
 def main():
     try:
-        from crewai import Agent, Crew, Task, LLM
+        from crewai import LLM, Agent, Crew, Task
     except ImportError:
         print("CrewAI not installed. Run: pip install crewai")
         return
@@ -215,7 +214,7 @@ def main():
     print()
     print(reporter.to_markdown())
 
-    print(f"\n  Files in workspace:")
+    print("\n  Files in workspace:")
     for f in sorted(runs_dir.rglob("*")):
         if f.is_file():
             print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")

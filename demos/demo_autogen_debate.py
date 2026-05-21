@@ -139,6 +139,7 @@ def main():
         return
 
     from concurry import LimitSet
+
     from slowburn.integrations.autogen import SlowBurnModelClient
     from slowburn.limits import CostLimit
     from slowburn.reporter import CostReporter
@@ -227,8 +228,8 @@ def main():
         )
 
     # Aggregator: synthesize the debate
-    print(f"\n  === Aggregation ===")
-    print(f"    [Aggregator] Synthesizing debate results...")
+    print("\n  === Aggregation ===")
+    print("    [Aggregator] Synthesizing debate results...")
 
     all_arguments = "\n\n".join(
         f"--- {name} (Final Round) ---\n{arg}" for name, arg in previous_arguments.items()
@@ -281,7 +282,7 @@ def main():
     print()
     print(reporter.to_markdown())
 
-    print(f"\n  Files in workspace:")
+    print("\n  Files in workspace:")
     for f in sorted(runs_dir.rglob("*")):
         if f.is_file():
             print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")

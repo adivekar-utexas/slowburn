@@ -6,11 +6,11 @@ from unittest.mock import patch
 import pytest
 from concurry import LimitSet
 
-from .conftest import MOCK_MODEL_NAME
-
 from slowburn.integrations.autogen import SlowBurnModelClient
 from slowburn.limits import CostLimit
 from slowburn.reporter import CostReporter
+
+from .conftest import MOCK_MODEL_NAME
 
 
 def _make_completion_response(

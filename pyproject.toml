@@ -10,7 +10,7 @@ authors = [
 ]
 description = "Cost-Sustainable Concurrent Execution for Long-Horizon LLM Agents"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -18,7 +18,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -35,7 +34,7 @@ keywords = [
     "long-horizon",
 ]
 dependencies = [
-    "concurry>=0.13.1",
+    "concurry>=0.13.2",
     "litellm>=1.82.0",
     "morphic>=0.2.1",
     "pydantic>=2.0.0",
@@ -96,7 +95,7 @@ ignore = [
 known-first-party = ["slowburn"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 check_untyped_defs = true

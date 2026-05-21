@@ -18,7 +18,6 @@ import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from concurry import CallLimit, LimitSet, RateLimit
 
 from slowburn import create_llm

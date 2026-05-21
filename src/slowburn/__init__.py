@@ -18,16 +18,13 @@ Quick start::
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 import litellm
 from concurry import (
     LimitPool,
     LimitSet,
     LoadBalancingAlgorithm,
-    RateLimit,
-    RateLimitAlgorithm,
-    ResourceLimit,
     RetryAlgorithm,
 )
 from morphic import validate
@@ -87,6 +84,7 @@ __all__: List[str] = [
     "PricingCache",
     "ModelNotFoundError",
     "CostReporter",
+    "EndpointConfig",
     "EndpointResolver",
     "build_limit_pool",
     "passthrough_resolver",
@@ -98,6 +96,12 @@ __all__: List[str] = [
     "SlowBurnLimits",
     "default_slowburn_limits",
     "SLOT_TO_LIMIT_KEY",
+    # Constants / type aliases used in the public ``create_llm`` signature.
+    "BackpressureNotify",
+    "BudgetOverflowAction",
+    "ExecutionBackend",
+    "PricingUnavailableAction",
+    "ToolChoiceOption",
 ]
 
 

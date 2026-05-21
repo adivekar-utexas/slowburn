@@ -6,9 +6,9 @@ from uuid import uuid4
 
 import pytest
 
-from .conftest import MOCK_MODEL_NAME
-
 from slowburn.integrations.langchain import SlowBurnCallbackHandler
+
+from .conftest import MOCK_MODEL_NAME
 
 # ---------------------------------------------------------------------------
 # Helpers

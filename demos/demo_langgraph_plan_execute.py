@@ -24,7 +24,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, Dict, List, TypedDict
 
 from dotenv import load_dotenv
 
@@ -77,8 +77,8 @@ def parse_plan(text: str) -> List[str]:
 
 def main():
     try:
-        from langgraph.graph import StateGraph, END
         from langchain_openai import ChatOpenAI
+        from langgraph.graph import END, StateGraph
     except ImportError:
         print("LangGraph/LangChain not installed. Run: pip install langgraph langchain-openai")
         return
@@ -272,7 +272,7 @@ def main():
     print()
     print(reporter.to_markdown())
 
-    print(f"\n  Files in workspace:")
+    print("\n  Files in workspace:")
     for f in sorted(runs_dir.rglob("*")):
         if f.is_file():
             print(f"    {f.relative_to(runs_dir)}: {f.stat().st_size} bytes")

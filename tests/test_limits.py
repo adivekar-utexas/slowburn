@@ -12,7 +12,6 @@ These tests cover:
 
 import math
 
-import pytest
 from concurry import LimitSet, RateLimit
 
 from slowburn.limits import DEFAULT_COST_LIMIT_KEY, CostLimit

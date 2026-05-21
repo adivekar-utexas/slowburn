@@ -22,20 +22,31 @@ The constructor accepts a flexible set of shorthand kwargs that get parsed
 into the right slot in :py:meth:`pre_initialize`. ``max_`` is always stripped
 first.
 
-============================================================================  ===============  ====================
-Pattern                                                                       Slot             Window
-============================================================================  ===============  ====================
-``rps`` / ``rpm`` / ``rph`` / ``rpd`` / ``rpw``                               ``requests``     second/minute/hour/day/week
-``requests_per_<window>``                                                     ``requests``     from suffix
-``itps`` / ``itpm`` / ``itph`` / ``itpd`` / ``itpw``                          ``input_tokens`` second/minute/hour/day/week
-``input_tps`` / ``input_tpm`` / ``input_tph`` / ``input_tpd`` / ``input_tpw`` ``input_tokens`` second/minute/hour/day/week
-``input_tokens_per_<window>``                                                 ``input_tokens`` from suffix
-``otps`` / ``otpm`` / ``otph`` / ``otpd`` / ``otpw``                          ``output_tokens`` second/minute/hour/day/week
-``output_tps`` / ``output_tpm`` / ``output_tph`` / ``output_tpd`` / ``output_tpw`` ``output_tokens`` second/minute/hour/day/week
-``output_tokens_per_<window>``                                                ``output_tokens`` from suffix
-``budget_per_<window>``                                                       ``budget``       from suffix
-``concurrency``                                                               ``concurrency``  —
-============================================================================  ===============  ====================
+Per slot, the accepted patterns are:
+
+``requests``
+    - ``rps`` / ``rpm`` / ``rph`` / ``rpd`` / ``rpw`` — compact form,
+      window from the trailing letter (s/m/h/d/w).
+    - ``requests_per_<window>`` — verbose form; window from the suffix.
+
+``input_tokens``
+    - ``itps`` / ``itpm`` / ``itph`` / ``itpd`` / ``itpw`` — compact form.
+    - ``input_tps`` / ``input_tpm`` / ``input_tph`` / ``input_tpd`` /
+      ``input_tpw`` — alternate compact form.
+    - ``input_tokens_per_<window>`` — verbose form.
+
+``output_tokens``
+    - ``otps`` / ``otpm`` / ``otph`` / ``otpd`` / ``otpw`` — compact form.
+    - ``output_tps`` / ``output_tpm`` / ``output_tph`` / ``output_tpd`` /
+      ``output_tpw`` — alternate compact form.
+    - ``output_tokens_per_<window>`` — verbose form.
+
+``budget``
+    - ``budget_per_<window>`` — verbose form only (intentional; ``bps``
+      etc. would collide with cents-per-second).
+
+``concurrency``
+    - ``concurrency`` — a single ``int``, no window.
 
 The ``<window>`` suffix accepts the canonical singular and plural forms as
 well as common abbreviations:

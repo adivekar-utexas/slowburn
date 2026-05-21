@@ -1,7 +1,7 @@
 """Tests for multi-turn conversation API: history, return_messages, tools, build_messages."""
 
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, patch
 
 import pytest

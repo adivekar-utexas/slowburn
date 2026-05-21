@@ -23,7 +23,6 @@ from slowburn.llm_worker import (
     ImageInput,
     SlowBurnLLM,
     _encode_image_to_data_url,
-    _estimate_tokens,
     _mime_type_for_path,
     _resolve_image_inputs,
 )

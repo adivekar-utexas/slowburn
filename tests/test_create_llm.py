@@ -8,7 +8,7 @@ import litellm
 import pytest
 
 from slowburn import create_llm
-from slowburn.config import slowburn_config, temp_config
+from slowburn.config import temp_config
 
 from .conftest import MOCK_MODEL_NAME
 

@@ -8,11 +8,10 @@ Tests are skipped if no key is available.
 import re
 import time
 
-import litellm
 import pytest
 from concurry import LimitSet
 
-from slowburn import CostLimit, CostReporter, _DEFAULT_RETRY_ON, create_llm
+from slowburn import _DEFAULT_RETRY_ON, CostLimit, CostReporter, create_llm
 from slowburn.integrations.autogen import SlowBurnModelClient
 
 from .conftest import skip_no_api_key
