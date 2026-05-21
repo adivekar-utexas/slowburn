@@ -109,10 +109,11 @@ def main():
     print(f"  Workspace: {workspace_dir}")
     print(f"{'=' * 70}")
 
+    from slowburn import CostLimit
+
     llm = create_llm(
         model=MODEL,
-        budget_usd=BUDGET_USD,
-        window=30,  # $0.02 per 30-second window
+        limits=dict(budget=[CostLimit(budget_usd=BUDGET_USD, window=30)]),  # $BUDGET_USD per 30-second window
         api_key=api_key,
         max_tokens=MAX_TOKENS,
         temperature=0.3,

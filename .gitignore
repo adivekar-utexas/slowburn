@@ -204,3 +204,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local-only test configs (templates with the same name minus `.template`
+# carry the user's real AWS account IDs / role ARNs and must not be committed).
+tests/configs/bedrock_e2e.json

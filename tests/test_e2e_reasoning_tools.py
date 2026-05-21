@@ -82,8 +82,7 @@ class TestSonnet46ThinkingBudget:
         llm = create_llm(
             model=model_id,
             api_key=api_key,
-            budget_usd=5.0,
-            window="daily",
+            limits=dict(budget_per_day=5.0),
             max_tokens=16000,  # Ensure enough headroom for thinking + content
             temperature=1.0,  # Temperature must be 1.0 when thinking is enabled
             litellm_params=litellm_params,
@@ -197,8 +196,7 @@ class TestImageAwareToolCalling:
         llm = create_llm(
             model=model_id,
             api_key=api_key,
-            budget_usd=5.0,
-            window="daily",
+            limits=dict(budget_per_day=5.0),
             max_tokens=1000,
             temperature=0.0,
             tools=tool_schemas,
@@ -394,8 +392,7 @@ class TestReasoningToolsGrid:
         llm = create_llm(
             model=model_id,
             api_key=api_key,
-            budget_usd=5.0,
-            window="daily",
+            limits=dict(budget_per_day=5.0),
             max_tokens=1000,
             temperature=0.0,
             tools=tool_schemas,

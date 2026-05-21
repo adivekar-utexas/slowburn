@@ -1,0 +1,60 @@
+{
+    "_README": [
+        "Configuration for tests/test_e2e_bedrock_multi_region.py.",
+        "",
+        "This is a TEMPLATE. To run the e2e test:",
+        "  1. Copy this file to `bedrock_e2e.json` (in the same directory).",
+        "  2. Replace every '<FILL_IN>' with values for your own AWS setup.",
+        "  3. The real `bedrock_e2e.json` is gitignored. Do NOT commit it.",
+        "",
+        "Auth chain semantics:",
+        "  caller (refreshed onto your default AWS profile by your local mechanism)",
+        "    -> hop_role_chain[0]",
+        "       -> hop_role_chain[1]",
+        "          -> ... -> target_role_template (formatted with each target account)",
+        "",
+        "The test calls litellm with the target-account credentials, against",
+        "the bedrock model `model_template.format(prefix=<region prefix>)` in",
+        "the corresponding region.",
+        "",
+        "This file is ONLY read by the e2e test. The unit/mocked tests do not",
+        "need it and will run without it."
+    ],
+
+    "caller_account_id": "<FILL_IN: 12-digit AWS account ID for the caller>",
+    "caller_role": "<FILL_IN: IAM role name your `aws sts get-caller-identity` reports>",
+
+    "hop_role_chain": [
+        "<FILL_IN: arn:aws:iam::<account>:role/<role-name> for STS hop 1>",
+        "<FILL_IN: arn:aws:iam::<account>:role/<role-name> for STS hop 2>"
+    ],
+
+    "target_role_template": "<FILL_IN: arn:aws:iam::{account}:role/<role-name> ; '{account}' is the placeholder>",
+
+    "target_accounts": [
+        "<FILL_IN: 12-digit AWS account ID 1>",
+        "<FILL_IN: 12-digit AWS account ID 2>"
+    ],
+
+    "region_to_prefix": [
+        ["us-east-1", "us"],
+        ["us-east-2", "us"],
+        ["us-west-2", "us"],
+        ["eu-west-2", "eu"],
+        ["eu-west-3", "eu"],
+        ["eu-central-1", "eu"],
+        ["ap-northeast-1", "jp"],
+        ["ap-southeast-2", "au"]
+    ],
+
+    "model_template": "bedrock/{prefix}.anthropic.claude-sonnet-4-6",
+
+    "test_params": {
+        "n_calls": 1000,
+        "endpoint_rpm": 50,
+        "endpoint_concurrency": 5,
+        "max_tokens": 800,
+        "timeout_seconds": 300.0,
+        "batch_timeout_seconds": 900.0
+    }
+}

@@ -140,8 +140,9 @@ class TestAsyncAcquireDeadlockPrevention:
 class TestCreateLLMBatchCapacity:
     """Test that create_llm's default limits don't deadlock on real batch sizes.
 
-    create_llm uses max_request_rate=100_000 by default (RateLimit capacity,
-    1-minute window). Batches <= max_request_rate should complete in one wave.
+    create_llm uses a generous default request-rate limit (very high RateLimit
+    capacity over a 1-minute window). Batches that fit within the configured
+    requests-per-minute limit should complete in one wave.
     """
 
     @patch("slowburn.llm_worker.litellm.acompletion", new_callable=AsyncMock)

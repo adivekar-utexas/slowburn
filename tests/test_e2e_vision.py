@@ -104,8 +104,7 @@ class TestVisionSingleImage:
         model, key = llm_model_and_key
         self.llm = create_llm(
             model=model,
-            budget_usd=2.0,
-            window="hourly",
+            limits=dict(budget_per_hour=2.0),
             api_key=key,
             max_tokens=300,
             temperature=0.2,
@@ -161,8 +160,7 @@ class TestVisionBatch:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=2.0,
-            window="hourly",
+            limits=dict(budget_per_hour=2.0),
             api_key=key,
             max_tokens=100,
             temperature=0.2,
@@ -196,8 +194,7 @@ class TestVisionCostReport:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            budget_usd=1.0,
-            window="hourly",
+            limits=dict(budget_per_hour=1.0),
             api_key=key,
             max_tokens=100,
             temperature=0.2,

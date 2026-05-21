@@ -27,8 +27,7 @@ class TestCreateLLMRealCalls:
         model, key = llm_model_and_key
         self.llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=1.0),
-            window="hourly",
+            limits=dict(budget_per_hour=1.0),
             api_key=key,
             max_tokens=150,
             temperature=0.3,
@@ -90,8 +89,7 @@ class TestValidatorRealCall:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=50,
             temperature=0.0,
@@ -170,8 +168,7 @@ class TestCostReporterFormats:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=50,
             temperature=0.3,
@@ -215,8 +212,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=50,
             temperature=0.0,
@@ -248,8 +244,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=50,
             temperature=0.0,
@@ -293,8 +288,7 @@ class TestRetryConfigRealCalls:
 
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=50,
             temperature=0.0,
@@ -328,8 +322,7 @@ class TestRetryConfigRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=30,
             temperature=0.0,
@@ -368,8 +361,7 @@ class TestMultiTurnRealCalls:
         model, key = llm_model_and_key
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=100,
             temperature=0.0,
@@ -428,8 +420,7 @@ class TestMultiTurnRealCalls:
         ]
         llm = create_llm(
             model=model,
-            limits=dict(budget_per_day=0.50),
-            window="hourly",
+            limits=dict(budget_per_hour=0.50),
             api_key=key,
             max_tokens=150,
             temperature=0.0,

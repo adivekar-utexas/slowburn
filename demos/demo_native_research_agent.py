@@ -85,8 +85,7 @@ def main():
 
     llm = create_llm(
         model=MODEL,
-        budget_usd=BUDGET_USD,
-        window="hourly",
+        limits=dict(budget_per_hour=BUDGET_USD),
         api_key=api_key,
         max_tokens=MAX_TOKENS,
         temperature=0.3,
