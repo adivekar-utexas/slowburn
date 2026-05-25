@@ -232,6 +232,89 @@ with temp_config(temperature=0.0, budget_usd=0.10):
     # temperature=0.0, budget_usd=$0.10
 ```
 
+### Multi-endpoint routing (multiple keys, accounts, or providers)
+
+`create_llm` accepts an `endpoints=[...]` list to route a single logical worker across multiple logical "endpoints" (which could be different API keys, accounts, regions, or even providers). The worker holds an internal pool, picks one endpoint per call (round-robin by default), and enforces a separate set of limits *per endpoint*. Concurrent calls fan out across endpoints automatically.
+
+Each endpoint dict can carry its own `model`, `api_key`, `api_base`, and a per-endpoint `limits=` block. Bookkeeping fields (anything else you put in the dict, e.g. `account_id`, `region`) are preserved on the resolved config object — they don't reach the LLM call but are visible to a custom `endpoint_resolver` if you set one (see "Custom endpoint resolvers" below).
+
+**Example: Using 3 OpenAI keys, and setting 5-hour and 1-week call limits, 5-hour spend cap, concurrency cap per endpoint.**
+
+OpenAI rate limits are per-key, not per-account. By giving each key its own endpoint with its own limit set, SlowBurn enforces all four constraints independently and routes around any key that's currently saturated.
+
+```python
+from concurry import RateLimit, RateLimitAlgorithm
+from slowburn import CostLimit, create_llm
+
+WINDOW_5H = 5 * 3600    # 5 hours in seconds
+WINDOW_1W = 7 * 86400   # 1 week in seconds
+
+def endpoint_with_limits(*, name, api_key, max_calls_5h, max_calls_1w, budget_5h_usd, max_concurrent):
+    return {
+        "endpoint_id": name,                       # label for cost reports
+        "api_key": api_key,                        # this key only on this endpoint
+        # Per-endpoint limits replace the global cascade for any slot they set.
+        "limits": dict(
+            # Two RateLimits on the same slot -> both windows enforced.
+            requests=[
+                RateLimit(key="requests", capacity=max_calls_5h,
+                          window=WINDOW_5H, algorithm=RateLimitAlgorithm.GCRA),
+                RateLimit(key="requests", capacity=max_calls_1w,
+                          window=WINDOW_1W, algorithm=RateLimitAlgorithm.GCRA),
+            ],
+            # Dollar budget reset every 5 hours.
+            budget=[
+                CostLimit(budget_usd=budget_5h_usd, window=WINDOW_5H,
+                          algorithm=RateLimitAlgorithm.GCRA),
+            ],
+            # Cap on simultaneously in-flight requests on this key.
+            concurrency=max_concurrent,
+        ),
+    }
+
+endpoints = [
+    endpoint_with_limits(
+        name="openai-key-a", api_key="sk-...AAA",
+        max_calls_5h=2_500, max_calls_1w=50_000,
+        budget_5h_usd=10.0, max_concurrent=8),
+    endpoint_with_limits(
+        name="openai-key-b", api_key="sk-...BBB",
+        max_calls_5h=2_500, max_calls_1w=50_000,
+        budget_5h_usd=10.0, max_concurrent=8),
+    endpoint_with_limits(
+        name="openai-key-c", api_key="sk-...CCC",
+        max_calls_5h=1_000, max_calls_1w=20_000,
+        budget_5h_usd=4.0,  max_concurrent=5),
+]
+
+llm = create_llm(
+    model="openai/gpt-5.5",                       # litellm model id; substitute any
+    api_base="https://api.openai.com/v1",         # shared by all 3 endpoints here
+    endpoints=endpoints,
+    load_balancing="RoundRobin",                  # also: "LeastActiveLoad", "Random"
+)
+
+# Concurrent calls round-robin across the 3 keys; each enforces its own limits.
+results = llm.call_llm_batch(prompts=["...", "...", "..."]).result()
+
+# Cost report breaks down by endpoint_id ("openai-key-a", ...).
+print(llm.get_reporter().result().to_markdown())
+llm.stop()
+```
+
+A few rules to know:
+
+- **Limits cascade is replace-slot.** If an endpoint sets `limits.requests`, its `requests` slot fully replaces the global one for that endpoint — there is no per-window merging across cascade layers. Any slot the endpoint omits inherits from the global `create_llm(limits=...)` (and from the library default if that's also unset).
+- **Endpoints with no per-slot override share one limit instance.** If you set a global `limits=dict(rpm=300)` and three endpoints don't override `requests`, all three share the *same* `RateLimit` object — so the 300 req/min cap is enforced *across* the pool, not 3 × 300. Endpoints that override get private limits.
+- **Custom windows need explicit `RateLimit` / `CostLimit`.** Shorthand suffixes only cover `second` / `minute` / `hour` / `day` / `week` (and their aliases). For 5-hour, monthly, etc., construct the limit object yourself with `window=<seconds>`, as in the example above.
+- **Different providers in the same pool work too.** Mix `model="gpt-4o"` on one endpoint, `model="anthropic/claude-3-5-sonnet"` on another, `model="bedrock/..."` on a third. Each endpoint's `model` is what reaches `litellm.acompletion`. The worker-level `model=` is just the fallback for endpoints that don't specify one.
+
+#### Custom endpoint resolvers
+
+For credential flows that need to run *per call* (e.g. AWS STS role-assume chains where session tokens expire every 15 minutes), pass `endpoint_resolver=`. The resolver is a `Callable[[Dict[str, Any]], Dict[str, Any]]` that runs after the pool selects an endpoint but before the LLM call; it sees the endpoint's serialized config (including any extra bookkeeping fields you put on the endpoint dict) and returns an augmented dict. Common pattern: read `account_id` / `role_arn` from the input dict, perform the assume-role chain, return the same dict with `litellm_params={"aws_access_key_id": ..., "aws_secret_access_key": ..., "aws_session_token": ..., "aws_region_name": ...}` populated.
+
+See `tests/test_e2e_bedrock_multi_region.py` for a complete N-hop STS resolver against multi-account AWS Bedrock.
+
 ## Framework Integrations
 
 SlowBurn provides drop-in hooks that add backpressure-based budget enforcement to existing agent frameworks. Each hook intercepts LLM calls at the framework's extension point and routes them through a shared limit set.
@@ -301,35 +384,6 @@ Between iterations, backpressure paused the agent for ~18 seconds until the budg
 | Framework hooks | 4 | 2 | Proxy | Many | --- |
 | Infrastructure | Zero | Zero | Proxy | Server | Zero |
 | Paper-ready export | Markdown + LaTeX | --- | --- | --- | --- |
-
-## Project Structure
-
-```
-slowburn/
-├── src/slowburn/
-│   ├── __init__.py                 # create_llm() entry point
-│   ├── config.py                   # SlowBurnConfig, temp_config(), _NO_ARG sentinel
-│   ├── constants.py                # Literal type aliases (ImageDetailLevel, ToolChoiceOption, etc.)
-│   ├── llm_worker.py               # SlowBurnLLM asyncio worker (text, vision, multi-turn, tools)
-│   ├── cost_accounting.py          # estimate_input_tokens(), cost_controlled_call()
-│   ├── limits.py                   # CostLimit (dollar-denominated rate limit)
-│   ├── pricing.py                  # PricingCache (litellm + OpenRouter pricing)
-│   ├── reporter.py                 # CostReporter (JSON, Markdown, LaTeX export)
-│   └── integrations/
-│       ├── autogen.py              # AutoGen (AG2) ModelClient
-│       ├── crewai.py               # CrewAI event bus / hooks middleware
-│       ├── langchain.py            # LangChain callback handler
-│       └── langgraph.py            # LangGraph agent middleware
-├── demos/
-│   ├── Demo.ipynb                      # Interactive demo notebook
-│   ├── demo_native_research_agent.py   # Research agent with web search
-│   ├── demo_native_code_agent.py       # Code improvement agent
-│   ├── demo_crewai_research_team.py    # CrewAI multi-agent demo
-│   ├── demo_autogen_debate.py          # AutoGen debate demo
-│   ├── demo_langchain_reflection.py    # LangChain chain demo
-│   └── demo_langgraph_plan_execute.py  # LangGraph agent demo
-└── README.md
-```
 
 ## Installation
 
