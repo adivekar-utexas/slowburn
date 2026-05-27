@@ -346,11 +346,17 @@ class TestConfigAffectsComponents:
         assert result_tuned > result_default
 
     def test_cost_limit_requires_explicit_window(self) -> None:
-        """``CostLimit`` no longer falls back to a config default — the user must specify a window."""
+        """``CostLimit`` requires the user to specify a window.
+
+        With the old ``__init__`` override this raised ``TypeError`` from the
+        positional-arg machinery; now that ``CostLimit`` is a normal
+        ``Typed`` subclass, pydantic raises a ``ValidationError`` (wrapped
+        by morphic into ``ValueError``) for the missing required field.
+        Either is fine — both reject the construction.
+        """
         from slowburn.limits import CostLimit
 
-        with pytest.raises(TypeError):
-            # No window — should fail.
+        with pytest.raises((TypeError, ValueError)):
             CostLimit(budget_usd=1.0)  # type: ignore[call-arg]
 
     def test_cost_limit_window_is_settable(self) -> None:

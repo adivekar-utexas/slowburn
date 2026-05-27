@@ -60,8 +60,14 @@ class TestCostLimitConstruction:
             CostLimit(budget_usd=float("-inf"), window=RateWindow.Daily)
 
     def test_window_required(self) -> None:
-        """``window`` is positional/required; no library default."""
-        with pytest.raises(TypeError):
+        """``window`` is required; omitting it raises.
+
+        ``CostLimit`` is a ``Typed`` (pydantic) subclass with no ``window``
+        default, so pydantic raises ``ValidationError`` (wrapped by morphic
+        into ``ValueError``). ``TypeError`` is also accepted for resilience
+        against future signature reshuffling.
+        """
+        with pytest.raises((TypeError, ValueError)):
             CostLimit(budget_usd=5.0)  # type: ignore[call-arg]
 
     def test_custom_key(self) -> None:
