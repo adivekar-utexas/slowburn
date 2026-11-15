@@ -14,6 +14,7 @@ crashing with an error.
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import math
 import mimetypes
@@ -24,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Self, TypeVar, Union
 import litellm
 from concurry import async_gather, worker
 from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
+from litellm.types.decisions import DecisionsResponse
 from morphic import Typed, validate
 from morphic.string import format_exception_msg
 from pydantic import Field
@@ -184,6 +186,26 @@ class Usage(Typed):
             output_tokens=output_tokens,
             cost_usd=self.cost_usd,
         )
+
+
+DecisionsState = Union[str, Dict[str, object], List[object]]
+"""The thing a decision model judges: text, a JSON object, or a JSON array."""
+
+DecisionsQuestions = Dict[str, Dict[str, object]]
+"""Named System One questions (``noul`` / ``choice`` / ``score`` / ``box``).
+
+Kept as plain dicts: LiteLLM validates them into its own question models
+(raising ``litellm.BadRequestError`` before any network call), so SlowBurn
+does not duplicate that schema.
+"""
+
+
+class SystemOneRequest(Typed):
+    """One decision-model request in a ``call_systemone_batch`` call."""
+
+    state: DecisionsState
+    questions: DecisionsQuestions
+    extra_headers: Optional[Dict[str, str]] = None
 
 
 @worker(mode="Asyncio")
@@ -657,6 +679,149 @@ class SlowBurnLLM(Typed):
             endpoint_id=endpoint_id,
         )
 
+    async def _acquire_limits(
+        self,
+        *,
+        estimated_usage: Usage,
+        should_track_cost: bool,
+        overflow_message: str,
+    ) -> Any:
+        """Reserve the estimated usage against the LimitPool, blocking until capacity exists.
+
+        This is the "SlowBurn" backpressure point shared by every call type.
+
+        Args:
+            estimated_usage: Conservative pre-call reservation.
+            should_track_cost: Whether the cost dimension is reserved.
+            overflow_message: Call-type-specific explanation used when a single
+                request's estimated cost can never fit in the budget window.
+
+        Returns:
+            The Concurry acquisition context manager. The caller must enter it
+            and account usage exactly once via ``_account_call``.
+        """
+        estimated_limit_usage: Dict[str, int] = self._build_limit_usage(
+            usage=estimated_usage,
+            should_track_cost=should_track_cost,
+        )
+        try:
+            acquire_start: float = time.monotonic()
+            context_manager: Any = await self.limits.async_acquire(requested=estimated_limit_usage)
+            acquire_elapsed: float = time.monotonic() - acquire_start
+        except ValueError as acquire_error:
+            # Concurry uses ValueError for both generic acquire failures and the
+            # specific "single request exceeds limit capacity" case. Only the
+            # latter is handled by SlowBurn's budget-overflow policy.
+            if "exceeds capacity" not in str(acquire_error):
+                raise acquire_error
+
+            # Budget overflow is a caller/configuration problem. Retrying the same
+            # request cannot make it fit inside the configured capacity.
+            if self.on_budget_overflow == "error":
+                raise BudgetOverflowError(overflow_message) from acquire_error
+            elif self.on_budget_overflow == "warn":
+                logger.warning(f"[{self.name}] Budget overflow: {overflow_message}")
+            elif self.on_budget_overflow == "ignore":
+                pass
+            else:
+                raise InvalidConfigValueError(
+                    f"Unknown on_budget_overflow={self.on_budget_overflow!r}. "
+                    "Must be 'error', 'warn', or 'ignore'."
+                ) from acquire_error
+
+            # In warn/ignore mode, acquire the non-cost limits normally but cap the
+            # cost request to zero so a single expensive call does not permanently
+            # block on a capacity it can never fit into.
+            capped_limit_usage: Dict[str, Union[int, float]] = dict(estimated_limit_usage)
+            if should_track_cost:
+                capped_limit_usage[DEFAULT_COST_LIMIT_KEY] = 0.0
+            acquire_start = time.monotonic()
+            context_manager = await self.limits.async_acquire(requested=capped_limit_usage)
+            acquire_elapsed = time.monotonic() - acquire_start
+
+        if self.backpressure_notify == "warn":
+            threshold: float = slowburn_config.defaults.backpressure_threshold_seconds
+            if acquire_elapsed > threshold:
+                logger.warning(
+                    f"[{self.name}] Backpressure: blocked {acquire_elapsed:.1f}s "
+                    f"waiting for budget/rate capacity "
+                    f"(estimated ${estimated_usage.cost_usd:.6f}, "
+                    f"~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens)"
+                )
+        return context_manager
+
+    def _resolve_endpoint_config(
+        self,
+        *,
+        acquisition: Any,
+        estimated_usage: Usage,
+        should_track_cost: bool,
+    ) -> EndpointConfig:
+        """Rebuild the selected endpoint's ``EndpointConfig`` and run the resolver.
+
+        On resolver failure the reservation is accounted (with zero output
+        tokens) before re-raising, so capacity does not leak.
+        """
+        # Concurry stores whatever dict was passed to LimitSet(config=...)
+        # on the acquisition. When SlowBurn built the pool via create_llm,
+        # this is a fully-populated EndpointConfig.model_dump() (with
+        # ``_rate_keys`` extra). When the user constructed a LimitSet
+        # manually with no config, it is an empty dict. EndpointConfig is
+        # strict (all known fields required) so we backfill any missing
+        # fields from the worker's own attributes before validating.
+        raw_config: Dict[str, Any] = dict(getattr(acquisition, "config", None) or {})
+        # ``_rate_keys`` is metadata for the worker, not an EndpointConfig
+        # field — strip before validation.
+        raw_config.pop("_rate_keys", None)
+        cfg = slowburn_config.defaults
+        _resolved_max_tokens_default: int = (
+            self.max_tokens if not is_no_arg(self.max_tokens) else cfg.max_tokens
+        )
+        _resolved_timeout_default: float = self.timeout if not is_no_arg(self.timeout) else cfg.timeout
+        _resolved_temperature_default: Optional[float] = (
+            self.temperature if not is_no_arg(self.temperature) else cfg.temperature
+        )
+        # Backfill any missing EndpointConfig fields from the worker's own
+        # attributes / library defaults. ``limits`` is left untouched —
+        # ``None`` is a valid value (means "inherit"), and the LimitSet
+        # the worker is using has already been built and contains the
+        # actual Limit objects. The ``EndpointConfig`` is rebuilt here
+        # purely so the per-call cascade and the resolver can read its
+        # fields; it is not used to re-derive limits.
+        _worker_endpoint_defaults: Dict[str, Any] = {
+            "model": self.model_name,
+            "api_key": self.api_key,
+            "api_base": self.api_base,
+            "temperature": _resolved_temperature_default,
+            "max_tokens": _resolved_max_tokens_default,
+            "timeout": _resolved_timeout_default,
+        }
+        for _field, _default in _worker_endpoint_defaults.items():
+            raw_config.setdefault(_field, _default)
+        endpoint_config: EndpointConfig = EndpointConfig(**raw_config)
+
+        # Run the user's resolver (default = passthrough). The resolver
+        # receives a serialized dict (so the user can write dict-style code
+        # without depending on EndpointConfig's typing). The dict it returns
+        # is re-validated into a new EndpointConfig.
+        resolver = self.endpoint_resolver if self.endpoint_resolver is not None else passthrough_resolver
+        try:
+            augmented_dict: Dict[str, Any] = resolver(endpoint_config.model_dump())
+        except Exception as resolver_error:
+            # Resolver failures are deterministic configuration errors —
+            # retrying does not change the resolver. Account the
+            # reservation back to the bucket before re-raising so we do
+            # not leak capacity.
+            self._account_call(
+                acquisition=acquisition,
+                usage=estimated_usage.with_output_tokens(output_tokens=0),
+                should_track_cost=should_track_cost,
+                model=self.model_name,
+                endpoint_id=endpoint_config.endpoint_id,
+            )
+            raise resolver_error
+        return EndpointConfig(**augmented_dict)
+
     async def _call_with_timeout(
         self,
         *,
@@ -886,11 +1051,6 @@ class SlowBurnLLM(Typed):
             should_track_cost=should_track_cost,
             max_tokens=pre_max_tokens,
         )
-        estimated_limit_usage: Dict[str, int] = self._build_limit_usage(
-            usage=estimated_usage,
-            should_track_cost=should_track_cost,
-        )
-
         call_t0: float = time.monotonic()
         prompt_hash: str = _hash_prompt(prompt)
         if verbosity >= 3:
@@ -901,18 +1061,10 @@ class SlowBurnLLM(Typed):
                 f"timeout={self.timeout}s tools={tools is not None and len(tools) > 0}"
             )
 
-        try:
-            acquire_start: float = time.monotonic()
-            context_manager: Any = await self.limits.async_acquire(requested=estimated_limit_usage)
-            acquire_elapsed: float = time.monotonic() - acquire_start
-        except ValueError as acquire_error:
-            # Concurry uses ValueError for both generic acquire failures and the
-            # specific "single request exceeds limit capacity" case. Only the
-            # latter is handled by SlowBurn's budget-overflow policy.
-            if "exceeds capacity" not in str(acquire_error):
-                raise acquire_error
-
-            overflow_message: str = (
+        context_manager: Any = await self._acquire_limits(
+            estimated_usage=estimated_usage,
+            should_track_cost=should_track_cost,
+            overflow_message=(
                 f"A single call_llm() call to {self.model_name} is estimated to cost "
                 f"${estimated_usage.cost_usd:.6f} "
                 f"(~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens), "
@@ -920,110 +1072,21 @@ class SlowBurnLLM(Typed):
                 f"Fix by: (1) increasing the budget while creating the LLM, "
                 f"(2) reducing max_tokens (currently {pre_max_tokens}), "
                 f"or (3) using a more budget-friendly model."
-            )
-
-            # Budget overflow is a caller/configuration problem. Retrying the same
-            # request cannot make it fit inside the configured capacity.
-            if self.on_budget_overflow == "error":
-                raise BudgetOverflowError(overflow_message) from acquire_error
-            elif self.on_budget_overflow == "warn":
-                logger.warning(f"[{self.name}] Budget overflow: {overflow_message}")
-            elif self.on_budget_overflow == "ignore":
-                pass
-            else:
-                raise InvalidConfigValueError(
-                    f"Unknown on_budget_overflow={self.on_budget_overflow!r}. "
-                    "Must be 'error', 'warn', or 'ignore'."
-                ) from acquire_error
-
-            # In warn/ignore mode, acquire the non-cost limits normally but cap the
-            # cost request to zero so a single expensive call does not permanently
-            # block on a capacity it can never fit into.
-            capped_limit_usage: Dict[str, Union[int, float]] = dict(estimated_limit_usage)
-            if should_track_cost:
-                capped_limit_usage[DEFAULT_COST_LIMIT_KEY] = 0.0
-            acquire_start = time.monotonic()
-            context_manager = await self.limits.async_acquire(requested=capped_limit_usage)
-            acquire_elapsed = time.monotonic() - acquire_start
-
-        if self.backpressure_notify == "warn":
-            threshold: float = slowburn_config.defaults.backpressure_threshold_seconds
-            if acquire_elapsed > threshold:
-                logger.warning(
-                    f"[{self.name}] Backpressure: blocked {acquire_elapsed:.1f}s "
-                    f"waiting for budget/rate capacity "
-                    f"(estimated ${estimated_usage.cost_usd:.6f}, "
-                    f"~{estimated_usage.input_tokens} input + {estimated_usage.output_tokens} output tokens)"
-                )
+            ),
+        )
 
         # From this point on, every failure path must update both the acquisition and
         # reporter exactly once with either actual usage (after a response exists) or
         # estimated usage (before a response exists).
         async with context_manager as acquisition:
             # ---------------------------------------------------------------
-            # Step 1: rebuild the typed EndpointConfig from the acquisition.
+            # Steps 1-2: rebuild the EndpointConfig and run the resolver.
             # ---------------------------------------------------------------
-            # Concurry stores whatever dict was passed to LimitSet(config=...)
-            # on the acquisition. When SlowBurn built the pool via create_llm,
-            # this is a fully-populated EndpointConfig.model_dump() (with
-            # ``_rate_keys`` extra). When the user constructed a LimitSet
-            # manually with no config, it is an empty dict. EndpointConfig is
-            # strict (all known fields required) so we backfill any missing
-            # fields from the worker's own attributes before validating.
-            raw_config: Dict[str, Any] = dict(getattr(acquisition, "config", None) or {})
-            # ``_rate_keys`` is metadata for the worker, not an EndpointConfig
-            # field — strip before validation.
-            raw_config.pop("_rate_keys", None)
-            cfg = slowburn_config.defaults
-            _resolved_max_tokens_default: int = (
-                self.max_tokens if not is_no_arg(self.max_tokens) else cfg.max_tokens
+            endpoint_config: EndpointConfig = self._resolve_endpoint_config(
+                acquisition=acquisition,
+                estimated_usage=estimated_usage,
+                should_track_cost=should_track_cost,
             )
-            _resolved_timeout_default: float = self.timeout if not is_no_arg(self.timeout) else cfg.timeout
-            _resolved_temperature_default: Optional[float] = (
-                self.temperature if not is_no_arg(self.temperature) else cfg.temperature
-            )
-            # Backfill any missing EndpointConfig fields from the worker's own
-            # attributes / library defaults. ``limits`` is left untouched —
-            # ``None`` is a valid value (means "inherit"), and the LimitSet
-            # the worker is using has already been built and contains the
-            # actual Limit objects. The ``EndpointConfig`` is rebuilt here
-            # purely so the per-call cascade and the resolver can read its
-            # fields; it is not used to re-derive limits.
-            _worker_endpoint_defaults: Dict[str, Any] = {
-                "model": self.model_name,
-                "api_key": self.api_key,
-                "api_base": self.api_base,
-                "temperature": _resolved_temperature_default,
-                "max_tokens": _resolved_max_tokens_default,
-                "timeout": _resolved_timeout_default,
-            }
-            for _field, _default in _worker_endpoint_defaults.items():
-                raw_config.setdefault(_field, _default)
-            endpoint_config: EndpointConfig = EndpointConfig(**raw_config)
-
-            # ---------------------------------------------------------------
-            # Step 2: run the user's resolver (default = passthrough). The
-            # resolver receives a serialized dict (so the user can write
-            # dict-style code without depending on EndpointConfig's typing).
-            # The dict it returns is re-validated into a new EndpointConfig.
-            # ---------------------------------------------------------------
-            resolver = self.endpoint_resolver if self.endpoint_resolver is not None else passthrough_resolver
-            try:
-                augmented_dict: Dict[str, Any] = resolver(endpoint_config.model_dump())
-            except Exception as resolver_error:
-                # Resolver failures are deterministic configuration errors —
-                # retrying does not change the resolver. Account the
-                # reservation back to the bucket before re-raising so we do
-                # not leak capacity.
-                self._account_call(
-                    acquisition=acquisition,
-                    usage=estimated_usage.with_output_tokens(output_tokens=0),
-                    should_track_cost=should_track_cost,
-                    model=self.model_name,
-                    endpoint_id=endpoint_config.endpoint_id,
-                )
-                raise resolver_error
-            endpoint_config = EndpointConfig(**augmented_dict)
 
             # ---------------------------------------------------------------
             # Step 3: cascade per-call > endpoint > worker default for every
@@ -1345,6 +1408,240 @@ class SlowBurnLLM(Typed):
                 disable=verbosity < 2,
                 desc=f"{self.name}",
                 miniters=max(len(prompts) // 2, 1),
+            ),
+        )
+        return results
+
+    def _estimate_decisions_usage(
+        self,
+        *,
+        state: DecisionsState,
+        questions: DecisionsQuestions,
+        should_track_cost: bool,
+    ) -> Usage:
+        """Estimate the pre-call reservation for a decision-model request.
+
+        Input tokens are counted over the serialized request body (state and
+        questions), with the same safety multiplier and overhead as chat calls.
+        Decision models produce no generated text, so output tokens (and the
+        output-cost portion) are zero.
+        """
+        defaults = slowburn_config.defaults
+        serialized_body: str = json.dumps({"state": state, "questions": questions}, default=str)
+        base_input_tokens: int = litellm.token_counter(model=self.model_name, text=serialized_body)
+        input_tokens: int = (
+            int(base_input_tokens * defaults.input_token_estimate_multiplier)
+            + defaults.input_token_estimate_overhead
+        )
+        cost_usd: float = 0.0
+        if should_track_cost:
+            cost_usd = PricingCache.estimate_cost_usd(self.model_name, input_tokens, 0)
+        return Usage(input_tokens=input_tokens, output_tokens=0, cost_usd=cost_usd)
+
+    @validate
+    async def call_systemone(
+        self,
+        *,
+        state: DecisionsState,
+        questions: DecisionsQuestions,
+        verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+        timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> DecisionsResponse:
+        """Execute one decision-model (System One) call with cost-aware backpressure.
+
+        Same pipeline as :meth:`call_llm` — estimate, ``limits.async_acquire``,
+        endpoint cascade, call, account — but calls ``litellm.asystemone``
+        instead of ``litellm.acompletion``.
+
+        Only ``model`` / ``api_key`` / ``api_base`` / ``timeout`` flow through
+        the endpoint cascade. Chat-only settings (``temperature``,
+        ``max_tokens``, ``tools``, ``litellm_params`` such as
+        ``reasoning_effort`` or ``extra_body``) are never forwarded: decision
+        models do not accept them.
+
+        Args:
+            state: The thing being judged (text, JSON object or JSON array).
+            questions: Named System One questions, e.g.
+                ``{"harm": {"type": "choice", "criteria": {"yes": None, "no": None}}}``.
+                LiteLLM validates them and raises ``litellm.BadRequestError``
+                before any network call when they are invalid.
+            verbosity: Logging verbosity. Defaults to
+                ``slowburn_config.defaults.verbosity``.
+            timeout: Per-call timeout in seconds. Cascade: per-call > endpoint
+                config > worker default.
+            extra_headers: Extra HTTP headers for this request.
+
+        Returns:
+            LiteLLM's ``DecisionsResponse`` (``answers``, ``usage``, ``model``).
+        """
+        if is_no_arg(verbosity):
+            verbosity = slowburn_config.defaults.verbosity
+
+        should_track_cost: bool = self._should_track_cost()
+        estimated_usage: Usage = self._estimate_decisions_usage(
+            state=state,
+            questions=questions,
+            should_track_cost=should_track_cost,
+        )
+        call_t0: float = time.monotonic()
+        request_hash: str = _hash_prompt({"state": state, "questions": questions})
+        if verbosity >= 3:
+            logger.info(
+                f"[{self.name}] [Request={request_hash}] SYSTEMONE_START | "
+                f"model={self.model_name} est_in={estimated_usage.input_tokens} "
+                f"questions={list(questions.keys())}"
+            )
+
+        context_manager: Any = await self._acquire_limits(
+            estimated_usage=estimated_usage,
+            should_track_cost=should_track_cost,
+            overflow_message=(
+                f"A single call_systemone() call to {self.model_name} is estimated to cost "
+                f"${estimated_usage.cost_usd:.6f} (~{estimated_usage.input_tokens} input tokens), "
+                f"which exceeds your budget_usd per window. "
+                f"Fix by: (1) increasing the budget while creating the LLM, "
+                f"(2) sending a smaller state or fewer questions, "
+                f"or (3) using a more budget-friendly model."
+            ),
+        )
+
+        async with context_manager as acquisition:
+            endpoint_config: EndpointConfig = self._resolve_endpoint_config(
+                acquisition=acquisition,
+                estimated_usage=estimated_usage,
+                should_track_cost=should_track_cost,
+            )
+            resolved_model: str = cascade_field(
+                field="model",
+                call_value=_NO_ARG,
+                config_value=endpoint_config.model,
+                worker_default=self.model_name,
+            )
+            resolved_api_key: Optional[str] = cascade_field(
+                field="api_key",
+                call_value=_NO_ARG,
+                config_value=endpoint_config.api_key,
+                worker_default=self.api_key,
+            )
+            resolved_api_base: Optional[str] = cascade_field(
+                field="api_base",
+                call_value=_NO_ARG,
+                config_value=endpoint_config.api_base,
+                worker_default=self.api_base,
+            )
+            resolved_timeout: float = cascade_field(
+                field="timeout",
+                call_value=timeout,
+                config_value=endpoint_config.timeout,
+                worker_default=self.timeout,
+            )
+            endpoint_id: Optional[str] = endpoint_config.endpoint_id
+
+            try:
+                response: DecisionsResponse = await asyncio.wait_for(
+                    litellm.asystemone(
+                        model=resolved_model,
+                        state=state,
+                        questions=questions,
+                        api_key=resolved_api_key,
+                        api_base=resolved_api_base,
+                        timeout=resolved_timeout,
+                        extra_headers=extra_headers,
+                    ),
+                    timeout=resolved_timeout,
+                )
+            except BaseException as call_error:
+                # No response exists, so account the conservative estimate.
+                self._account_call(
+                    acquisition=acquisition,
+                    usage=estimated_usage,
+                    should_track_cost=should_track_cost,
+                    model=resolved_model,
+                    endpoint_id=endpoint_id,
+                )
+                if verbosity >= 2:
+                    logger.warning(
+                        f"[{resolved_model}] [Request={request_hash}] SYSTEMONE_ERROR | "
+                        f"{type(call_error).__name__} at {time.monotonic() - call_t0:.2f}s: "
+                        f"{format_exception_msg(call_error)}"
+                    )
+                raise call_error
+
+            try:
+                cost_usd: float = PricingCache.actual_decisions_cost_usd(
+                    response=response, model=resolved_model
+                )
+            except ModelNotFoundError:
+                # Same policy as _extract_actual_cost: the response was already
+                # produced; unknown pricing was handled pre-call by
+                # on_pricing_unavailable and must not turn into a retry.
+                cost_usd = 0.0
+            # LiteLLM types usage as optional; without it the conservative
+            # estimate is the best record of what was sent.
+            actual_usage: Usage = Usage(
+                input_tokens=(
+                    response.usage.input_tokens
+                    if response.usage is not None
+                    else estimated_usage.input_tokens
+                ),
+                output_tokens=response.usage.output_tokens if response.usage is not None else 0,
+                cost_usd=cost_usd,
+            )
+            self._account_call(
+                acquisition=acquisition,
+                usage=actual_usage,
+                should_track_cost=should_track_cost,
+                model=resolved_model,
+                endpoint_id=endpoint_id,
+            )
+            if verbosity >= 2:
+                endpoint_suffix: str = f" via {endpoint_id}" if endpoint_id is not None else ""
+                logger.info(
+                    f"[{resolved_model}]{endpoint_suffix}: systemone "
+                    f"{actual_usage.input_tokens}+{actual_usage.output_tokens} tokens, "
+                    f"${actual_usage.cost_usd:.6f}"
+                )
+            return response
+
+    @validate
+    async def call_systemone_batch(
+        self,
+        *,
+        requests: List[SystemOneRequest],
+        verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+    ) -> List[DecisionsResponse]:
+        """Execute multiple decision-model calls concurrently with shared backpressure.
+
+        Each request goes through :meth:`call_systemone` (and is retried
+        individually per the worker's retry configuration).
+
+        Args:
+            requests: One :class:`SystemOneRequest` per call.
+            verbosity: Logging verbosity.
+
+        Returns:
+            One ``DecisionsResponse`` per request, in request order.
+        """
+        if is_no_arg(verbosity):
+            verbosity = slowburn_config.defaults.verbosity
+        if len(requests) == 0:
+            return []
+        tasks = [
+            self.call_systemone(
+                state=request.state,
+                questions=request.questions,
+                extra_headers=request.extra_headers,
+                verbosity=verbosity,
+            )
+            for request in requests
+        ]
+        results: List[DecisionsResponse] = await async_gather(
+            tasks,
+            progress=dict(
+                disable=verbosity < 2,
+                desc=f"{self.name}",
+                miniters=max(len(requests) // 2, 1),
             ),
         )
         return results

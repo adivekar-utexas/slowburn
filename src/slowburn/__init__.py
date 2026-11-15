@@ -62,13 +62,23 @@ from .exceptions import (
 )
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from .limits_spec import SLOT_TO_LIMIT_KEY, SlowBurnLimits, default_slowburn_limits
-from .llm_worker import ImageInput, SlowBurnLLM
+from .llm_worker import (
+    DecisionsQuestions,
+    DecisionsState,
+    ImageInput,
+    SlowBurnLLM,
+    SystemOneRequest,
+)
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
 __all__: List[str] = [
     "create_llm",
     "_DEFAULT_RETRY_ON",
+    "_DEFAULT_SYSTEMONE_RETRY_ON",
+    "DecisionsQuestions",
+    "DecisionsState",
+    "SystemOneRequest",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
@@ -112,6 +122,21 @@ _DEFAULT_RETRY_ON: List[Type[BaseException]] = [
     litellm.APIError,
     litellm.APIConnectionError,
     litellm.BadRequestError,
+    litellm.InternalServerError,
+    litellm.RateLimitError,
+    litellm.ServiceUnavailableError,
+]
+
+
+# Retries for ``call_systemone``. Unlike ``_DEFAULT_RETRY_ON`` this excludes
+# ``litellm.BadRequestError`` and ``ValueError``: decision responses are typed,
+# not parsed text, so an invalid request (e.g. a score question with > 10
+# levels, or a validation error) is deterministic and retrying cannot fix it.
+_DEFAULT_SYSTEMONE_RETRY_ON: List[Type[BaseException]] = [
+    asyncio.TimeoutError,
+    litellm.Timeout,
+    litellm.APIError,
+    litellm.APIConnectionError,
     litellm.InternalServerError,
     litellm.RateLimitError,
     litellm.ServiceUnavailableError,
@@ -383,8 +408,11 @@ def create_llm(
         temperature: Default sampling temperature.
         max_tokens: Default max output tokens.
         timeout: Default per-call timeout in seconds.
-        num_retries: Number of retries on transient errors.
+        num_retries: Number of retries on transient errors, for both
+            ``call_llm`` and ``call_systemone``.
         retry_on: Exception types that trigger a retry on ``call_llm``.
+            ``call_systemone`` always uses ``_DEFAULT_SYSTEMONE_RETRY_ON``
+            (transient API errors only; never ``BadRequestError``).
         retry_wait: Base wait time in seconds for transient-error retries.
         retry_algorithm: Backoff strategy ("Exponential" / "Linear" / "Fibonacci").
         retry_jitter: Jitter factor in [0, 1] added to each retry wait.
@@ -474,11 +502,15 @@ def create_llm(
     llm = SlowBurnLLM.options(
         mode=backend,
         limits=limit_pool,
-        num_retries={"call_llm": num_retries, "*": 0},
-        retry_on={"call_llm": retry_on, "*": []},
-        retry_wait={"call_llm": retry_wait, "*": 1},
-        retry_algorithm={"call_llm": retry_algorithm, "*": RetryAlgorithm.Exponential},
-        retry_jitter={"call_llm": retry_jitter, "*": 0},
+        num_retries={"call_llm": num_retries, "call_systemone": num_retries, "*": 0},
+        retry_on={"call_llm": retry_on, "call_systemone": _DEFAULT_SYSTEMONE_RETRY_ON, "*": []},
+        retry_wait={"call_llm": retry_wait, "call_systemone": retry_wait, "*": 1},
+        retry_algorithm={
+            "call_llm": retry_algorithm,
+            "call_systemone": retry_algorithm,
+            "*": RetryAlgorithm.Exponential,
+        },
+        retry_jitter={"call_llm": retry_jitter, "call_systemone": retry_jitter, "*": 0},
     ).init(
         name=name,
         model_name=model,
