@@ -19,7 +19,7 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 import litellm
-from litellm.types.decisions import DecisionsResponse
+from litellm.types.decisions import OpenAIDecisionResponse
 
 from .config import slowburn_config
 
@@ -249,8 +249,8 @@ class PricingCache:
         )
 
     @staticmethod
-    def actual_decisions_cost_usd(*, response: DecisionsResponse, model: str) -> float:
-        """Post-call cost of a decision-model (System One) response, in dollars.
+    def actual_decisions_cost_usd(*, response: OpenAIDecisionResponse, model: str) -> float:
+        """Post-call cost of a decision-model (OpenAI Decisions) response, in dollars.
 
         Tier 1: ``response._hidden_params["response_cost"]`` (LiteLLM's own
         calculation). Zero is a valid cost here, unlike the chat path.

@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Self, TypeVar, Union
 import litellm
 from concurry import async_gather, worker
 from litellm.litellm_core_utils.logging_worker import GLOBAL_LOGGING_WORKER
-from litellm.types.decisions import DecisionsResponse
+from litellm.types.decisions import OpenAIDecisionResponse
 from morphic import Typed, validate
 from morphic.string import format_exception_msg
 from pydantic import Field
@@ -1422,19 +1422,19 @@ class SlowBurnLLM(Typed):
     def _estimate_decisions_usage(
         self,
         *,
-        state: Union[str, Dict[str, Any], List[Any]],
-        questions: Dict[str, Dict[str, Any]],
+        input: Union[str, List[Dict[str, Any]]],
+        questions: List[Dict[str, Any]],
         should_track_cost: bool,
     ) -> Usage:
         """Estimate the pre-call reservation for a decision-model request.
 
-        Input tokens are counted over the serialized request body (state and
+        Input tokens are counted over the serialized request body (input and
         questions), with the same safety multiplier and overhead as chat calls.
         Decision models produce no generated text, so output tokens (and the
         output-cost portion) are zero.
         """
         defaults = slowburn_config.defaults
-        serialized_body: str = json.dumps({"state": state, "questions": questions}, default=str)
+        serialized_body: str = json.dumps({"input": input, "questions": questions}, default=str)
         base_input_tokens: int = litellm.token_counter(model=self.model_name, text=serialized_body)
         input_tokens: int = (
             int(base_input_tokens * defaults.input_token_estimate_multiplier)
@@ -1446,20 +1446,25 @@ class SlowBurnLLM(Typed):
         return Usage(input_tokens=input_tokens, output_tokens=0, cost_usd=cost_usd)
 
     @validate
-    async def call_systemone(
+    async def call_decision(
         self,
         *,
-        state: Union[str, Dict[str, Any], List[Any]],
-        questions: Dict[str, Dict[str, Any]],
+        input: Union[str, List[Dict[str, Any]]],
+        questions: List[Dict[str, Any]],
+        safety_identifier: Optional[str] = None,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
         extra_headers: Optional[Dict[str, str]] = None,
-    ) -> DecisionsResponse:
-        """Execute one decision-model (System One) call with cost-aware backpressure.
+    ) -> OpenAIDecisionResponse:
+        """Execute one decision-model call (OpenAI Decisions format) with cost-aware backpressure.
 
         Same pipeline as :meth:`call_llm` — estimate, ``limits.async_acquire``,
-        endpoint cascade, call, account — but calls ``litellm.asystemone``
-        instead of ``litellm.acompletion``.
+        endpoint cascade, call, account — but calls ``litellm.adecisions``
+        instead of ``litellm.acompletion``. The request and response use the
+        OpenAI Decisions format for every provider: LiteLLM translates it for
+        System One providers such as TypeSafe Jev, so the same call works
+        against OpenAI decision models, Jev, or a LiteLLM proxy's
+        ``/v1/decisions`` route.
 
         Only ``model`` / ``api_key`` / ``api_base`` / ``timeout`` flow through
         the endpoint cascade. Chat-only settings (``temperature``,
@@ -1468,13 +1473,17 @@ class SlowBurnLLM(Typed):
         models do not accept them.
 
         Args:
-            state: The thing being judged (text, JSON object or JSON array).
-            questions: Named System One questions (``noul`` / ``choice`` /
-                ``score`` / ``box``), e.g.
-                ``{"harm": {"type": "choice", "criteria": {"yes": None, "no": None}}}``.
+            input: The thing being judged: a string, or OpenAI input messages
+                shaped like ``{"type": "message", "role": "user", "content": ...}``.
+            questions: OpenAI Decisions questions (``predicate`` / ``choice`` /
+                ``score`` / ``box``), answered in the same order, e.g.
+                ``[{"type": "choice", "name": "harm", "instructions": "...",
+                "choices": [{"value": "harmful"}, {"value": "unharmful"}]}]``.
                 Kept as plain dicts: LiteLLM validates them and raises
                 ``litellm.BadRequestError`` before any network call when they
                 are invalid, so SlowBurn does not duplicate that schema.
+            safety_identifier: Optional stable end-user ID. Only forwarded when
+                set, since non-OpenAI providers reject it.
             verbosity: Logging verbosity. Defaults to
                 ``slowburn_config.defaults.verbosity``.
             timeout: Per-call timeout in seconds. Cascade: per-call > endpoint
@@ -1482,35 +1491,35 @@ class SlowBurnLLM(Typed):
             extra_headers: Extra HTTP headers for this request.
 
         Returns:
-            LiteLLM's ``DecisionsResponse`` (``answers``, ``usage``, ``model``).
+            LiteLLM's ``OpenAIDecisionResponse`` (``answers`` list, ``usage``, ``model``).
         """
         if is_no_arg(verbosity):
             verbosity = slowburn_config.defaults.verbosity
 
         should_track_cost: bool = self._should_track_cost()
         estimated_usage: Usage = self._estimate_decisions_usage(
-            state=state,
+            input=input,
             questions=questions,
             should_track_cost=should_track_cost,
         )
         call_t0: float = time.monotonic()
-        request_hash: str = _hash_prompt({"state": state, "questions": questions})
+        request_hash: str = _hash_prompt({"input": input, "questions": questions})
         if verbosity >= 3:
             logger.info(
-                f"[{self.name}] [Request={request_hash}] SYSTEMONE_START | "
+                f"[{self.name}] [Request={request_hash}] DECISION_START | "
                 f"model={self.model_name} est_in={estimated_usage.input_tokens} "
-                f"questions={list(questions.keys())}"
+                f"questions={[question.get('name') for question in questions]}"
             )
 
         context_manager: Any = await self._acquire_limits(
             estimated_usage=estimated_usage,
             should_track_cost=should_track_cost,
             overflow_message=(
-                f"A single call_systemone() call to {self.model_name} is estimated to cost "
+                f"A single call_decision() call to {self.model_name} is estimated to cost "
                 f"${estimated_usage.cost_usd:.6f} (~{estimated_usage.input_tokens} input tokens), "
                 f"which exceeds your budget_usd per window. "
                 f"Fix by: (1) increasing the budget while creating the LLM, "
-                f"(2) sending a smaller state or fewer questions, "
+                f"(2) sending a smaller input or fewer questions, "
                 f"or (3) using a more budget-friendly model."
             ),
         )
@@ -1546,17 +1555,21 @@ class SlowBurnLLM(Typed):
                 worker_default=self.timeout,
             )
             endpoint_id: Optional[str] = endpoint_config.endpoint_id
+            optional_kwargs: Dict[str, Any] = {}
+            if safety_identifier is not None:
+                optional_kwargs["safety_identifier"] = safety_identifier
 
             try:
-                response: DecisionsResponse = await asyncio.wait_for(
-                    litellm.asystemone(
+                response: OpenAIDecisionResponse = await asyncio.wait_for(
+                    litellm.adecisions(
                         model=resolved_model,
-                        state=state,
+                        input=input,
                         questions=questions,
                         api_key=resolved_api_key,
                         api_base=resolved_api_base,
                         timeout=resolved_timeout,
                         extra_headers=extra_headers,
+                        **optional_kwargs,
                     ),
                     timeout=resolved_timeout,
                 )
@@ -1571,7 +1584,7 @@ class SlowBurnLLM(Typed):
                 )
                 if verbosity >= 2:
                     logger.warning(
-                        f"[{resolved_model}] [Request={request_hash}] SYSTEMONE_ERROR | "
+                        f"[{resolved_model}] [Request={request_hash}] DECISION_ERROR | "
                         f"{type(call_error).__name__} at {time.monotonic() - call_t0:.2f}s: "
                         f"{format_exception_msg(call_error)}"
                     )
@@ -1607,59 +1620,62 @@ class SlowBurnLLM(Typed):
             if verbosity >= 2:
                 endpoint_suffix: str = f" via {endpoint_id}" if endpoint_id is not None else ""
                 logger.info(
-                    f"[{resolved_model}]{endpoint_suffix}: systemone "
+                    f"[{resolved_model}]{endpoint_suffix}: decision "
                     f"{actual_usage.input_tokens}+{actual_usage.output_tokens} tokens, "
                     f"${actual_usage.cost_usd:.6f}"
                 )
             return response
 
     @validate
-    async def call_systemone_batch(
+    async def call_decision_batch(
         self,
-        states: List[Union[str, Dict[str, Any], List[Any]]],
+        inputs: List[Union[str, List[Dict[str, Any]]]],
         *,
-        questions: Dict[str, Dict[str, Any]],
+        questions: List[Dict[str, Any]],
+        safety_identifier: Optional[str] = None,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
         extra_headers: Optional[Dict[str, str]] = None,
-    ) -> List[DecisionsResponse]:
+    ) -> List[OpenAIDecisionResponse]:
         """Execute multiple decision-model calls concurrently with shared backpressure.
 
-        Mirrors :meth:`call_llm_batch`: per-item inputs are a list (``states``,
+        Mirrors :meth:`call_llm_batch`: per-item inputs are a list (``inputs``,
         like ``prompts``) and everything else is shared across items. Each
-        state goes through :meth:`call_systemone` (and is retried individually
+        input goes through :meth:`call_decision` (and is retried individually
         per the worker's retry configuration).
 
         Args:
-            states: One state per call (text, JSON object or JSON array).
-            questions: Named System One questions asked of every state.
+            inputs: One input per call (a string or OpenAI input messages).
+            questions: OpenAI Decisions questions asked of every input.
+            safety_identifier: Optional end-user ID shared across all items.
             verbosity: Logging verbosity.
             timeout: Per-call timeout shared across all items.
             extra_headers: Extra HTTP headers shared across all items.
 
         Returns:
-            One ``DecisionsResponse`` per state, in input order.
+            One ``OpenAIDecisionResponse`` per input, in input order.
         """
         if is_no_arg(verbosity):
             verbosity = slowburn_config.defaults.verbosity
-        if len(states) == 0:
+        if len(inputs) == 0:
             return []
         tasks = [
-            self.call_systemone(
-                state=state,
+            self.call_decision(
+                input=input_item,
                 questions=questions,
+                safety_identifier=safety_identifier,
                 verbosity=verbosity,
                 timeout=timeout,
                 extra_headers=extra_headers,
             )
-            for state in states
+            for input_item in inputs
         ]
-        results: List[DecisionsResponse] = await async_gather(
+        results: List[OpenAIDecisionResponse] = await async_gather(
             tasks,
             progress=dict(
                 disable=verbosity < 2,
                 desc=f"{self.name}",
-                miniters=max(len(states) // 2, 1),
+                miniters=max(len(inputs) // 2, 1),
             ),
         )
         return results

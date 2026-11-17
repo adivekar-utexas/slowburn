@@ -69,7 +69,7 @@ from .reporter import CostReporter
 __all__: List[str] = [
     "create_llm",
     "_DEFAULT_RETRY_ON",
-    "_DEFAULT_SYSTEMONE_RETRY_ON",
+    "_DEFAULT_DECISION_RETRY_ON",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
@@ -119,11 +119,11 @@ _DEFAULT_RETRY_ON: List[Type[BaseException]] = [
 ]
 
 
-# Retries for ``call_systemone``. Unlike ``_DEFAULT_RETRY_ON`` this excludes
+# Retries for ``call_decision``. Unlike ``_DEFAULT_RETRY_ON`` this excludes
 # ``litellm.BadRequestError`` and ``ValueError``: decision responses are typed,
 # not parsed text, so an invalid request (e.g. a score question with > 10
 # levels, or a validation error) is deterministic and retrying cannot fix it.
-_DEFAULT_SYSTEMONE_RETRY_ON: List[Type[BaseException]] = [
+_DEFAULT_DECISION_RETRY_ON: List[Type[BaseException]] = [
     asyncio.TimeoutError,
     litellm.Timeout,
     litellm.APIError,
@@ -400,9 +400,9 @@ def create_llm(
         max_tokens: Default max output tokens.
         timeout: Default per-call timeout in seconds.
         num_retries: Number of retries on transient errors, for both
-            ``call_llm`` and ``call_systemone``.
+            ``call_llm`` and ``call_decision``.
         retry_on: Exception types that trigger a retry on ``call_llm``.
-            ``call_systemone`` always uses ``_DEFAULT_SYSTEMONE_RETRY_ON``
+            ``call_decision`` always uses ``_DEFAULT_DECISION_RETRY_ON``
             (transient API errors only; never ``BadRequestError``).
         retry_wait: Base wait time in seconds for transient-error retries.
         retry_algorithm: Backoff strategy ("Exponential" / "Linear" / "Fibonacci").
@@ -493,15 +493,15 @@ def create_llm(
     llm = SlowBurnLLM.options(
         mode=backend,
         limits=limit_pool,
-        num_retries={"call_llm": num_retries, "call_systemone": num_retries, "*": 0},
-        retry_on={"call_llm": retry_on, "call_systemone": _DEFAULT_SYSTEMONE_RETRY_ON, "*": []},
-        retry_wait={"call_llm": retry_wait, "call_systemone": retry_wait, "*": 1},
+        num_retries={"call_llm": num_retries, "call_decision": num_retries, "*": 0},
+        retry_on={"call_llm": retry_on, "call_decision": _DEFAULT_DECISION_RETRY_ON, "*": []},
+        retry_wait={"call_llm": retry_wait, "call_decision": retry_wait, "*": 1},
         retry_algorithm={
             "call_llm": retry_algorithm,
-            "call_systemone": retry_algorithm,
+            "call_decision": retry_algorithm,
             "*": RetryAlgorithm.Exponential,
         },
-        retry_jitter={"call_llm": retry_jitter, "call_systemone": retry_jitter, "*": 0},
+        retry_jitter={"call_llm": retry_jitter, "call_decision": retry_jitter, "*": 0},
     ).init(
         name=name,
         model_name=model,

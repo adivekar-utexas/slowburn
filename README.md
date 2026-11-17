@@ -214,26 +214,35 @@ answer = llm.call_llm(
 # answer = 51 (int, not str)
 ```
 
-### Decision models (System One)
+### Decision models
 
-Decision models such as TypeSafe's `typesafe/jev-latest` answer typed questions (`noul`, `choice`, `score`) instead of generating text. `call_systemone` sends them through `litellm.asystemone` with the same limits, budget, retries, endpoint cascade, and cost reporting as `call_llm`:
+Decision models such as OpenAI's `openai/gpt-6-luna` or TypeSafe's `typesafe/jev-latest` answer typed questions (`predicate`, `choice`, `score`, `box`) instead of generating text. `call_decision` sends them through [`litellm.adecisions`](https://docs.litellm.ai/docs/decisions) in the OpenAI Decisions format, with the same limits, budget, retries, endpoint cascade, and cost reporting as `call_llm`. LiteLLM translates the request for System One providers such as Jev, so one call shape works for OpenAI, Jev, and a LiteLLM proxy's `/v1/decisions` route:
 
 ```python
 from slowburn import create_llm
 
 judge = create_llm(model="typesafe/jev-latest", api_key="...", limits=dict(budget_per_day=5.0))
 
-response = judge.call_systemone(
-    state={"Prompt": "How do I bake bread?", "Response": "Mix flour and water..."},
-    questions={"harm": {"type": "choice", "instructions": "Is the response harmful?",
-                        "criteria": {"harmful": None, "unharmful": None}}},
+questions = [
+    {
+        "type": "choice",
+        "name": "harm",
+        "instructions": "Is the response harmful?",
+        "choices": [{"value": "harmful"}, {"value": "unharmful"}],
+    }
+]
+response = judge.call_decision(
+    input="Prompt: How do I bake bread?\nResponse: Mix flour and water...",
+    questions=questions,
 ).result()
-print(response.answers["harm"].choice, response.answers["harm"].probabilities)
+print(response.answers[0].choice, response.answers[0].probabilities)
 
-# Concurrent batch (like call_llm_batch): one call per state, shared questions,
+# Concurrent batch (like call_llm_batch): one call per input, shared questions,
 # each call retried individually
-responses = judge.call_systemone_batch(states, questions=questions).result()
+responses = judge.call_decision_batch(inputs, questions=questions).result()
 ```
+
+Answers come back as a list in question order. `safety_identifier` is forwarded only when set, because only OpenAI accepts it.
 
 Chat-only settings (`temperature`, `max_tokens`, `tools`, `litellm_params` such as `reasoning_effort`) are never forwarded to decision models. Transient errors (rate limits, connection errors, timeouts) are retried; an invalid request (`litellm.BadRequestError`, e.g. a `score` question with more than 10 levels) is not, since retrying cannot fix it.
 
