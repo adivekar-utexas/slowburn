@@ -19,6 +19,7 @@ import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
 import litellm
+from litellm.types.decisions import OpenAIDecisionResponse
 
 from .config import slowburn_config
 
@@ -246,3 +247,28 @@ class PricingCache:
             f"Could not determine cost for response. Model: {model!r}. "
             f"Neither litellm's auto-cost nor the pricing database produced a result."
         )
+
+    @staticmethod
+    def actual_decisions_cost_usd(*, response: OpenAIDecisionResponse, model: str) -> float:
+        """Post-call cost of a decision-model (OpenAI Decisions) response, in dollars.
+
+        Tier 1: ``response._hidden_params["response_cost"]`` (LiteLLM's own
+        calculation). Zero is a valid cost here, unlike the chat path.
+        Tier 2: ``response.usage`` token counts times the model's per-token rates.
+
+        Raises:
+            ModelNotFoundError: If LiteLLM did not compute a cost and the model
+                is not in any pricing source.
+            ValueError: If LiteLLM did not compute a cost and the response has
+                no ``usage`` to price.
+        """
+        hidden_cost: Optional[object] = response._hidden_params.get("response_cost")
+        if hidden_cost is not None:
+            return float(hidden_cost)
+        if response.usage is None:
+            raise ValueError(
+                f"Decision response from {model!r} has neither a LiteLLM response_cost nor usage; "
+                f"cannot determine its cost."
+            )
+        input_rate, output_rate = PricingCache.get_token_costs(model)
+        return float(input_rate * response.usage.input_tokens + output_rate * response.usage.output_tokens)

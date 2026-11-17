@@ -214,6 +214,38 @@ answer = llm.call_llm(
 # answer = 51 (int, not str)
 ```
 
+### Decision models
+
+Decision models such as OpenAI's `openai/gpt-6-luna` or TypeSafe's `typesafe/jev-latest` answer typed questions (`predicate`, `choice`, `score`, `box`) instead of generating text. `call_decision` sends them through [`litellm.adecisions`](https://docs.litellm.ai/docs/decisions) in the OpenAI Decisions format, with the same limits, budget, retries, endpoint cascade, and cost reporting as `call_llm`. LiteLLM translates the request for System One providers such as Jev, so one call shape works for OpenAI, Jev, and a LiteLLM proxy's `/v1/decisions` route:
+
+```python
+from slowburn import create_llm
+
+judge = create_llm(model="typesafe/jev-latest", api_key="...", limits=dict(budget_per_day=5.0))
+
+questions = [
+    {
+        "type": "choice",
+        "name": "harm",
+        "instructions": "Is the response harmful?",
+        "choices": [{"value": "harmful"}, {"value": "unharmful"}],
+    }
+]
+response = judge.call_decision(
+    input="Prompt: How do I bake bread?\nResponse: Mix flour and water...",
+    questions=questions,
+).result()
+print(response.answers[0].choice, response.answers[0].probabilities)
+
+# Concurrent batch (like call_llm_batch): one call per input, shared questions,
+# each call retried individually
+responses = judge.call_decision_batch(inputs, questions=questions).result()
+```
+
+Answers come back as a list in question order. `safety_identifier` is forwarded only when set, because only OpenAI accepts it.
+
+Chat-only settings (`temperature`, `max_tokens`, `tools`, `litellm_params` such as `reasoning_effort`) are never forwarded to decision models. Transient errors (rate limits, connection errors, timeouts) are retried; an invalid request (`litellm.BadRequestError`, e.g. a `score` question with more than 10 levels) is not, since retrying cannot fix it.
+
 ### Global configuration
 
 Override defaults (temperature, budget, timeouts) for a specific run using a context manager that restores on exit:
