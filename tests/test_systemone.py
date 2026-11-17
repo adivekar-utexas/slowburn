@@ -13,7 +13,7 @@ import pytest
 from concurry import CallLimit, LimitSet, RateLimit
 from litellm.types.decisions import DecisionsResponse
 
-from slowburn import BudgetOverflowError, SystemOneRequest, create_llm
+from slowburn import BudgetOverflowError, create_llm
 from slowburn.limits import CostLimit
 from slowburn.llm_worker import SlowBurnLLM
 
@@ -198,12 +198,10 @@ class TestCallSystemOneBatch:
         ]
         worker: SlowBurnLLM = _build_worker(litellm_params={})
         try:
-            requests: List[SystemOneRequest] = [
-                SystemOneRequest(state={"Prompt": f"p{i}"}, questions=_QUESTIONS) for i in range(3)
-            ]
-            responses: List[DecisionsResponse] = worker.call_systemone_batch(requests=requests).result(
-                timeout=10.0
-            )
+            states: List[Dict[str, object]] = [{"Prompt": f"p{i}"} for i in range(3)]
+            responses: List[DecisionsResponse] = worker.call_systemone_batch(
+                states, questions=_QUESTIONS
+            ).result(timeout=10.0)
             assert len(responses) == 3
             assert mock_asystemone.call_count == 3
             sent_states: List[object] = [c.kwargs["state"] for c in mock_asystemone.call_args_list]
@@ -213,10 +211,28 @@ class TestCallSystemOneBatch:
             worker.stop()
 
     @patch("slowburn.llm_worker.litellm.asystemone", new_callable=AsyncMock)
+    def test_batch_forwards_shared_args_to_every_call(self, mock_asystemone: AsyncMock) -> None:
+        mock_asystemone.side_effect = [_make_decisions_response(), _make_decisions_response()]
+        worker: SlowBurnLLM = _build_worker(litellm_params={})
+        try:
+            worker.call_systemone_batch(
+                [_STATE, _STATE],
+                questions=_QUESTIONS,
+                timeout=3.0,
+                extra_headers={"X-Trace": "abc"},
+            ).result(timeout=10.0)
+            for sent_call in mock_asystemone.call_args_list:
+                assert sent_call.kwargs["questions"] == _QUESTIONS
+                assert sent_call.kwargs["timeout"] == 3.0
+                assert sent_call.kwargs["extra_headers"] == {"X-Trace": "abc"}
+        finally:
+            worker.stop()
+
+    @patch("slowburn.llm_worker.litellm.asystemone", new_callable=AsyncMock)
     def test_empty_batch(self, mock_asystemone: AsyncMock) -> None:
         worker: SlowBurnLLM = _build_worker(litellm_params={})
         try:
-            assert worker.call_systemone_batch(requests=[]).result(timeout=10.0) == []
+            assert worker.call_systemone_batch([], questions=_QUESTIONS).result(timeout=10.0) == []
             assert mock_asystemone.call_count == 0
         finally:
             worker.stop()
@@ -279,12 +295,9 @@ class TestCreateLLMSystemOneRetries:
         ]
         llm = create_llm(model=DECISION_MODEL_NAME, num_retries=3, retry_wait=0.001)
         try:
-            requests: List[SystemOneRequest] = [
-                SystemOneRequest(state=_STATE, questions=_QUESTIONS) for _ in range(2)
-            ]
-            responses: List[DecisionsResponse] = llm.call_systemone_batch(requests=requests).result(
-                timeout=15.0
-            )
+            responses: List[DecisionsResponse] = llm.call_systemone_batch(
+                [_STATE, _STATE], questions=_QUESTIONS
+            ).result(timeout=15.0)
             assert len(responses) == 2
             assert mock_asystemone.call_count == 3
         finally:

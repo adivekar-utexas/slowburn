@@ -219,7 +219,7 @@ answer = llm.call_llm(
 Decision models such as TypeSafe's `typesafe/jev-latest` answer typed questions (`noul`, `choice`, `score`) instead of generating text. `call_systemone` sends them through `litellm.asystemone` with the same limits, budget, retries, endpoint cascade, and cost reporting as `call_llm`:
 
 ```python
-from slowburn import SystemOneRequest, create_llm
+from slowburn import create_llm
 
 judge = create_llm(model="typesafe/jev-latest", api_key="...", limits=dict(budget_per_day=5.0))
 
@@ -230,10 +230,9 @@ response = judge.call_systemone(
 ).result()
 print(response.answers["harm"].choice, response.answers["harm"].probabilities)
 
-# Concurrent batch: one request per item, each retried individually
-responses = judge.call_systemone_batch(requests=[
-    SystemOneRequest(state=s, questions=questions) for s in states
-]).result()
+# Concurrent batch (like call_llm_batch): one call per state, shared questions,
+# each call retried individually
+responses = judge.call_systemone_batch(states, questions=questions).result()
 ```
 
 Chat-only settings (`temperature`, `max_tokens`, `tools`, `litellm_params` such as `reasoning_effort`) are never forwarded to decision models. Transient errors (rate limits, connection errors, timeouts) are retried; an invalid request (`litellm.BadRequestError`, e.g. a `score` question with more than 10 levels) is not, since retrying cannot fix it.

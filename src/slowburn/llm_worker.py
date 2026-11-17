@@ -200,14 +200,6 @@ does not duplicate that schema.
 """
 
 
-class SystemOneRequest(Typed):
-    """One decision-model request in a ``call_systemone_batch`` call."""
-
-    state: DecisionsState
-    questions: DecisionsQuestions
-    extra_headers: Optional[Dict[str, str]] = None
-
-
 @worker(mode="Asyncio")
 class SlowBurnLLM(Typed):
     """AsyncIO worker for concurrent LLM calls with dollar-budget backpressure.
@@ -759,8 +751,24 @@ class SlowBurnLLM(Typed):
     ) -> EndpointConfig:
         """Rebuild the selected endpoint's ``EndpointConfig`` and run the resolver.
 
+        Call sites use this wrapper rather than the two steps directly, so the
+        resolver can never be skipped or run before the config is built.
         On resolver failure the reservation is accounted (with zero output
         tokens) before re-raising, so capacity does not leak.
+        """
+        endpoint_config: EndpointConfig = self._build_endpoint_config(acquisition=acquisition)
+        return self._apply_endpoint_resolver(
+            endpoint_config=endpoint_config,
+            acquisition=acquisition,
+            estimated_usage=estimated_usage,
+            should_track_cost=should_track_cost,
+        )
+
+    def _build_endpoint_config(self, *, acquisition: Any) -> EndpointConfig:
+        """Step 1: rebuild the typed ``EndpointConfig`` from the acquisition.
+
+        Backfills missing fields from the worker's attributes and library
+        defaults. Does not touch the acquisition's accounting.
         """
         # Concurry stores whatever dict was passed to LimitSet(config=...)
         # on the acquisition. When SlowBurn built the pool via create_llm,
@@ -798,12 +806,23 @@ class SlowBurnLLM(Typed):
         }
         for _field, _default in _worker_endpoint_defaults.items():
             raw_config.setdefault(_field, _default)
-        endpoint_config: EndpointConfig = EndpointConfig(**raw_config)
+        return EndpointConfig(**raw_config)
 
-        # Run the user's resolver (default = passthrough). The resolver
-        # receives a serialized dict (so the user can write dict-style code
-        # without depending on EndpointConfig's typing). The dict it returns
-        # is re-validated into a new EndpointConfig.
+    def _apply_endpoint_resolver(
+        self,
+        *,
+        endpoint_config: EndpointConfig,
+        acquisition: Any,
+        estimated_usage: Usage,
+        should_track_cost: bool,
+    ) -> EndpointConfig:
+        """Step 2: run the user's resolver on a built ``EndpointConfig``.
+
+        The resolver (default = passthrough) receives a serialized dict, so
+        the user can write dict-style code without depending on
+        ``EndpointConfig``'s typing. The dict it returns is re-validated into
+        a new ``EndpointConfig``.
+        """
         resolver = self.endpoint_resolver if self.endpoint_resolver is not None else passthrough_resolver
         try:
             augmented_dict: Dict[str, Any] = resolver(endpoint_config.model_dump())
@@ -1607,41 +1626,50 @@ class SlowBurnLLM(Typed):
     @validate
     async def call_systemone_batch(
         self,
+        states: List[DecisionsState],
         *,
-        requests: List[SystemOneRequest],
+        questions: DecisionsQuestions,
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
+        timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> List[DecisionsResponse]:
         """Execute multiple decision-model calls concurrently with shared backpressure.
 
-        Each request goes through :meth:`call_systemone` (and is retried
-        individually per the worker's retry configuration).
+        Mirrors :meth:`call_llm_batch`: per-item inputs are a list (``states``,
+        like ``prompts``) and everything else is shared across items. Each
+        state goes through :meth:`call_systemone` (and is retried individually
+        per the worker's retry configuration).
 
         Args:
-            requests: One :class:`SystemOneRequest` per call.
+            states: One state per call (text, JSON object or JSON array).
+            questions: Named System One questions asked of every state.
             verbosity: Logging verbosity.
+            timeout: Per-call timeout shared across all items.
+            extra_headers: Extra HTTP headers shared across all items.
 
         Returns:
-            One ``DecisionsResponse`` per request, in request order.
+            One ``DecisionsResponse`` per state, in input order.
         """
         if is_no_arg(verbosity):
             verbosity = slowburn_config.defaults.verbosity
-        if len(requests) == 0:
+        if len(states) == 0:
             return []
         tasks = [
             self.call_systemone(
-                state=request.state,
-                questions=request.questions,
-                extra_headers=request.extra_headers,
+                state=state,
+                questions=questions,
                 verbosity=verbosity,
+                timeout=timeout,
+                extra_headers=extra_headers,
             )
-            for request in requests
+            for state in states
         ]
         results: List[DecisionsResponse] = await async_gather(
             tasks,
             progress=dict(
                 disable=verbosity < 2,
                 desc=f"{self.name}",
-                miniters=max(len(requests) // 2, 1),
+                miniters=max(len(states) // 2, 1),
             ),
         )
         return results

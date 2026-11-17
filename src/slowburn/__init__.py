@@ -67,7 +67,6 @@ from .llm_worker import (
     DecisionsState,
     ImageInput,
     SlowBurnLLM,
-    SystemOneRequest,
 )
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
@@ -78,7 +77,6 @@ __all__: List[str] = [
     "_DEFAULT_SYSTEMONE_RETRY_ON",
     "DecisionsQuestions",
     "DecisionsState",
-    "SystemOneRequest",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
