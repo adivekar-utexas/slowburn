@@ -188,18 +188,6 @@ class Usage(Typed):
         )
 
 
-DecisionsState = Union[str, Dict[str, object], List[object]]
-"""The thing a decision model judges: text, a JSON object, or a JSON array."""
-
-DecisionsQuestions = Dict[str, Dict[str, object]]
-"""Named System One questions (``noul`` / ``choice`` / ``score`` / ``box``).
-
-Kept as plain dicts: LiteLLM validates them into its own question models
-(raising ``litellm.BadRequestError`` before any network call), so SlowBurn
-does not duplicate that schema.
-"""
-
-
 @worker(mode="Asyncio")
 class SlowBurnLLM(Typed):
     """AsyncIO worker for concurrent LLM calls with dollar-budget backpressure.
@@ -1434,8 +1422,8 @@ class SlowBurnLLM(Typed):
     def _estimate_decisions_usage(
         self,
         *,
-        state: DecisionsState,
-        questions: DecisionsQuestions,
+        state: Union[str, Dict[str, Any], List[Any]],
+        questions: Dict[str, Dict[str, Any]],
         should_track_cost: bool,
     ) -> Usage:
         """Estimate the pre-call reservation for a decision-model request.
@@ -1461,8 +1449,8 @@ class SlowBurnLLM(Typed):
     async def call_systemone(
         self,
         *,
-        state: DecisionsState,
-        questions: DecisionsQuestions,
+        state: Union[str, Dict[str, Any], List[Any]],
+        questions: Dict[str, Dict[str, Any]],
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
         extra_headers: Optional[Dict[str, str]] = None,
@@ -1481,10 +1469,12 @@ class SlowBurnLLM(Typed):
 
         Args:
             state: The thing being judged (text, JSON object or JSON array).
-            questions: Named System One questions, e.g.
+            questions: Named System One questions (``noul`` / ``choice`` /
+                ``score`` / ``box``), e.g.
                 ``{"harm": {"type": "choice", "criteria": {"yes": None, "no": None}}}``.
-                LiteLLM validates them and raises ``litellm.BadRequestError``
-                before any network call when they are invalid.
+                Kept as plain dicts: LiteLLM validates them and raises
+                ``litellm.BadRequestError`` before any network call when they
+                are invalid, so SlowBurn does not duplicate that schema.
             verbosity: Logging verbosity. Defaults to
                 ``slowburn_config.defaults.verbosity``.
             timeout: Per-call timeout in seconds. Cascade: per-call > endpoint
@@ -1626,9 +1616,9 @@ class SlowBurnLLM(Typed):
     @validate
     async def call_systemone_batch(
         self,
-        states: List[DecisionsState],
+        states: List[Union[str, Dict[str, Any], List[Any]]],
         *,
-        questions: DecisionsQuestions,
+        questions: Dict[str, Dict[str, Any]],
         verbosity: Union[int, _NO_ARG_TYPE] = _NO_ARG,
         timeout: Union[float, _NO_ARG_TYPE] = _NO_ARG,
         extra_headers: Optional[Dict[str, str]] = None,

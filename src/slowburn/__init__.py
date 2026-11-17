@@ -62,12 +62,7 @@ from .exceptions import (
 )
 from .limits import DEFAULT_COST_LIMIT_KEY, CostLimit
 from .limits_spec import SLOT_TO_LIMIT_KEY, SlowBurnLimits, default_slowburn_limits
-from .llm_worker import (
-    DecisionsQuestions,
-    DecisionsState,
-    ImageInput,
-    SlowBurnLLM,
-)
+from .llm_worker import ImageInput, SlowBurnLLM
 from .pricing import ModelNotFoundError, PricingCache
 from .reporter import CostReporter
 
@@ -75,8 +70,6 @@ __all__: List[str] = [
     "create_llm",
     "_DEFAULT_RETRY_ON",
     "_DEFAULT_SYSTEMONE_RETRY_ON",
-    "DecisionsQuestions",
-    "DecisionsState",
     "CostCallContext",
     "cost_controlled_call",
     "estimate_input_tokens",
